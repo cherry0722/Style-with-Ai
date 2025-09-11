@@ -1,0 +1,73 @@
+export type GarmentCategory =
+  | "top"
+  | "bottom"
+  | "dress"
+  | "outerwear"
+  | "shoes"
+  | "accessory";
+
+export type ColorName =
+  | "black"
+  | "white"
+  | "gray"
+  | "blue"
+  | "green"
+  | "red"
+  | "yellow"
+  | "beige"
+  | "brown"
+  | "pink"
+  | "purple";
+
+export interface Garment {
+  id: string;
+  uri: string; // local image URI
+  category: GarmentCategory;
+  colors: ColorName[];
+  brand?: string;
+  notes?: string;
+}
+
+export type OutfitContext = "date-night" | "casual" | "formal" | "work" | "party";
+
+export interface OutfitTemplate {
+  id: string;
+  context: OutfitContext;
+  recipe: GarmentCategory[]; // e.g., ["top","bottom","shoes","accessory"]
+  preferredColors?: Partial<Record<GarmentCategory, ColorName[]>>;
+}
+
+export interface OutfitSuggestion {
+  id: string;
+  items: Garment[];
+  score: number;
+  context: OutfitContext;
+}
+
+/** Profile / Auth */
+export type Pronouns = "she/her" | "he/him" | "they/them" | "prefer-not-to-say";
+export type BodyType =
+  | "skinny"
+  | "fit"
+  | "muscular"
+  | "bulk"
+  | "pear"
+  | "hourglass"
+  | "rectangle";
+
+export interface UserProfile {
+  preferredName?: string;
+  pronouns?: Pronouns;
+  heightCm?: number;
+  weightLb?: number;
+  bodyType?: BodyType;
+  privacyConsent?: boolean;
+}
+
+export interface UserAuth {
+  id: string;
+  email?: string;
+  phone?: string;
+  displayName?: string; // derived from email/name, for greeting
+  profile?: UserProfile;
+}
