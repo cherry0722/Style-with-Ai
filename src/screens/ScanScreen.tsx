@@ -76,12 +76,12 @@ function Chip({ label, active, onPress }: { label: string; active?: boolean; onP
 const styles = {
   input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 10 },
   btn: { backgroundColor: "#111", borderRadius: 12, padding: 14, alignItems: "center" as const },
-  btnText: { color: "#fff", fontWeight: "700" },
+  btnText: { color: "#fff", fontWeight: "700" as const },
   btnHollow: { borderWidth: 1, borderColor: "#111", borderRadius: 12, padding: 12, alignItems: "center" as const },
-  btnHollowText: { fontWeight: "700" },
+  btnHollowText: { fontWeight: "700" as const },
   label: { fontWeight: "700" as const },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#ddd", borderRadius: 999 },
   chipActive: { backgroundColor: "#111", borderColor: "#111" },
-  chipText: { fontWeight: "600" },
-  chipTextActive: { color: "#fff", fontWeight: "700" },
+  chipText: { fontWeight: "600" as const },
+  chipTextActive: { color: "#fff", fontWeight: "700" as const },
 };
