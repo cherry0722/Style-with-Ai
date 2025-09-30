@@ -1,60 +1,135 @@
 import React, { useMemo, useState } from "react";
-import { View, Text, FlatList, Image, Pressable } from "react-native";
+import { View, Text, FlatList, Image, Pressable, StyleSheet } from "react-native";
 import { recommend } from "../services/recommender";
 import { useCloset } from "../store/closet";
 import { OutfitSuggestion } from "../types";
+import { useTheme } from "../context/ThemeContext";
 
 export default function OutfitIdeasScreen() {
+  const theme = useTheme();
   const { items } = useCloset();
   const [context, setContext] = useState<"date-night" | "casual" | "formal" | "work" | "party">("date-night");
 
   const ideas: OutfitSuggestion[] = useMemo(() => recommend(items, context, 5), [items, context]);
 
-  return (
-    <View style={{ flex: 1, padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 22, fontWeight: "800" }}>Top picks for {context.replace("-", " ")}</Text>
+  const styles = createStyles(theme);
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Top picks for {context.replace("-", " ")}</Text>
+
+      <View style={styles.chipContainer}>
         {["date-night", "casual", "formal", "work", "party"].map((c) => (
-          <Pressable key={c} onPress={() => setContext(c as any)} style={[chipStyles.chip, context === c && chipStyles.chipActive]}>
-            <Text style={[chipStyles.text, context === c && chipStyles.textActive]}>{c}</Text>
+          <Pressable 
+            key={c} 
+            onPress={() => setContext(c as any)} 
+            style={[styles.chip, context === c && styles.chipActive]}
+          >
+            <Text style={[styles.chipText, context === c && styles.chipTextActive]}>{c}</Text>
           </Pressable>
         ))}
       </View>
 
       {ideas.length === 0 ? (
-        <Text style={{ color: "#666" }}>Not enough items in your closet for this context yet.</Text>
+        <Text style={styles.emptyText}>Not enough items in your closet for this context yet.</Text>
       ) : (
         <FlatList
           data={ideas}
           keyExtractor={(o) => o.id}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-          renderItem={({ item }) => <OutfitCard suggestion={item} />}
+          renderItem={({ item }) => <OutfitCard suggestion={item} theme={theme} />}
         />
       )}
     </View>
   );
 }
 
-function OutfitCard({ suggestion }: { suggestion: OutfitSuggestion }) {
+function OutfitCard({ suggestion, theme }: { suggestion: OutfitSuggestion; theme: any }) {
+  const styles = createStyles(theme);
+  
   return (
-    <View style={{ borderWidth: 1, borderColor: "#eee", borderRadius: 16, overflow: "hidden" }}>
-      <View style={{ flexDirection: "row", padding: 10, gap: 10, alignItems: "center" }}>
+    <View style={styles.card}>
+      <View style={styles.cardImages}>
         {suggestion.items.map((it) => (
-          <Image key={it.id} source={{ uri: it.uri }} style={{ width: 70, height: 70, borderRadius: 8 }} />
+          <Image key={it.id} source={{ uri: it.uri }} style={styles.cardImage} />
         ))}
       </View>
-      <View style={{ padding: 10, gap: 6 }}>
-        <Text style={{ fontWeight: "800" }}>Score: {suggestion.score.toFixed(2)}</Text>
-        <Text style={{ color: "#666" }}>Context: {suggestion.context}</Text>
+      <View style={styles.cardContent}>
+        <Text style={styles.cardScore}>Score: {suggestion.score.toFixed(2)}</Text>
+        <Text style={styles.cardContext}>Context: {suggestion.context}</Text>
       </View>
     </View>
   );
 }
 
-const chipStyles = {
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#ddd", borderRadius: 999 },
-  chipActive: { backgroundColor: "#111", borderColor: "#111" },
-  text: { fontWeight: "600" },
-  textActive: { color: "#fff", fontWeight: "700" },
-};
+const createStyles = (theme: any) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  title: {
+    fontSize: theme.typography['2xl'],
+    fontWeight: theme.typography.bold,
+    color: theme.colors.textPrimary,
+  },
+  chipContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  chip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.backgroundSecondary,
+  },
+  chipActive: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
+  chipText: {
+    fontWeight: theme.typography.medium,
+    color: theme.colors.textSecondary,
+  },
+  chipTextActive: {
+    color: theme.colors.white,
+    fontWeight: theme.typography.bold,
+  },
+  emptyText: {
+    color: theme.colors.textTertiary,
+    fontSize: theme.typography.base,
+  },
+  card: {
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.backgroundSecondary,
+  },
+  cardImages: {
+    flexDirection: 'row',
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+    alignItems: 'center',
+  },
+  cardImage: {
+    width: 70,
+    height: 70,
+    borderRadius: theme.borderRadius.md,
+  },
+  cardContent: {
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  cardScore: {
+    fontWeight: theme.typography.bold,
+    color: theme.colors.textPrimary,
+  },
+  cardContext: {
+    color: theme.colors.textSecondary,
+  },
+});

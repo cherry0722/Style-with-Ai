@@ -1,21 +1,23 @@
 import React, { useMemo, useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import HomeScreen from "../screens/HomeScreen";
 import ClosetScreen from "../screens/ClosetScreen";
-import ScanScreen from "../screens/ScanScreen";
-import OutfitIdeasScreen from "../screens/OutfitIdeasScreen";
+import OutfitScreen from "../screens/OutfitScreen";
 import FavoritesScreen from "../screens/FavoritesScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal } from "react-native";
 import { useAuth } from "../context/AuthContext";
+import { useNotifications } from "../store/notifications";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "./RootNavigator";
+import { useTheme } from "../context/ThemeContext";
 
 export type TabParamList = {
-  Closet: undefined;
-  Scan: undefined;
-  Ideas: undefined;
+  Home: undefined;
+  Explore: undefined;
+  Outfit: undefined;
   Favs: undefined;
   Settings: undefined;
 };
@@ -24,6 +26,8 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 export default function Tabs() {
   const { user, logout } = useAuth();
+  const theme = useTheme();
+  const { unreadCount } = useNotifications();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -43,12 +47,12 @@ export default function Tabs() {
 
   function iconFor(route: keyof TabParamList): keyof typeof Ionicons.glyphMap {
     switch (route) {
-      case "Closet":
+      case "Home":
+        return "home-outline";
+      case "Explore":
+        return "compass-outline";
+      case "Outfit":
         return "shirt-outline";
-      case "Scan":
-        return "camera-outline";
-      case "Ideas":
-        return "color-wand-outline";
       case "Favs":
         return "heart-outline";
       case "Settings":
@@ -60,25 +64,86 @@ export default function Tabs() {
 
   return (
     <>
-      <Tab.Navigator
-        screenOptions={({ route }) => ({
-          headerTitle: () => (
-            <Text style={{ fontWeight: "800", fontSize: 16 }}>Hi, {firstName} 👋</Text>
+        <Tab.Navigator
+          initialRouteName="Home"
+          screenOptions={({ route }) => ({
+            headerTitle: () => (
+              <Text style={{ fontWeight: "800", fontSize: 16 }}>
+                {route.name}
+              </Text>
+            ),
+            headerRight: () => (
+              route.name === 'Settings' ? (
+                <Pressable onPress={() => setMenuOpen(true)} style={{ paddingRight: 12 }}>
+                  <Ionicons name="person-circle-outline" size={26} />
+                </Pressable>
+              ) : null
+            ),
+            headerTitleAlign: "center",
+          tabBarIcon: ({ size, focused }) => (
+            <Ionicons 
+              name={iconFor(route.name) as any} 
+              size={24} 
+              color={focused ? theme.colors.accent : theme.colors.textTertiary}
+            />
           ),
-          headerRight: () => (
-            <Pressable onPress={() => setMenuOpen(true)} style={{ paddingRight: 12 }}>
-              <Ionicons name="person-circle-outline" size={26} />
-            </Pressable>
-          ),
-          headerTitleAlign: "center",
-          tabBarIcon: ({ size }) => <Ionicons name={iconFor(route.name) as any} size={size} />,
+          tabBarActiveTintColor: theme.colors.accent,
+          tabBarInactiveTintColor: theme.colors.textTertiary,
+            tabBarStyle: {
+              backgroundColor: theme.colors.background,
+              borderTopColor: theme.colors.border,
+              paddingBottom: 8,
+              paddingTop: 8,
+              height: 70,
+              shadowColor: theme.colors.black,
+              shadowOffset: { width: 0, height: -2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+              elevation: 8,
+            },
+          // 3D transition animations
+          animation: 'shift',
+          animationEnabled: true,
+          swipeEnabled: true,
+          tabBarHideOnKeyboard: true,
+          tabBarLabelStyle: {
+            fontSize: 11,
+            fontWeight: '600',
+            marginTop: 3,
+          },
+          tabBarIconStyle: {
+            marginTop: 3,
+          },
         })}
       >
-        <Tab.Screen name="Closet" component={ClosetScreen} />
-        <Tab.Screen name="Scan" component={ScanScreen} />
-        <Tab.Screen name="Ideas" component={OutfitIdeasScreen} options={{ title: "Outfit Ideas" }} />
-        <Tab.Screen name="Favs" component={FavoritesScreen} options={{ title: "Favorites" }} />
-        <Tab.Screen name="Settings" component={SettingsScreen} />
+        <Tab.Screen 
+          name="Home" 
+          component={HomeScreen} 
+          options={{ 
+            title: "Home",
+            headerShown: false,
+          }} 
+        />
+        <Tab.Screen 
+          name="Explore" 
+          component={ClosetScreen} 
+          options={{ title: "Explore" }} 
+        />
+        <Tab.Screen 
+          name="Outfit" 
+          component={OutfitScreen} 
+          options={{ title: "Outfit" }} 
+        />
+        <Tab.Screen 
+          name="Favs" 
+          component={FavoritesScreen} 
+          options={{ title: "Favorites" }} 
+        />
+        <Tab.Screen 
+          name="Settings" 
+          component={SettingsScreen} 
+          options={{ title: "Settings" }} 
+        />
       </Tab.Navigator>
 
       {/* Simple logout menu */}
