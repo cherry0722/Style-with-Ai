@@ -71,3 +71,56 @@ export interface UserAuth {
   displayName?: string; // derived from email/name, for greeting
   profile?: UserProfile;
 }
+
+/** Weather & Location */
+export interface WeatherData {
+  temperature: number;
+  feelsLike: number;
+  minTemp: number;
+  maxTemp: number;
+  condition: string;
+  conditionIcon: string;
+  humidity: number;
+  windSpeed: number;
+  description: string;
+  outfitTip: string;
+}
+
+export interface LocationData {
+  latitude: number;
+  longitude: number;
+  city: string;
+  country: string;
+  timezone: string;
+}
+
+/** Calendar & Events */
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  date: string; // ISO date string
+  time?: string; // HH:MM format
+  type: 'interview' | 'party' | 'date' | 'work' | 'casual' | 'formal' | 'other';
+  outfitContext?: OutfitContext;
+  notes?: string;
+}
+
+/** Notifications */
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'outfit' | 'weather' | 'event' | 'reminder' | 'system';
+  read: boolean;
+  createdAt: string; // ISO timestamp
+  data?: Record<string, any>;
+}
+
+/** App Settings */
+export interface AppSettings {
+  temperatureUnit: 'celsius' | 'fahrenheit';
+  notificationsEnabled: boolean;
+  locationPermissionGranted: boolean;
+  lastWeatherUpdate?: string;
+  preferredLocation?: string;
+}

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ai-wardrobe",
-    "slug": "ai-wardrobe",
+    "name": "MYRA",
+    "slug": "myra-style-assistant",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -28,7 +28,9 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-font"
+      "expo-font",
+      "expo-location",
+      "expo-notifications"
     ]
   }
 }

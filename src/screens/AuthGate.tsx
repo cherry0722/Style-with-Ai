@@ -9,7 +9,7 @@ export default function AuthGate({ navigation }: NativeStackScreenProps<RootStac
 
   useEffect(() => {
     if (user) navigation.replace("Main");
-    else navigation.replace("Login");
+    else navigation.replace("Splash");
   }, [user]);
 
   return (
