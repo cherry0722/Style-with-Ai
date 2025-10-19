@@ -67,9 +67,8 @@ export interface UserProfile {
 export interface UserAuth {
   id: string;
   email?: string;
-  phone?: string;
-  displayName?: string; // derived from email/name, for greeting
-  profile?: UserProfile;
+  username?: string; // derived from email/name, for greeting
+  phone?: String;
 }
 
 /** Weather & Location */
