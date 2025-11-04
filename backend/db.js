@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const URI = "mongodb+srv://dbuser:12345@style-with-ai.x1lxnfg.mongodb.net/style-with-ai"; 
+const URI = "mongodb+srv://dbuser:12345@style-with-ai.x1lxnfg.mongodb.net/?retryWrites=true&w=majority&appName=style-with-ai"; 
 
 const connectDB = async () => {
   try {
