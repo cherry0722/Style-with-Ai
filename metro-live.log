@@ -1,0 +1,14 @@
+env: load .env
+env: export EXPO_PUBLIC_WEATHER_API_KEY EXPO_PUBLIC_API_URL
+Starting project at /Users/cherry07/Style-with-Ai
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+The following packages should be updated for best compatibility with the installed expo version:
+  @expo/vector-icons@15.0.2 - expected version: ^15.0.3
+  expo@54.0.12 - expected version: 54.0.22
+  expo-file-system@19.0.16 - expected version: ~19.0.17
+  expo-font@14.0.8 - expected version: ~14.0.9
+  react-native@0.81.4 - expected version: 0.81.5
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.

@@ -1,0 +1,12 @@
+ℹ️ DB module loaded
+✅ API listening on http://0.0.0.0:5000
+✅ Connected to MongoDB!
+[0mGET /api/health [32m200[0m 0.795 ms - 30[0m
+[0mPOST /api/signup [32m201[0m 65.656 ms - 205[0m
+[0mPOST /api/login [32m200[0m 71.350 ms - 205[0m
+[0mGET /api/health [32m200[0m 0.266 ms - 30[0m
+[0mPOST /api/signup [32m201[0m 56.609 ms - 207[0m
+[0mPOST /api/login [32m200[0m 56.736 ms - 207[0m
+[0mGET /api/health [32m200[0m 0.279 ms - 30[0m
+[0mPOST /api/signup [33m409[0m 0.135 ms - 33[0m
+[0mPOST /api/login [32m200[0m 57.780 ms - 205[0m
