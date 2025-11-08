@@ -1,65 +1,55 @@
-# MYRA - Your Personal Style Assistant
+# 🪞 MYRA – AI Wardrobe & Style Assistant  
 
-A premium React Native app that helps users manage their wardrobe, plan outfits, and get weather-based clothing recommendations.
+An intelligent React Native app that helps users manage wardrobes, plan outfits, and get AI + weather-based clothing recommendations.  
 
-## Features
+## 🚀 Features  
 
-### 🏠 Home Dashboard
-- **Weather Integration**: Real-time weather data with location detection
-- **Temperature Units**: Toggle between Celsius and Fahrenheit
-- **Outfit Tips**: Weather-based clothing recommendations
-- **Calendar Widget**: Quick view of today's events
-- **Quick Actions**: Fast access to key features
+### 🏠 Dashboard  
+- Real-time **weather integration** (auto location detection)  
+- **Outfit suggestions** based on temperature & event context  
+- **Calendar widget** synced with user events  
 
-### 📅 Calendar & Events
-- **Event Management**: Add, edit, and delete calendar events
-- **Event Types**: Interview, party, date, work, casual, formal, other
-- **Outfit Context**: Events can suggest appropriate outfit styles
-- **Visual Calendar**: Interactive calendar with event indicators
+### 👕 Wardrobe  
+- Add clothes via **photo scanner**  
+- Smart **categorization** (top, bottom, dress, shoes, accessories)  
+- **Color detection** + tagging  
+- AI-based **outfit generation** using backend agent  
 
-### 🔔 Notifications
-- **Smart Notifications**: Outfit suggestions, weather alerts, event reminders
-- **Badge Counts**: Unread notification indicators
-- **Mark as Read**: Individual and bulk read status management
-- **Notification Types**: Outfit, weather, event, reminder, system
+### 📅 Calendar  
+- Add/edit/delete events  
+- Suggests **outfits per event type** (formal, casual, interview, etc.)  
 
-### 👕 Wardrobe Management
-- **Clothing Scanner**: Add items by taking photos
-- **Categorization**: Top, bottom, dress, outerwear, shoes, accessory
-- **Color Detection**: Manual color tagging system
-- **Outfit Suggestions**: AI-powered outfit recommendations
+### 🔔 Notifications  
+- Smart alerts for **weather, outfits, and events**  
+- Supports **local push notifications**  
 
-### 🎨 Premium UX
-- **Modern Design**: Clean, minimalist interface with premium feel
-- **Smooth Animations**: 60fps interactions with React Native Reanimated
-- **Haptic Feedback**: Tactile responses for key interactions
-- **Accessibility**: VoiceOver/TalkBack support, dynamic type, high contrast
-- **Splash Animation**: Polished Myra logo animation on app launch
+### 🧠 AI Features  
+- Integrated **RAG pipeline** for personalized outfit reasoning  
+- Backend **AI Agent** connected with weather + calendar APIs  
+- Uses **LLM + vector DB** for contextual recommendations  
 
-## Tech Stack
+---
 
-- **React Native**: Cross-platform mobile development
-- **Expo**: Development platform and toolchain
-- **TypeScript**: Type-safe development
-- **React Navigation**: Navigation library
-- **Zustand**: Lightweight state management
-- **Expo Location**: GPS and location services
-- **Expo Notifications**: Push and local notifications
-- **React Native Calendars**: Calendar component library
 
-## Getting Started
+## 🧰 Tech Stack  
 
-### Prerequisites
+| Layer | Tools |
+|-------|-------|
+| **Frontend** | React Native, Expo, TypeScript |
+| **Backend** | Python (FastAPI/Flask), LangGraph/LangChain |
+| **Database** | MongoDB / AWS DynamoDB |
+| **AI & NLP** | Microsoft Phi-3, GPT-4, OpenAI API |
+| **State Mgmt** | Zustand |
+| **APIs** | OpenWeatherMap, Google Calendar |
+| **Dev Tools** | ESLint, Prettier, Expo CLI |
 
-- Node.js 18+ 
-- Expo CLI
-- iOS Simulator or Android Emulator (or physical device)
+---
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone [<repository-url>](https://github.com/cherry0722/Style-with-Ai.git)
    cd ai-wardrobe
    ```
 
@@ -94,16 +84,21 @@ A premium React Native app that helps users manage their wardrobe, plan outfits,
 ## Project Structure
 
 ```
-src/
-├── components/          # Reusable UI components
-├── context/            # React context providers
-├── navigation/         # Navigation configuration
-├── screens/           # Screen components
-├── services/          # API services and external integrations
-├── store/             # Zustand state stores
-├── theme/             # Design system and styling
-├── types/             # TypeScript type definitions
-└── utils/             # Utility functions
+myra/
+├── src/
+│   ├── screens/         # App screens
+│   ├── components/      # Reusable UI components
+│   ├── services/        # Weather, AI, Notifications
+│   ├── store/           # Zustand stores
+│   ├── navigation/      # App navigation
+│   ├── utils/           # Helper functions
+│   └── theme/           # Styling system
+├── backend/
+│   ├── main.py          # FastAPI entry point
+│   ├── rag_engine.py    # RAG pipeline logic
+│   ├── agent.py         # AI Agent core
+│   └── db/              # MongoDB integration
+
 ```
 
 ## Architecture
