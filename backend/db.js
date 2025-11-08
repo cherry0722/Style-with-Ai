@@ -1,17 +1,21 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const URI = "mongodb+srv://dbuser:12345@style-with-ai.x1lxnfg.mongodb.net/?retryWrites=true&w=majority&appName=style-with-ai"; 
+const URI = process.env.MONGO_URI;
+const DB_NAME = process.env.MONGO_DB || 'style_with_ai';
 
-const connectDB = async () => {
+if (!URI) {
+  console.error('[DB] MONGO_URI not set. Add it to your .env');
+  process.exit(1);
+}
+
+async function connectDB() {
   try {
-    await mongoose.connect(URI);
-    console.log("✅ Connected to MongoDB!");
-  } catch (error) {
-    console.error("❌ MongoDB connection failed:", error.message);
+    await mongoose.connect(URI, { dbName: DB_NAME, autoIndex: true });
+    console.log(`[DB] Connected to MongoDB db=${DB_NAME}`);
+  } catch (err) {
+    console.error('[DB] Mongo connection error:', err.message);
     process.exit(1);
   }
-};
+}
 
-connectDB();
-
-module.exports = mongoose;
+module.exports = connectDB;

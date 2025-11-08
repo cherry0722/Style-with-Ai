@@ -770,12 +770,38 @@ export default function SignupScreen({
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function onSignup() {
+    // Validation
+    if (!username.trim()) {
+      setError("Username is required");
+      return;
+    }
+    if (!email.trim()) {
+      setError("Email is required");
+      return;
+    }
+    if (!password.trim()) {
+      setError("Password is required");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+
+    setError("");
     setLoading(true);
-    await signup(email, password, username, phone );
-    setLoading(false);
-    navigation.replace("Main");
+    try {
+      await signup(email, password, username, phone);
+      setLoading(false);
+      navigation.replace("Main");
+    } catch (err: any) {
+      setLoading(false);
+      setError(err.message || "Signup failed. Please try again.");
+      console.error("Signup error:", err);
+    }
   }
 
   return (
@@ -792,13 +818,19 @@ export default function SignupScreen({
         <TextInput
           placeholder="Username"
           value={username}
-          onChangeText={setUsername}
+          onChangeText={(text) => {
+            setUsername(text);
+            if (error) setError("");
+          }}
           style={styles.input}
         />
         <TextInput
           placeholder="Email"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(text) => {
+            setEmail(text);
+            if (error) setError("");
+          }}
           keyboardType="email-address"
           autoCapitalize="none"
           style={styles.input}
@@ -806,17 +838,27 @@ export default function SignupScreen({
         <TextInput
           placeholder="Password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(text) => {
+            setPassword(text);
+            if (error) setError("");
+          }}
           secureTextEntry
           style={styles.input}
         />
         <TextInput
-          placeholder="Phone"
+          placeholder="Phone (optional)"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(text) => {
+            setPhone(text);
+            if (error) setError("");
+          }}
           keyboardType="phone-pad"
           style={styles.input}
         />
+
+        {error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : null}
 
         <Pressable
           onPress={onSignup}
@@ -887,5 +929,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 14,
     marginTop: 8,
+  },
+  errorText: {
+    color: "#FF3B30",
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: "center",
   },
 });
