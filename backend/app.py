@@ -1,4 +1,5 @@
 # app.py
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,6 +27,7 @@ app.add_middleware(
 def root():
     return {"message": "MYRA backend is running"}
 
-# Register routes
+# Register routes - AI routes are gated by AI_ENABLE flag
+# Routes themselves will return 501 if AI is disabled
 app.include_router(agent_router, prefix="/agent", tags=["Agent"])
 app.include_router(feedback_router, prefix="/feedback", tags=["Feedback"])
