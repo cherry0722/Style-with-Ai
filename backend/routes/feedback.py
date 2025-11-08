@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+import os
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from db.mongo import get_user_profile, save_user_profile, get_user_wardrobe
 from ai.preference import update_profile_counts, recompute_user_vec
@@ -12,6 +13,12 @@ class FeedbackIn(BaseModel):
 
 @router.post("")
 def submit_feedback(fb: FeedbackIn):
+    # Gate AI features behind environment flag
+    if os.getenv("AI_ENABLE", "false").lower() != "true":
+        raise HTTPException(
+            status_code=501,
+            detail="AI features disabled. Set AI_ENABLE=true to enable."
+        )
     up = get_user_profile(fb.user_id) or {"_id": fb.user_id, "liked_item_ids": [], "disliked_item_ids": []}
 
     # Bookkeeping lists

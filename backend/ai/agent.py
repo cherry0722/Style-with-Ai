@@ -31,12 +31,16 @@ class MyraAgent:
         ranked = pref.score(wardrobe, base_scores=None)
 
         # 3) Call RAG engine (GPT-4 selection) with memory-informed candidates
-        rag_result = suggest_with_rag(
-            user_id=user_id,
-            event_text=event_text,
-            weather=weather,
-            wardrobe_items=ranked,
-        )
+        try:
+            rag_result = suggest_with_rag(
+                user_id=user_id,
+                event_text=event_text,
+                weather=weather,
+                wardrobe_items=ranked,
+            )
+        except NotImplementedError:
+            # Safety net: if RAG is not implemented, return empty outfits
+            rag_result = {"outfits": [], "note": "RAG not implemented"}
 
         return RecommendResponse(
             outfits=[o for o in rag_result.get("outfits", [])],

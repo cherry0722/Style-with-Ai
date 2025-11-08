@@ -1,5 +1,6 @@
 import topOutfits from "../data/topOutfits";
 import { Garment, OutfitSuggestion, OutfitTemplate } from "../types";
+import { ENABLE_AI } from "../config";
 
 function colorAffinity(needed: OutfitTemplate["preferredColors"], cat: string, garment: Garment) {
   if (!needed) return 0.2; // base score if no prefs
@@ -9,7 +10,14 @@ function colorAffinity(needed: OutfitTemplate["preferredColors"], cat: string, g
   return matches > 0 ? 0.6 : 0.1; // crude scoring
 }
 
-export function recommend(closet: Garment[], context: OutfitTemplate["context"], topK = 5): OutfitSuggestion[] {
+/**
+ * Local rule-based recommendation (fallback when AI is disabled)
+ */
+function localRuleBasedRecommend(
+  closet: Garment[],
+  context: OutfitTemplate["context"],
+  topK: number
+): OutfitSuggestion[] {
   const templates = topOutfits.filter((t) => t.context === context);
   const out: OutfitSuggestion[] = [];
 
@@ -40,4 +48,19 @@ export function recommend(closet: Garment[], context: OutfitTemplate["context"],
   return out
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
+}
+
+/**
+ * Main recommendation function - uses local rule-based logic when AI is disabled
+ */
+export function recommend(closet: Garment[], context: OutfitTemplate["context"], topK = 5): OutfitSuggestion[] {
+  // If AI is disabled, use local rule-based recommendation
+  if (!ENABLE_AI) {
+    return localRuleBasedRecommend(closet, context, topK);
+  }
+  
+  // When AI is enabled, this function could call the Python backend
+  // For now, fall back to local logic until AI integration is complete
+  // TODO: Implement AI backend call when EXPO_PUBLIC_ENABLE_AI=true
+  return localRuleBasedRecommend(closet, context, topK);
 }
