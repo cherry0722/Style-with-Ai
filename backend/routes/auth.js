@@ -1,15 +1,33 @@
 const router = require("express").Router();
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const rateLimit = require("express-rate-limit");
 const User = require("../models/user");
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
+
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('[AUTH] JWT_SECRET not set. Exiting.');
+  process.exit(1);
+}
+
+// Rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 requests per window
+  message: { message: 'Too many requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ❌ Signup is handled in routes/user.js via /api/users
 // This file only handles login via /api/login
 
-router.post("/login", async (req, res) => {
+router.post("/login", authLimiter, async (req, res) => {
   try {
-    console.log("Login route hit");
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[AUTH] /login requested');
+    }
     const { email, password } = req.body || {};
     if (!email || !password)
       return res.status(400).json({ message: "Email and password required" });
