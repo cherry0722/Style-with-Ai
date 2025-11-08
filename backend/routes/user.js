@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const User = require("../models/user");
+const auth = require("../middleware/auth");
 
 //signup
 router.post("/users", async (req, res) => {
   try {
-    console.log("Create user route hit", req.body);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[USER] create requested');
+    }
     const { username, email, password, phone, image } = req.body;
 
     // Validation
@@ -64,7 +67,7 @@ router.post("/users", async (req, res) => {
   }
 });
 
-router.get("/users/email/:email", async (req, res) => {
+router.get("/users/email/:email", auth, async (req, res) => {
   try {
     const user = await User.findOne({ email: req.params.email });
     if (!user) {
@@ -73,11 +76,11 @@ router.get("/users/email/:email", async (req, res) => {
     res.status(200).json(user);
   } catch (err) {
     console.error("Error fetching user by email:", err);
-    res.status(500).json({ error: "Server error while fetching user" });
+    res.status(500).json({ message: "Server error while fetching user" });
   }
 });
 
-router.get("/users/username/:username", async (req, res) => {
+router.get("/users/username/:username", auth, async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
     if (!user) {
@@ -86,19 +89,19 @@ router.get("/users/username/:username", async (req, res) => {
     res.status(200).json(user);
   } catch (err) {
     console.error("Error fetching user by username:", err);
-    res.status(500).json({ error: "Server error while fetching user" });
+    res.status(500).json({ message: "Server error while fetching user" });
   }
 });
 
 // ❌ Removed duplicate /login route - login is handled in routes/auth.js
 
-router.get("/users", async (req, res) => {
+router.get("/users", auth, async (req, res) => {
   try {
     const users = await User.find();
     res.status(200).json(users);
   } catch (err) {
     console.error("Error fetching users:", err);
-    res.status(500).json({ error: "Server error while fetching users" });
+    res.status(500).json({ message: "Server error while fetching users" });
   }
 });
 
