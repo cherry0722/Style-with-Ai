@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   ScrollView,
   Pressable,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import SignInForm from '../components/auth/SignInForm';
@@ -22,16 +25,37 @@ interface PremiumSignInScreenProps {
   navigation?: any;
 }
 
-export default function PremiumSignInScreen({ navigation }: PremiumSignInScreenProps = {}) {
+export default function PremiumSignInScreen({ navigation: navigationProp }: PremiumSignInScreenProps = {}) {
   const theme = useTheme();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const hasNavigated = React.useRef(false);
+  
+  // Use navigation hook as fallback if prop is not provided
+  const navigationHook = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = navigationProp || navigationHook;
 
   const styles = createStyles(theme);
 
+  // Navigate to Main when user is set (after successful login)
+  useEffect(() => {
+    if (user && !hasNavigated.current) {
+      console.log('User logged in, navigating to Main...', user);
+      hasNavigated.current = true;
+      // Use replace to prevent going back to login screen
+      try {
+        navigation.replace('Main');
+      } catch (error) {
+        console.error('Navigation error:', error);
+        // Fallback: try navigate instead of replace
+        navigation.navigate('Main' as any);
+      }
+    }
+  }, [user, navigation]);
+
   const handleSignInSuccess = () => {
     hapticFeedback.success();
-    // Navigation will be handled by the auth context
+    // Navigation will happen automatically via useEffect when user state updates
   };
 
   const handleCreateAccount = () => {

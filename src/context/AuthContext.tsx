@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode } from "react";
 import type { UserAuth } from "../types";
-import axios from "axios";
+import client from "../api/client";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthCtx {
   user: UserAuth | null;
@@ -26,34 +27,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Login with email/password
   async function login(email: string, password: string) {
     try {
-      const res = await axios.post("https://30f492a92c14.ngrok-free.app/api/login", { email, password });
-      const { user } = res.data;
+      const res = await client.post("/api/login", { email, password });
+      const { user, token } = res.data;
 
-      setUser({
+      // Store token
+      if (token) {
+        await AsyncStorage.setItem('token', token);
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('token', token);
+        }
+      }
+
+      const userData = {
         id: user._id,
         email: user.email,
         username: user.username,
         phone: user.phone,
-      });
-
-      console.log("Login successful!");
+      };
+      
+      setUser(userData);
+      console.log("Login successful! User set:", userData);
     } catch (err: any) {
-      console.error("Login failed:", err.response?.data || err.message);
-      throw new Error(err.response?.data?.message || "Invalid credentials");
+      console.error("Login failed:", err.data || err.message);
+      throw new Error(err.data?.message || err.message || "Invalid credentials");
     }
   }
 
   // Signup with email, password, username, phone
-  async function signup(email: string, password: string, username?: string, phone?: string) {
+  async function signup(email: string, password: string, username?: string, phone?: string, image?: string) {
     try {
-      const res = await axios.post("https://30f492a92c14.ngrok-free.app/api/users", {
+      const res = await client.post("/api/users", {
         email,
         password,
         username,
         phone,
+        image,
       });
 
       const { user } = res.data;
+
+      // Note: Signup doesn't return a token, user needs to login after signup
+      // If you want auto-login after signup, you can call login() here
 
       setUser({
         id: user._id,
@@ -64,8 +78,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("Signup successful!");
     } catch (err: any) {
-      console.error("Signup failed:", err.response?.data || err.message);
-      throw new Error(err.response?.data?.message || "Signup failed");
+      console.error("Signup failed:", err);
+      
+      // Handle network errors
+      if (err.message === 'Network Error' || err.message?.includes('Network')) {
+        throw new Error('Cannot connect to server. Make sure the backend is running and the API URL is correct.');
+      }
+      
+      // Handle API errors
+      const errorMessage = err.data?.message || err.message || "Signup failed";
+      throw new Error(errorMessage);
     }
   }
 
@@ -81,7 +103,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser({ id: "demo-phone", email: "", username: phone, phone });
   }
 
-  function logout() {
+  async function logout() {
+    // Remove token from storage
+    await AsyncStorage.removeItem('token');
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('token');
+    }
     setUser(null);
   }
 

@@ -58,12 +58,14 @@ export default function SignInForm({ onSignInSuccess, isLoading, onLoadingChange
       hapticFeedback.light();
       
       await login(email.trim(), password);
+      // Don't call onLoadingChange(false) here - let the navigation happen
+      // The loading state will be reset when the screen unmounts
       onSignInSuccess();
-    } catch (error) {
-      hapticFeedback.error();
-      Alert.alert('Sign In Failed', 'Please check your credentials and try again.');
-    } finally {
+    } catch (error: any) {
       onLoadingChange(false);
+      hapticFeedback.error();
+      const errorMessage = error?.message || 'Please check your credentials and try again.';
+      Alert.alert('Sign In Failed', errorMessage);
     }
   };
 

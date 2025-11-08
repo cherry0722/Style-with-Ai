@@ -5,8 +5,15 @@ const User = require("../models/user");
 //signup
 router.post("/users", async (req, res) => {
   try {
-console.log("Create user route hit");
-    const { username, email, password, phone } = req.body;
+    console.log("Create user route hit", req.body);
+    const { username, email, password, phone, image } = req.body;
+
+    // Validation
+    if (!username || !email || !password) {
+      return res.status(400).json({ 
+        message: "Username, email, and password are required" 
+      });
+    }
 
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],
@@ -22,16 +29,38 @@ console.log("Create user route hit");
       email,
       password,
       phone,
+      image,
     });
 
     const savedUser = await newUser.save();
+    
+    // Don't send password back
+    const userResponse = savedUser.toObject();
+    delete userResponse.password;
+    
     res.status(201).json({
       message: "User created successfully",
-      user: savedUser,
+      user: userResponse,
     });
   } catch (err) {
     console.error("Error creating user:", err);
-    res.status(500).json({ error: "Server error while creating user" });
+    
+    // Handle MongoDB validation errors
+    if (err.name === 'ValidationError') {
+      const messages = Object.values(err.errors).map(e => e.message).join(', ');
+      return res.status(400).json({ message: messages });
+    }
+    
+    // Handle duplicate key errors
+    if (err.code === 11000) {
+      return res.status(400).json({ 
+        message: "Email or username already exists" 
+      });
+    }
+    
+    res.status(500).json({ 
+      message: err.message || "Server error while creating user" 
+    });
   }
 });
 
@@ -61,32 +90,7 @@ router.get("/users/username/:username", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
-  try {
-     console.log("Login route hit");
-    const { email, password } = req.body;
-
-    // 1️⃣ Find user by email
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // 2️⃣ Match password
-    if (user.password !== password) {
-      return res.status(401).json({ message: "Invalid password" });
-    }
-
-    // 3️⃣ Return user data
-    res.status(200).json({
-      message: "Login successful",
-      user,
-    });
-  } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: "Server error during login" });
-  }
-});
+// ❌ Removed duplicate /login route - login is handled in routes/auth.js
 
 router.get("/users", async (req, res) => {
   try {
