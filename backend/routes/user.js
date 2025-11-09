@@ -1,22 +1,30 @@
 const express = require("express");
 const router = express.Router();
+const { body, validationResult } = require('express-validator');
 const User = require("../models/user");
 const auth = require("../middleware/auth");
 
 //signup
-router.post("/users", async (req, res) => {
+router.post("/users", [
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('username').trim().notEmpty().withMessage('Username is required')
+], async (req, res) => {
   try {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[USER] create requested');
     }
-    const { username, email, password, phone, image } = req.body;
 
-    // Validation
-    if (!username || !email || !password) {
+    // Validate input
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
       return res.status(400).json({ 
-        message: "Username, email, and password are required" 
+        message: 'Validation failed', 
+        details: errors.array() 
       });
     }
+
+    const { username, email, password, phone, image } = req.body;
 
     const existingUser = await User.findOne({
       $or: [{ email }, { username }],

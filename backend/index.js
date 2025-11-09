@@ -36,8 +36,12 @@ app.use((req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error("💥 Unhandled error:", err);
-  res.status(500).json({ message: "Server error" });
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('💥 Unhandled error:', err);
+    if (err?.stack) console.error(err.stack);
+  }
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({ message: err.message || 'Server error' });
 });
 
 const PORT = process.env.NODE_PORT || 5000;
