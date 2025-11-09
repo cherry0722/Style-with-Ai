@@ -1,12 +1,23 @@
-import os, datetime
+import os
+import datetime
 from typing import List, Dict, Any
-from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 
 load_dotenv()
 
-_client = MongoClient(os.getenv("MONGO_URI"))
-db = _client[os.getenv("MONGO_DB", "myra")]
+MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    raise ValueError("MONGO_URI environment variable is required")
+
+try:
+    _client = MongoClient(MONGO_URI)
+    _client.admin.command('ping')
+except PyMongoError as e:
+    raise ConnectionError(f"Failed to connect to MongoDB: {e}")
+
+db = _client[os.getenv("MONGO_DB", "style_with_ai")]
 
 def get_user_wardrobe(user_id: str) -> List[Dict[str, Any]]:
     return list(db.wardrobe.find({"user_id": user_id}))

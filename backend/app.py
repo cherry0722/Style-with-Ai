@@ -1,31 +1,40 @@
 # app.py
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from routes.agent import router as agent_router
 from routes.feedback import router as feedback_router
+from db.mongo import db, _client
 
 app = FastAPI(title="MYRA Backend", version="0.1.0")
 
-# CORS configuration
-origins = [
-    "http://localhost:19006",  # Expo web
-    "exp://localhost:19000",   # Expo development
-    "http://localhost:3000",   # Frontend development
-]
+# CORS configuration from environment
+cors_origins_env = os.getenv("CORS_ORIGINS", "")
+if cors_origins_env:
+    origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+else:
+    origins = ["*"]  # dev default
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "Accept"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/")
 def root():
     return {"message": "MYRA backend is running"}
+
+@app.get("/health")
+def health():
+    try:
+        _client.admin.command('ping')
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"DB down: {e}")
 
 # Register routes - AI routes are gated by AI_ENABLE flag
 # Routes themselves will return 501 if AI is disabled
