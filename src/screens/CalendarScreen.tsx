@@ -5,26 +5,18 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  Dimensions,
   Alert,
 } from 'react-native';
 import { Calendar, DateData } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { useCalendar } from '../store/calendar';
-import { useAuth } from '../context/AuthContext';
 import { hapticFeedback } from '../utils/haptics';
-
-const { width } = Dimensions.get('window');
 
 export default function CalendarScreen() {
   const theme = useTheme();
-  const { user } = useAuth();
-  const { events, addEvent } = useCalendar();
+  const { events } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [showAddEvent, setShowAddEvent] = useState(false);
-
-  const firstName = user?.profile?.preferredName || user?.displayName || 'User';
 
   const markedDates = events.reduce((acc, event) => {
     acc[event.date] = {
@@ -43,7 +35,8 @@ export default function CalendarScreen() {
   }, []);
 
   const handleAddEvent = useCallback(() => {
-    setShowAddEvent(true);
+    // TODO: Implement add event modal
+    Alert.alert('Add Event', 'Event creation feature coming soon!');
     hapticFeedback.light();
   }, []);
 

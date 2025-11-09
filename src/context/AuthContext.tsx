@@ -5,21 +5,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthCtx {
   user: UserAuth | null;
+  setUser: (u: UserAuth | null) => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, username?: string, phone?: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginWithApple: () => Promise<void>;
   loginWithPhone: (phone: string) => Promise<void>;
   logout: () => void;
+  updateProfile?: (patch: Partial<UserAuth>) => void; // optional
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
-
-function nameFromEmail(email?: string) {
-  if (!email) return undefined;
-  const left = email.split("@")[0] || "";
-  return left.charAt(0).toUpperCase() + left.slice(1);
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserAuth | null>(null);
@@ -112,16 +108,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  const updateProfile = (patch: Partial<UserAuth>) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : null));
+  };
+
   return (
     <Ctx.Provider
       value={{
         user,
+        setUser,
         login,
         signup,
         loginWithGoogle,
         loginWithApple,
         loginWithPhone,
         logout,
+        updateProfile,
       }}
     >
       {children}

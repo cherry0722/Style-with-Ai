@@ -5,13 +5,10 @@ import {
   StyleSheet,
   Pressable,
   Animated,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
-
-const { width } = Dimensions.get('window');
 
 interface TestVideoPlayerProps {
   onVideoPress?: () => void;
@@ -57,6 +54,7 @@ export default function TestVideoPlayer({ onVideoPress }: TestVideoPlayerProps) 
 
       return () => clearInterval(interval);
     }
+    return undefined;
   }, [isPlaying, fadeAnim]);
 
   const handlePlayPause = () => {

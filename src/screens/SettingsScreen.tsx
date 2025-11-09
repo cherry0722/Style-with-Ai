@@ -5,11 +5,8 @@ import {
   ScrollView,
   Pressable,
   Switch,
-  Alert,
   Modal,
   TextInput,
-  Dimensions,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -19,16 +16,16 @@ import { hapticFeedback } from "../utils/haptics";
 import { Picker } from '@react-native-picker/picker';
 import type { BodyType, Pronouns } from "../types";
 
-const { width } = Dimensions.get('window');
-
 const PRONOUNS: Pronouns[] = ["she/her", "he/him", "they/them", "prefer-not-to-say"];
 const BODY_TYPES: BodyType[] = ["skinny", "fit", "muscular", "bulk", "pear", "hourglass", "rectangle"];
 
 export default function SettingsScreen() {
-  const { user, updateProfile } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
+  const updateProfile = auth.updateProfile;
   const settings = useSettings();
   const theme = useTheme();
-  const p = user?.profile || {};
+  const p = (user?.profile ?? {}) as { preferredName?: string; pronouns?: Pronouns; heightCm?: number; weightLb?: number; bodyType?: BodyType };
 
   // View/edit mode
   const [editing, setEditing] = useState(false);
@@ -62,13 +59,15 @@ export default function SettingsScreen() {
 
   function saveEdit() {
     hapticFeedback.success();
-    updateProfile({
-      preferredName: preferredName || undefined,
-      pronouns,
-      heightCm,
-      weightLb,
-      bodyType,
-    });
+    updateProfile?.({
+      profile: {
+        preferredName: preferredName || undefined,
+        pronouns,
+        heightCm,
+        weightLb,
+        bodyType,
+      },
+    } as any);
     setEditing(false);
   }
 

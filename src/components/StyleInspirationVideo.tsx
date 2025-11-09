@@ -17,7 +17,7 @@ export default function StyleInspirationVideo({
 }: StyleInspirationVideoProps) {
   const theme = useTheme();
   const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
+  const [_hasError, _setHasError] = useState(false);
   const videoRef = useRef<Video>(null);
 
   const styles = createStyles(theme);
@@ -25,20 +25,20 @@ export default function StyleInspirationVideo({
   const handleVideoLoad = async (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
       setIsLoading(false);
-      setHasError(false);
+      _setHasError(false);
       // Auto-play the video when it loads
       try {
         await videoRef.current?.playAsync();
       } catch (error) {
         console.error('Error auto-playing video:', error);
-        setHasError(true);
+        _setHasError(true);
       }
     }
   };
 
   const handleVideoError = (error: any) => {
     console.error('Video error:', error);
-    setHasError(true);
+    _setHasError(true);
     setIsLoading(false);
   };
 

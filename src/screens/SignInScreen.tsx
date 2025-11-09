@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,8 @@ import {
   Platform,
   ScrollView,
   Pressable,
-  Image,
   AccessibilityInfo,
 } from 'react-native';
-import { Video, ResizeMode } from 'expo-av';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -23,12 +21,9 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import SignInForm from '../components/auth/SignInForm';
 import SocialButtons from '../components/auth/SocialButtons';
 import { hapticFeedback } from '../utils/haptics';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const { width, height } = Dimensions.get('window');
 
@@ -38,14 +33,13 @@ const { width, height } = Dimensions.get('window');
 // const BOTTOM_HERO_IMAGE = require('../assets/images/bottomHero.png'); // TODO: Add image
 
 interface SignInScreenProps {
-  navigation?: any; // Optional for now
+  navigation?: any;
 }
 
 export default function SignInScreen({ navigation }: SignInScreenProps = {}) {
   const theme = useTheme();
-  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [_isSigningIn, _setIsSigningIn] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
 
   // Animation values
@@ -57,9 +51,6 @@ export default function SignInScreen({ navigation }: SignInScreenProps = {}) {
   const formTranslateY = useSharedValue(30);
   const backgroundOverlayOpacity = useSharedValue(0);
   const backgroundBlur = useSharedValue(0);
-
-  // Video ref
-  const videoRef = useRef<Video>(null);
 
   const styles = createStyles(theme);
 
@@ -102,7 +93,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps = {}) {
   };
 
   const handleSignInStart = () => {
-    setIsSigningIn(true);
+    _setIsSigningIn(true);
     
     if (!reduceMotion) {
       // Add background overlay and blur
@@ -112,7 +103,7 @@ export default function SignInScreen({ navigation }: SignInScreenProps = {}) {
   };
 
   const handleSignInEnd = () => {
-    setIsSigningIn(false);
+    _setIsSigningIn(false);
     
     if (!reduceMotion) {
       // Remove background overlay and blur
@@ -178,18 +169,12 @@ export default function SignInScreen({ navigation }: SignInScreenProps = {}) {
         
         {/* TODO: Uncomment when video asset is available
         <Video
-          ref={videoRef}
           source={FASHION_VIDEO}
           style={styles.video}
-          resizeMode={ResizeMode.COVER}
+          resizeMode="cover"
           shouldPlay
           isLooping
           isMuted
-          onLoad={() => {
-            if (videoRef.current) {
-              videoRef.current.playAsync();
-            }
-          }}
         />
         */}
       </View>

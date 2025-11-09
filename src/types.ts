@@ -65,10 +65,17 @@ export interface UserProfile {
 }
 
 export interface UserAuth {
-  id: string;
+  id?: string;
   email?: string;
   username?: string; // derived from email/name, for greeting
-  phone?: String;
+  phone?: string; // lowercase primitive
+  image?: string;
+  // optional fields referenced in UI:
+  displayName?: string;
+  profile?: {
+    preferredName?: string;
+  };
+  token?: string;
 }
 
 /** Weather & Location */

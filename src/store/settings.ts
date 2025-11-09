@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { AppSettings } from '../types';
 
 interface SettingsState extends AppSettings {
