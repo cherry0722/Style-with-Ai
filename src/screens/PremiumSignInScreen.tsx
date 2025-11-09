@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
@@ -18,8 +17,6 @@ import { useAuth } from '../context/AuthContext';
 import SignInForm from '../components/auth/SignInForm';
 import SocialButtons from '../components/auth/SocialButtons';
 import { hapticFeedback } from '../utils/haptics';
-
-const { width, height } = Dimensions.get('window');
 
 interface PremiumSignInScreenProps {
   navigation?: any;

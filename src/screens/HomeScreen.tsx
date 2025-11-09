@@ -7,7 +7,6 @@ import {
   Image,
   RefreshControl,
   Alert,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -22,8 +21,6 @@ import { hapticFeedback } from '../utils/haptics';
 import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
 
-const { width } = Dimensions.get('window');
-
 export default function HomeScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
@@ -34,10 +31,9 @@ export default function HomeScreen() {
   
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [location, setLocation] = useState<LocationData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const firstName = user?.profile?.preferredName || user?.displayName || 'there';
+  const firstName = user?.profile?.preferredName || user?.displayName || user?.username || (user?.email ? user.email.split('@')[0] : 'there');
   const today = new Date().toISOString().split('T')[0];
   const todayEvents = getEventsForDate(today);
 
@@ -57,7 +53,6 @@ export default function HomeScreen() {
       console.error('Error loading weather data:', error);
       Alert.alert('Error', 'Failed to load weather data. Please check your connection.');
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   }, [settings]);
@@ -565,10 +560,8 @@ const createStyles = (theme: any) => ({
     marginBottom: theme.spacing.xl,
   },
   stickyHeader: {
-    position: 'sticky' as const,
-    top: 0,
+    position: 'relative' as const,
     backgroundColor: theme.colors.background,
-    zIndex: 10,
     paddingVertical: theme.spacing.lg,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "../screens/HomeScreen";
 import ClosetScreen from "../screens/ClosetScreen";
@@ -8,7 +8,6 @@ import SettingsScreen from "../screens/SettingsScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal } from "react-native";
 import { useAuth } from "../context/AuthContext";
-import { useNotifications } from "../store/notifications";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "./RootNavigator";
@@ -27,17 +26,8 @@ const Tab = createBottomTabNavigator<TabParamList>();
 export default function Tabs() {
   const { user, logout } = useAuth();
   const theme = useTheme();
-  const { unreadCount } = useNotifications();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  const firstName = useMemo(() => {
-    if (user?.profile?.preferredName) return user.profile.preferredName;
-    if (user?.displayName) return user.displayName;
-    if (user?.email) return (user.email.split("@")[0] || "there");
-    if (user?.phone) return user.phone;
-    return "there";
-  }, [user]);
 
   function handleLogout() {
     setMenuOpen(false);
