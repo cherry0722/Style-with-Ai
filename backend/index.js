@@ -29,6 +29,9 @@ app.use("/api", authRoutes);
 const userRoutes = require("./routes/user");
 app.use("/api", userRoutes);
 
+const wardrobeRoutes = require("./routes/wardrobe");
+app.use("/api/wardrobe", wardrobeRoutes);
+
 // 404 handler - must be last
 app.use((req, res) => {
   res.status(404).json({ message: "Not found" });
