@@ -23,15 +23,29 @@ class Weather(BaseModel):
     precipChance: Optional[float] = None
 
 
+class Location(BaseModel):
+    latitude: float
+    longitude: float
+    name: Optional[str] = None
+
+
 class RecommendRequest(BaseModel):
     user_id: str = Field(..., description="User ID from your auth system/app")
     event: Optional[str] = Field(None, description="Event description, e.g. 'Dinner at 7pm'")
     weather: Optional[Weather] = None
 
 
+class SuggestRequest(BaseModel):
+    user_id: str = Field(..., description="User ID from your auth system/app")
+    location: Location = Field(..., description="Location (lat/lon) used to fetch weather if needed")
+    weather: Weather = Field(..., description="Current weather summary and numeric fields")
+
+
 class Outfit(BaseModel):
     items: List[str]
     why: str
+    # Non-breaking enrichment: optional detailed metadata for items
+    items_detail: Optional[List[Dict[str, Any]]] = None
 
 
 class RecommendResponse(BaseModel):

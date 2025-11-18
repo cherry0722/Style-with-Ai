@@ -1,11 +1,15 @@
 # app.py
 import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+# Load environment variables from .env
+load_dotenv()
+
 from routes.agent import router as agent_router
 from routes.feedback import router as feedback_router
-from db.mongo import db, _client
+from db.mongo import db, _client, USE_MOCK_DB_ENV
 
 app = FastAPI(title="MYRA Backend", version="0.1.0")
 
@@ -30,6 +34,8 @@ def root():
 
 @app.get("/health")
 def health():
+    if USE_MOCK_DB_ENV or _client is None:
+        return {"status": "healthy", "database": "mock"}
     try:
         _client.admin.command('ping')
         return {"status": "healthy", "database": "connected"}

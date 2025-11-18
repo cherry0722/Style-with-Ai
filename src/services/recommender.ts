@@ -1,6 +1,9 @@
 import topOutfits from "../data/topOutfits";
 import { Garment, OutfitSuggestion, OutfitTemplate } from "../types";
-import { ENABLE_AI } from "../config";
+import { ENABLE_AI, AI_BASE_URL } from "../config";
+import client from "../api/client";
+import { getCurrentLocation, getWeatherData } from "./weather";
+import { useSettings } from "../store/settings";
 
 function colorAffinity(needed: OutfitTemplate["preferredColors"], cat: string, garment: Garment) {
   if (!needed) return 0.2; // base score if no prefs
@@ -51,16 +54,94 @@ function localRuleBasedRecommend(
 }
 
 /**
- * Main recommendation function - uses local rule-based logic when AI is disabled
+ * Call the backend AI agent endpoint to get outfit suggestions
  */
-export function recommend(closet: Garment[], context: OutfitTemplate["context"], topK = 5): OutfitSuggestion[] {
+async function callAIBackendRecommend(
+  userId: string,
+  latitude: number,
+  longitude: number,
+  tempF: number,
+  weatherSummary: string,
+  topK: number
+): Promise<OutfitSuggestion[] | null> {
+  try {
+    const payload = {
+      user_id: userId,
+      location: { latitude, longitude, name: "Current Location" },
+      weather: { tempF, summary: weatherSummary, precipChance: 0 },
+    };
+
+    const response = await client.post(`${AI_BASE_URL}/agent/suggest_outfit`, payload);
+    
+    if (response.data && response.data.outfits && Array.isArray(response.data.outfits)) {
+      // Map backend response to OutfitSuggestion format
+      const suggestions: OutfitSuggestion[] = response.data.outfits.map((outfit: any, idx: number) => {
+        const suggestion: any = {
+          id: `ai-${idx}`,
+          items: outfit.items || [],
+          score: 0.9, // High score for AI suggestions
+          context: "ai_generated",
+        };
+        // Store the "why" explanation from backend
+        if (outfit.why) {
+          suggestion.why = outfit.why;
+        }
+        return suggestion;
+      });
+      return suggestions.slice(0, topK);
+    }
+    return null;
+  } catch (error) {
+    console.warn("[Recommender] Backend AI call failed, falling back to rule-based:", error);
+    return null;
+  }
+}
+
+/**
+ * Main recommendation function - calls AI backend when enabled, falls back to rule-based
+ */
+export async function recommend(
+  closet: Garment[],
+  context: OutfitTemplate["context"],
+  userId?: string,
+  topK = 5
+): Promise<OutfitSuggestion[]> {
   // If AI is disabled, use local rule-based recommendation
   if (!ENABLE_AI) {
     return localRuleBasedRecommend(closet, context, topK);
   }
-  
-  // When AI is enabled, this function could call the Python backend
-  // For now, fall back to local logic until AI integration is complete
-  // TODO: Implement AI backend call when EXPO_PUBLIC_ENABLE_AI=true
+
+  // AI is enabled: try to call backend
+  if (userId) {
+    try {
+      const settings = useSettings.getState();
+      const location = await getCurrentLocation();
+      const weatherResult = await getWeatherData(settings, false);
+      
+      if (location && weatherResult.weather) {
+        const tempF = weatherResult.weather.temperature || 70;
+        const summary = weatherResult.weather.condition || "Clear";
+        
+        const aiSuggestions = await callAIBackendRecommend(
+          userId,
+          location.latitude,
+          location.longitude,
+          tempF,
+          summary,
+          topK
+        );
+        
+        if (aiSuggestions && aiSuggestions.length > 0) {
+          console.log("[Recommender] Using AI backend suggestions:", aiSuggestions.length);
+          return aiSuggestions;
+        }
+      }
+    } catch (error) {
+      console.warn("[Recommender] Error calling AI backend:", error);
+    }
+  }
+
+  // Fallback to rule-based if AI failed or no user ID
+  console.log("[Recommender] Falling back to rule-based recommendation");
   return localRuleBasedRecommend(closet, context, topK);
 }

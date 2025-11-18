@@ -7,6 +7,7 @@ import {
   Image,
   RefreshControl,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -20,6 +21,8 @@ import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
 import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
+import { recommend } from '../services/recommender';
+import { useCloset } from '../store/closet';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -28,10 +31,12 @@ export default function HomeScreen() {
   const theme = useTheme();
   const { getEventsForDate } = useCalendar();
   const { unreadCount } = useNotifications();
+  const { items } = useCloset();
   
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [location, setLocation] = useState<LocationData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const firstName = user?.profile?.preferredName || user?.displayName || user?.username || (user?.email ? user.email.split('@')[0] : 'there');
   const today = new Date().toISOString().split('T')[0];
@@ -96,6 +101,40 @@ export default function HomeScreen() {
       case 'calendar':
         // Calendar navigation removed - no longer in bottom tabs
         break;
+    }
+  };
+
+  const handleGenerateAIOutfit = async () => {
+    try {
+      setAiLoading(true);
+      console.log("[HomeScreen] Generating AI outfit...");
+      const result = await recommend(items, 'casual', user?.id, 1);
+      console.log("[HomeScreen] AI outfit result:", result);
+      
+      if (result && result.length > 0) {
+        const outfit = result[0];
+        const itemCount = (outfit.items as any[])?.length || 0;
+        
+        // Check if outfit has a context/why field that explains the suggestion
+        const explanation = (outfit as any).why || `Outfit with ${itemCount} items`;
+        
+        const message = itemCount > 0 
+          ? `✨ Selected ${itemCount} items for you\n\n📝 "${explanation}"`
+          : "✨ AI generated an outfit suggestion";
+        
+        Alert.alert(
+          "✨ Outfit Generated!",
+          message,
+          [{ text: "Perfect!", onPress: () => console.log("[HomeScreen] User accepted outfit") }]
+        );
+      } else {
+        Alert.alert("No Outfit", "Could not generate an outfit. Try adding more items to your closet.");
+      }
+    } catch (error) {
+      console.error("[HomeScreen] Error generating outfit:", error);
+      Alert.alert("Error", "Failed to generate outfit. Please ensure backend is running.");
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -261,6 +300,22 @@ export default function HomeScreen() {
           </View>
         )}
       </View>
+
+      {/* AI Outfit Generator Button */}
+      <Pressable 
+        style={[styles.aiGeneratorButton, aiLoading && styles.aiGeneratorButtonDisabled]}
+        onPress={handleGenerateAIOutfit}
+        disabled={aiLoading}
+      >
+        {aiLoading ? (
+          <ActivityIndicator color={theme.colors.white} />
+        ) : (
+          <>
+            <Ionicons name="sparkles" size={20} color={theme.colors.white} style={{ marginRight: 8 }} />
+            <Text style={styles.aiGeneratorButtonText}>Generate with AI</Text>
+          </>
+        )}
+      </Pressable>
 
       {/* Calendar Widget */}
       <View style={styles.calendarWidget}>
@@ -619,5 +674,30 @@ const createStyles = (theme: any) => ({
     textAlign: 'center' as const,
     fontStyle: 'italic' as const,
     marginTop: theme.spacing.lg,
+  },
+  aiGeneratorButton: {
+    backgroundColor: theme.colors.accent,
+    marginHorizontal: theme.spacing.lg,
+    marginVertical: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    borderRadius: theme.borderRadius.lg,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    shadowColor: theme.colors.black || '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  aiGeneratorButtonDisabled: {
+    opacity: 0.6,
+  },
+  aiGeneratorButtonText: {
+    color: theme.colors.white,
+    fontWeight: theme.typography.bold,
+    fontSize: theme.typography.lg,
+    textAlign: 'center' as const,
   },
 });
