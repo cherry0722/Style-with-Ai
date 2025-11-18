@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
+const path = require('path');
 const connectDB = require('./db');
 
 const app = express();
@@ -31,6 +32,12 @@ app.use("/api", userRoutes);
 
 const wardrobeRoutes = require("./routes/wardrobe");
 app.use("/api/wardrobe", wardrobeRoutes);
+
+const uploadRoutes = require("./routes/upload");
+app.use("/api/upload", uploadRoutes);
+
+// Static file serving for uploaded images
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // 404 handler - must be last
 app.use((req, res) => {
