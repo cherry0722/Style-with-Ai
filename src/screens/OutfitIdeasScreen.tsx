@@ -51,7 +51,7 @@ function OutfitCard({ suggestion, theme }: { suggestion: OutfitSuggestion; theme
     <View style={styles.card}>
       <View style={styles.cardImages}>
         {suggestion.items.map((it) => (
-          <Image key={it.id} source={{ uri: it.uri }} style={styles.cardImage} />
+          <Image key={it.id} source={{ uri: it.imageUrl || it.uri }} style={styles.cardImage} />
         ))}
       </View>
       <View style={styles.cardContent}>

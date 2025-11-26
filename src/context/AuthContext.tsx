@@ -51,6 +51,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Signup with email, password, username, phone
   async function signup(email: string, password: string, username?: string, phone?: string, image?: string) {
+    // Debug logging (development only) - sanitize password
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      const sanitizedPayload = { email, username, phone, image, password: '[REDACTED]' };
+      console.log('[Auth] Signup request payload (sanitized):', sanitizedPayload);
+      console.log('[Auth] Calling POST /api/users');
+    }
+
     try {
       const res = await client.post("/api/users", {
         email,
@@ -61,6 +68,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       const { user } = res.data;
+
+      // Debug logging (development only)
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[Auth] Signup response:', { 
+          userId: user._id, 
+          email: user.email, 
+          username: user.username 
+        });
+      }
 
       // Note: Signup doesn't return a token, user needs to login after signup
       // If you want auto-login after signup, you can call login() here
@@ -74,10 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("Signup successful!");
     } catch (err: any) {
-      console.error("Signup failed:", err);
+      // Debug logging (development only)
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.error('[Auth] Signup error:', {
+          message: err?.message,
+          status: err?.status,
+          data: err?.data,
+          fullError: err,
+        });
+      }
       
       // Handle network errors
-      if (err.message === 'Network Error' || err.message?.includes('Network')) {
+      if (err.message === 'Network Error' || err.message?.includes('Network') || err.message?.includes('timeout')) {
         throw new Error('Cannot connect to server. Make sure the backend is running and the API URL is correct.');
       }
       

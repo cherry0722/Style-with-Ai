@@ -20,8 +20,9 @@ export type ColorName =
   | "purple";
 
 export interface Garment {
-  id: string;
-  uri: string; // local image URI
+  id: string;           // maps from backend _id
+  uri?: string;         // local file:// path (optional, for immediate preview)
+  imageUrl?: string;    // backend URL (optional, but preferred for rendering)
   category: GarmentCategory;
   colors: ColorName[];
   brand?: string;

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { API_BASE_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -22,6 +22,8 @@ async function getToken() {
   }
 }
 
+console.log('[API Client] Using baseURL =', API_BASE_URL);
+
 const client = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
@@ -33,15 +35,49 @@ client.interceptors.request.use(async (config) => {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
+  
+  // Debug logging (development only)
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    const fullUrl = `${config.baseURL}${config.url}`;
+    console.log(`[API Client] ${config.method?.toUpperCase()} ${fullUrl}`);
+  }
+  
   return config;
 });
 
 client.interceptors.response.use(
-  (res) => res,
-  (err) => {
+  (res) => {
+    // Debug logging (development only)
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      const fullUrl = `${res.config.baseURL}${res.config.url}`;
+      console.log(`[API Client] ${res.config.method?.toUpperCase()} ${fullUrl} - Success (${res.status})`);
+    }
+    return res;
+  },
+  async (err: AxiosError) => {
     const status = err?.response?.status;
     const data = err?.response?.data;
-    return Promise.reject({ status, data, message: err?.message ?? 'Request failed' });
+    const fullUrl = err?.config ? `${err.config.baseURL}${err.config.url}` : 'unknown';
+    
+    // Debug logging (development only)
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.error(`[API Client] Request failed: ${err.config?.method?.toUpperCase()} ${fullUrl}`);
+      console.error(`[API Client] Error status: ${status || 'N/A'}, message: ${err?.message || 'N/A'}`);
+      if (data) {
+        console.error(`[API Client] Error data:`, data);
+      }
+    }
+    
+    // Return clean error message
+    const cleanMessage = (data && typeof data === 'object' && 'message' in data ? (data as any).message : null) || 
+                        err?.message || 
+                        (status ? `Request failed with status ${status}` : 'Request failed');
+    
+    return Promise.reject({ 
+      status: status || undefined, 
+      data: data || undefined, 
+      message: cleanMessage 
+    });
   }
 );
 

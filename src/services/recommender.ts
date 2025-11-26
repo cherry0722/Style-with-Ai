@@ -1,6 +1,7 @@
 import topOutfits from "../data/topOutfits";
 import { Garment, OutfitSuggestion, OutfitTemplate } from "../types";
 import { ENABLE_AI } from "../config";
+import aiClient from "../api/aiClient";
 
 function colorAffinity(needed: OutfitTemplate["preferredColors"], cat: string, garment: Garment) {
   if (!needed) return 0.2; // base score if no prefs

@@ -26,7 +26,7 @@ export default function FavoritesScreen() {
           <View style={styles.card}>
             <View style={styles.cardImages}>
               {item.items.map((it) => (
-                <Image key={it.id} source={{ uri: it.uri }} style={styles.cardImage} />
+                <Image key={it.id} source={{ uri: it.imageUrl || it.uri }} style={styles.cardImage} />
               ))}
             </View>
             <View style={styles.cardContent}>
