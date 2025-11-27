@@ -53,12 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signup(email: string, password: string, username?: string, phone?: string, image?: string) {
     // Debug logging (development only) - sanitize password
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      const sanitizedPayload = { email, username, phone, image, password: '[REDACTED]' };
+      const sanitizedPayload = { email, username, phone, image: image ? '[provided]' : undefined, password: '[REDACTED]' };
       console.log('[Auth] Signup request payload (sanitized):', sanitizedPayload);
       console.log('[Auth] Calling POST /api/users');
     }
 
     try {
+      // 1) Create the user account
       const res = await client.post("/api/users", {
         email,
         password,
@@ -67,36 +68,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         image,
       });
 
-      const { user } = res.data;
-
       // Debug logging (development only)
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[Auth] Signup response:', { 
-          userId: user._id, 
-          email: user.email, 
-          username: user.username 
-        });
+        console.log('[Auth] Signup response:', res.data);
+        console.log('[Auth] Signup successful, logging in...');
       }
 
-      // Note: Signup doesn't return a token, user needs to login after signup
-      // If you want auto-login after signup, you can call login() here
+      // 2) Immediately log in to obtain JWT token and set auth state
+      await login(email, password);
 
-      setUser({
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        phone: user.phone,
-      });
-
-      console.log("Signup successful!");
+      // Do NOT set user/token here directly.
+      // Do NOT navigate from signup(), let login() or the caller handle navigation.
     } catch (err: any) {
       // Debug logging (development only)
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.error('[Auth] Signup error:', {
           message: err?.message,
-          status: err?.status,
-          data: err?.data,
-          fullError: err,
+          status: err?.status || err?.response?.status,
+          data: err?.data || err?.response?.data,
         });
       }
       
@@ -106,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       // Handle API errors
-      const errorMessage = err.data?.message || err.message || "Signup failed";
+      const errorMessage = err.data?.message || err.response?.data?.message || err.message || "Signup failed";
       throw new Error(errorMessage);
     }
   }

@@ -3,10 +3,12 @@ import { View, Text, Pressable, Image, TextInput, ActivityIndicator, Alert } fro
 import * as ImagePicker from "expo-image-picker";
 import { GarmentCategory } from "../types";
 import { uploadWardrobeImage, createWardrobeItem } from "../api/wardrobe";
+import { useAuth } from "../context/AuthContext";
 
 const CATS: GarmentCategory[] = ["top", "bottom", "dress", "outerwear", "shoes", "accessory"];
 
 export default function ScanScreen() {
+  const { user } = useAuth();
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [category, setCategory] = useState<GarmentCategory>("top");
   const [notes, setNotes] = useState<string>("");
@@ -21,33 +23,60 @@ export default function ScanScreen() {
   }
 
   const handleSave = async () => {
+    console.log("[ScanScreen] handleSave called", {
+      hasUser: !!user,
+      userId: user?.id,
+      imageUri,
+      category,
+      notes,
+    });
+
+    if (!user) {
+      Alert.alert(
+        "Not logged in",
+        "Please log in before adding items to your wardrobe."
+      );
+      console.log("[ScanScreen] Aborting save: no user");
+      return;
+    }
+
     if (!imageUri) {
-      Alert.alert('No image', 'Please select or capture an image first.');
+      Alert.alert("No image", "Please select or capture an image first.");
+      console.log("[ScanScreen] Aborting save: no imageUri");
       return;
     }
 
     try {
       setIsSaving(true);
-      console.log('[ScanScreen] Starting upload for', imageUri);
+      console.log("[ScanScreen] Starting upload for", imageUri);
 
       const imageUrl = await uploadWardrobeImage(imageUri);
-      console.log('[ScanScreen] Upload complete, imageUrl =', imageUrl);
+      console.log("[ScanScreen] Upload complete, imageUrl =", imageUrl);
 
-      const created = await createWardrobeItem({
+      const payload = {
         imageUrl,
         category,
-        colors: [],               // AI will fill later
+        colors: [],
         notes: notes || undefined,
-      });
+      };
+      console.log("[ScanScreen] Creating wardrobe item with payload:", payload);
 
-      console.log('[ScanScreen] Wardrobe item created:', created);
-      Alert.alert('Saved', 'Item saved to your wardrobe (backend).');
+      const created = await createWardrobeItem(payload);
 
+      console.log("[ScanScreen] Wardrobe item created:", created);
+      console.log("[ScanScreen] Created item userId:", created.userId);
+      console.log("[ScanScreen] Created item _id:", created._id);
+      Alert.alert("Saved", "Item saved to your wardrobe (backend).");
     } catch (err: any) {
-      console.error('[ScanScreen] Failed to save garment:', err);
+      console.error("[ScanScreen] Failed to save garment:", {
+        message: err?.message,
+        status: err?.status ?? err?.response?.status,
+        data: err?.response?.data,
+        fullError: err,
+      });
       Alert.alert(
-        'Error',
-        err?.message || 'Failed to save garment. Please try again.'
+        "Error",
+        err?.message || "Failed to save garment. Please try again."
       );
     } finally {
       setIsSaving(false);

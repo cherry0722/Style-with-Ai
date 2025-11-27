@@ -8,6 +8,7 @@ import {
   Alert,
   Modal,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -15,18 +16,22 @@ import { useCloset } from '../store/closet';
 import { Garment, GarmentCategory, ColorName } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
+import { uploadWardrobeImage, createWardrobeItem, WardrobeItemResponse } from '../api/wardrobe';
+import { useAuth } from '../context/AuthContext';
 
 const CATEGORIES: GarmentCategory[] = ["top", "bottom", "dress", "outerwear", "shoes", "accessory"];
 const COLORS: ColorName[] = ["black", "white", "gray", "blue", "green", "red", "yellow", "beige", "brown", "pink", "purple"];
 
 export default function OutfitScreen() {
   const theme = useTheme();
+  const { user } = useAuth();
   const { add } = useCloset();
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [category, setCategory] = useState<GarmentCategory>("top");
   const [color, setColor] = useState<ColorName>("black");
   const [note, setNote] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const styles = createStyles(theme);
 
@@ -90,31 +95,87 @@ export default function OutfitScreen() {
     }
   };
 
-  const saveGarment = () => {
-    if (!selectedImage) {
-      Alert.alert('Error', 'Please select an image first.');
+  const saveGarment = async () => {
+    console.log("[OutfitScreen] saveOutfit called", {
+      hasUser: !!user,
+      userId: user?.id,
+      selectedImage,
+      category,
+      color,
+      notes: note,
+    });
+
+    if (!user) {
+      Alert.alert(
+        "Not logged in",
+        "Please log in before adding outfits to your wardrobe."
+      );
+      console.log("[OutfitScreen] Aborting save: no user");
       return;
     }
 
-    const garment: Garment = {
-      id: `garment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      uri: selectedImage,
-      category,
-      colors: [color],
-      notes: note || undefined,
-    };
+    if (!selectedImage) {
+      Alert.alert("No image", "Please take or select a photo first.");
+      console.log("[OutfitScreen] Aborting save: no selectedImage");
+      return;
+    }
 
-    add(garment);
-    hapticFeedback.success();
-    
-    // Reset form
-    setSelectedImage(null);
-    setCategory("top");
-    setColor("black");
-    setNote("");
-    setShowAddModal(false);
-    
-    Alert.alert('Success', 'Outfit added to your collection!');
+    try {
+      setIsSaving(true);
+      console.log("[OutfitScreen] Starting upload for", selectedImage);
+
+      const imageUrl = await uploadWardrobeImage(selectedImage);
+      console.log("[OutfitScreen] Upload complete, imageUrl =", imageUrl);
+
+      const payload = {
+        imageUrl,
+        category,
+        colors: [color],
+        notes: note || undefined,
+      };
+      console.log("[OutfitScreen] Creating wardrobe item with payload:", payload);
+
+      const created: WardrobeItemResponse = await createWardrobeItem(payload);
+
+      console.log("[OutfitScreen] Wardrobe item created:", created);
+      console.log("[OutfitScreen] Created item userId:", created.userId);
+      console.log("[OutfitScreen] Created item _id:", created._id);
+
+      // Map backend response to Garment and add to store
+      const garment: Garment = {
+        id: created._id,
+        imageUrl: created.imageUrl,
+        category: created.category as GarmentCategory,
+        colors: (created.colors ?? []) as ColorName[],
+        notes: created.notes,
+        // Do NOT set uri for backend items
+      };
+
+      add(garment);
+      hapticFeedback.success();
+
+      // Reset form
+      setSelectedImage(null);
+      setCategory("top");
+      setColor("black");
+      setNote("");
+      setShowAddModal(false);
+
+      Alert.alert("Saved", "Outfit saved to your wardrobe.");
+    } catch (err: any) {
+      console.error("[OutfitScreen] Failed to save outfit:", {
+        message: err?.message,
+        status: err?.status ?? err?.response?.status,
+        data: err?.response?.data,
+        fullError: err,
+      });
+      Alert.alert(
+        "Error",
+        err?.message || "Failed to save outfit. Please try again."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const resetForm = () => {
@@ -162,8 +223,19 @@ export default function OutfitScreen() {
               <Text style={styles.modalCancel}>Cancel</Text>
             </Pressable>
             <Text style={styles.modalTitle}>Add Outfit</Text>
-            <Pressable onPress={saveGarment}>
-              <Text style={styles.modalSave}>Save</Text>
+            <Pressable
+              onPress={saveGarment}
+              disabled={!selectedImage || isSaving}
+              style={{ opacity: !selectedImage || isSaving ? 0.6 : 1 }}
+            >
+              {isSaving ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <ActivityIndicator size="small" color={theme.colors.accent} />
+                  <Text style={styles.modalSave}>Saving...</Text>
+                </View>
+              ) : (
+                <Text style={styles.modalSave}>Save</Text>
+              )}
             </Pressable>
           </View>
 

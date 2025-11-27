@@ -49,3 +49,5 @@ backend/.env
 # generated native folders
 /ios
 /android
+
+backend/uploads/images/
