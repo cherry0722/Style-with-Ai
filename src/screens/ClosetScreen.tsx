@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { View, FlatList, Text, ActivityIndicator, Alert } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import ClothingCard from "../components/ClothingCard";
 import { useCloset } from "../store/closet";
-import { fetchWardrobeItems, WardrobeItemResponse } from "../api/wardrobe";
+import { fetchWardrobeItems, toggleFavorite, WardrobeItemResponse } from "../api/wardrobe";
 import { Garment } from "../types";
 
 export default function ClosetScreen() {
@@ -13,6 +13,7 @@ export default function ClosetScreen() {
   const items = useCloset((state) => state.items);
   const setItems = useCloset((state) => state.setItems);
   const remove = useCloset((state) => state.remove);
+  const updateItem = useCloset((state) => state.updateItem);
 
   const loadWardrobe = async () => {
     try {
@@ -26,6 +27,8 @@ export default function ClosetScreen() {
         category: item.category,
         colors: item.colors ?? [],
         notes: item.notes,
+        isFavorite: item.isFavorite ?? false,
+        tags: item.tags ?? [],
         // no local uri from backend
       }));
 
@@ -41,6 +44,35 @@ export default function ClosetScreen() {
       setLoading(false);
     }
   };
+
+  const handleToggleFavorite = useCallback(
+    async (id: string, next: boolean) => {
+      console.log("[ClosetScreen] Toggling favorite for id=", id, "next=", next);
+
+      // Find previous state for rollback
+      const prev = items.find((item) => item.id === id);
+      const prevIsFavorite = prev?.isFavorite ?? !next;
+
+      // Optimistic update: update Zustand store first
+      updateItem(id, { isFavorite: next });
+
+      try {
+        const updated = await toggleFavorite(id, next);
+        console.log("[ClosetScreen] toggleFavorite response:", updated);
+
+        // Sync with backend response
+        updateItem(id, {
+          isFavorite: updated.isFavorite,
+        });
+      } catch (err: any) {
+        // Rollback on error
+        updateItem(id, { isFavorite: prevIsFavorite });
+        console.error("[ClosetScreen] Failed to toggle favorite:", err);
+        Alert.alert("Error", "Could not update favorite. Please try again.");
+      }
+    },
+    [items, updateItem]
+  );
 
   useEffect(() => {
     if (isFocused) {
@@ -69,7 +101,13 @@ export default function ClosetScreen() {
         <FlatList
           data={items}
           keyExtractor={(it) => it.id}
-          renderItem={({ item }) => <ClothingCard item={item} onDelete={remove} />}
+          renderItem={({ item }) => (
+            <ClothingCard
+              item={item}
+              onDelete={(id) => remove(id)}
+              onToggleFavorite={handleToggleFavorite}
+            />
+          )}
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}

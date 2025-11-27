@@ -1,17 +1,50 @@
-import React from "react";
-import { View, Text, FlatList, Image, StyleSheet } from "react-native";
-import { useFavorites } from "../store/favorites";
-import { useTheme } from "../context/ThemeContext";
+import React, { useMemo, useCallback } from 'react';
+import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
+import { useCloset } from '../store/closet';
+import { toggleFavorite } from '../api/wardrobe';
+import ClothingCard from '../components/ClothingCard';
+import { Garment } from '../types';
 
 export default function FavoritesScreen() {
-  const theme = useTheme();
-  const { items } = useFavorites();
-  const styles = createStyles(theme);
+  // Subscribe to items directly (stable reference, no derived arrays in selector)
+  const items = useCloset((state) => state.items);
+  const updateItem = useCloset((state) => state.updateItem);
 
-  if (items.length === 0) {
+  // Derive favorites with useMemo (pure, no side effects)
+  const favorites = useMemo(
+    () => items.filter((item) => item.isFavorite === true),
+    [items]
+  );
+
+  // Favorite toggle handler with optimistic update and rollback
+  const handleToggleFavorite = useCallback(
+    async (id: string, next: boolean) => {
+      const prev = items.find((item) => item.id === id);
+      if (!prev) return;
+
+      // Optimistic update
+      updateItem(id, { isFavorite: next });
+
+      try {
+        const res = await toggleFavorite(id, next);
+        // Ensure store matches backend response
+        updateItem(id, { isFavorite: res.isFavorite });
+      } catch (err) {
+        console.error('[FavoritesScreen] toggleFavorite error, rolling back', err);
+        // Rollback on error
+        updateItem(id, { isFavorite: !next });
+        Alert.alert('Error', 'Could not update favorite. Please try again.');
+      }
+    },
+    [items, updateItem]
+  );
+
+  if (favorites.length === 0) {
     return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No favorites yet. Tap the ♥ on an outfit to save it.</Text>
+        <Text style={styles.emptyText}>
+          No favorite items yet. Tap the ♥ on a piece in your closet to favorite it.
+        </Text>
       </View>
     );
   }
@@ -19,72 +52,38 @@ export default function FavoritesScreen() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={items}
-        keyExtractor={(o) => o.id}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+        data={favorites}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardImages}>
-              {item.items.map((it) => (
-                <Image key={it.id} source={{ uri: it.imageUrl || it.uri }} style={styles.cardImage} />
-              ))}
-            </View>
-            <View style={styles.cardContent}>
-              <Text style={styles.cardScore}>Score: {item.score.toFixed(2)}</Text>
-              <Text style={styles.cardContext}>Context: {item.context}</Text>
-            </View>
-          </View>
+          <ClothingCard
+            item={item}
+            onToggleFavorite={handleToggleFavorite}
+          />
         )}
       />
     </View>
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.lg,
+    backgroundColor: '#fff',
   },
   emptyContainer: {
     flex: 1,
-    backgroundColor: theme.colors.background,
-    padding: theme.spacing.lg,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
   },
   emptyText: {
-    color: theme.colors.textTertiary,
-    fontSize: theme.typography.base,
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
-  card: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.xl,
-    overflow: "hidden",
-    backgroundColor: theme.colors.backgroundSecondary,
-  },
-  cardImages: {
-    flexDirection: "row",
-    padding: theme.spacing.md,
-    gap: theme.spacing.sm,
-    alignItems: "center",
-  },
-  cardImage: {
-    width: 70,
-    height: 70,
-    borderRadius: theme.borderRadius.md,
-  },
-  cardContent: {
-    padding: theme.spacing.md,
-    gap: theme.spacing.xs,
-  },
-  cardScore: {
-    fontWeight: theme.typography.bold,
-    color: theme.colors.textPrimary,
-  },
-  cardContext: {
-    color: theme.colors.textSecondary,
+  list: {
+    padding: 16,
+    gap: 12,
   },
 });
-

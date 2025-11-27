@@ -27,6 +27,8 @@ export interface Garment {
   colors: ColorName[];
   brand?: string;
   notes?: string;
+  isFavorite?: boolean; // favorite status from backend
+  tags?: string[];      // tags from backend
 }
 
 export type OutfitContext = "date-night" | "casual" | "formal" | "work" | "party";

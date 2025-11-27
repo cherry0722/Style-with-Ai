@@ -14,6 +14,8 @@ export interface WardrobeItemResponse {
   category: string;
   colors: string[];
   notes?: string;
+  isFavorite?: boolean;
+  tags?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -122,4 +124,34 @@ export const createWardrobeItem = async (
 export const fetchWardrobeItems = async (): Promise<WardrobeItemResponse[]> => {
   const res = await client.get<WardrobeItemResponse[]>('/api/wardrobe');
   return res.data;
+};
+
+export const toggleFavorite = async (
+  id: string,
+  isFavorite: boolean
+): Promise<WardrobeItemResponse> => {
+  console.log("[Wardrobe API] toggleFavorite called with id:", id, "isFavorite:", isFavorite);
+
+  try {
+    console.log("[Wardrobe API] Calling PATCH /api/wardrobe/:id/favorite");
+    const res = await client.patch<WardrobeItemResponse>(
+      `/api/wardrobe/${id}/favorite`,
+      { isFavorite }
+    );
+
+    console.log("[Wardrobe API] /api/wardrobe/:id/favorite response:", res.data);
+    console.log("[Wardrobe API] Response status:", res.status);
+    console.log("[Wardrobe API] Updated item _id:", res.data?._id);
+    console.log("[Wardrobe API] Updated item isFavorite:", res.data?.isFavorite);
+
+    return res.data;
+  } catch (err: any) {
+    console.error("[Wardrobe API] toggleFavorite error:", {
+      message: err?.message,
+      status: err?.status ?? err?.response?.status,
+      data: err?.response?.data,
+      fullError: err,
+    });
+    throw err;
+  }
 };

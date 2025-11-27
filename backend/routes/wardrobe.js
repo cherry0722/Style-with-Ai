@@ -84,4 +84,45 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// PATCH /api/wardrobe/:id/favorite - toggle favorite status for a wardrobe item
+router.patch('/:id/favorite', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isFavorite } = req.body;
+
+    if (typeof isFavorite !== 'boolean') {
+      return res.status(400).json({
+        message: 'isFavorite must be a boolean',
+      });
+    }
+
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid auth payload' });
+    }
+
+    // Find the item and ensure it belongs to the authenticated user
+    const item = await Wardrobe.findOne({ _id: id, userId });
+    if (!item) {
+      return res.status(404).json({
+        message: 'Wardrobe item not found or does not belong to user',
+      });
+    }
+
+    // Update the isFavorite field
+    item.isFavorite = isFavorite;
+    const updated = await item.save();
+
+    return res.json(updated);
+  } catch (err) {
+    console.error('[Wardrobe] PATCH /api/wardrobe/:id/favorite error:', err);
+    if (err.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid wardrobe item ID' });
+    }
+    return res
+      .status(500)
+      .json({ message: 'Failed to update favorite status' });
+  }
+});
+
 module.exports = router;
