@@ -1,6 +1,7 @@
 const express = require('express');
 const auth = require('../middleware/auth');
 const Wardrobe = require('../models/wardrobe');
+const { analyzeImage } = require('../services/azureVisionService');
 
 const router = express.Router();
 
@@ -34,11 +35,70 @@ router.post('/', auth, async (req, res) => {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
 
+    // Azure Vision integration: analyze image if imageUrl is present
+    let aiResult = null;
+    if (imageUrl) {
+      try {
+        aiResult = await analyzeImage(imageUrl);
+      } catch (err) {
+        // Log but don't fail - wardrobe creation should still succeed
+        console.log('[AzureVision] Analysis skipped or failed for imageUrl:', imageUrl);
+      }
+    }
+
+    // Merge tags: request tags + AI tags
+    const requestTags = Array.isArray(tags) ? tags : [];
+    const requestTagsNormalized = requestTags
+      .map((tag) => String(tag).trim().toLowerCase())
+      .filter((tag) => tag.length > 0);
+
+    const aiTags = aiResult?.tags || [];
+    const aiTagsNormalized = aiTags
+      .map((tag) => String(tag).trim().toLowerCase())
+      .filter((tag) => tag.length > 0);
+
+    // Combine and dedupe tags
+    const combinedTags = [...new Set([...requestTagsNormalized, ...aiTagsNormalized])].slice(0, 20);
+
+    // Determine colors: use request colors if provided, otherwise use AI colors
+    let finalColors = [];
+    if (Array.isArray(colors) && colors.length > 0) {
+      // Use provided colors
+      finalColors = colors;
+    } else if (aiResult?.colors) {
+      // Derive colors from AI analysis
+      const aiColors = aiResult.colors;
+      const colorsFromAI = [];
+
+      // Add dominant colors
+      if (Array.isArray(aiColors.dominantColors)) {
+        colorsFromAI.push(...aiColors.dominantColors);
+      }
+
+      // Add foreground if present and not already included
+      const foreground = aiColors.dominantForegroundColor || aiColors.foreground;
+      if (foreground && !colorsFromAI.includes(foreground)) {
+        colorsFromAI.push(foreground);
+      }
+
+      // Add background if present and not already included
+      const background = aiColors.dominantBackgroundColor || aiColors.background;
+      if (background && !colorsFromAI.includes(background)) {
+        colorsFromAI.push(background);
+      }
+
+      // Normalize: lowercase, trim, filter empty, dedupe
+      finalColors = [...new Set(colorsFromAI.map((c) => String(c).trim().toLowerCase()).filter((c) => c.length > 0))];
+    } else {
+      // Fallback to empty array
+      finalColors = [];
+    }
+
     const item = await Wardrobe.create({
       userId,
       imageUrl,
       category,
-      colors: Array.isArray(colors) ? colors : [],
+      colors: finalColors,
       notes: notes || undefined,
 
       formality: formality || undefined,
@@ -50,7 +110,7 @@ router.post('/', auth, async (req, res) => {
       fabric: fabric || undefined,
       isFavorite:
         typeof isFavorite === 'boolean' ? isFavorite : undefined, // let schema default apply
-      tags: Array.isArray(tags) ? tags : [],
+      tags: combinedTags,
     });
 
     return res.status(201).json(item);
