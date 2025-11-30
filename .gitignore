@@ -51,3 +51,6 @@ backend/.env
 /android
 
 backend/uploads/images/
+
+.venv/
+backend/.venv/.venv/
