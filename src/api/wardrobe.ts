@@ -3,6 +3,7 @@ import type { FashionMetadata } from '../types';
 
 export interface WardrobeItemPayload {
   imageUrl: string;
+  cleanImageUrl?: string;
   category: string;
   colors?: string[];
   notes?: string;
@@ -14,6 +15,7 @@ export interface WardrobeItemResponse {
   _id: string;
   userId: string;
   imageUrl: string;
+  cleanImageUrl?: string;
   category: string;
   colors: string[];
   notes?: string;
@@ -57,7 +59,9 @@ const inferFileNameFromUri = (uri: string): string => {
   }
 };
 
-export const uploadWardrobeImage = async (uri: string): Promise<string> => {
+export const uploadWardrobeImage = async (
+  uri: string
+): Promise<{ imageUrl: string; cleanImageUrl?: string }> => {
   console.log("[Wardrobe API] uploadWardrobeImage called with uri:", uri);
   
   const formData = new FormData();
@@ -79,7 +83,7 @@ export const uploadWardrobeImage = async (uri: string): Promise<string> => {
 
   try {
     console.log("[Wardrobe API] Calling POST /api/upload/image");
-    const res = await client.post<{ imageUrl: string }>(
+    const res = await client.post<{ imageUrl: string; cleanImageUrl?: string }>(
       '/api/upload/image',
       formData,
       {
@@ -91,6 +95,7 @@ export const uploadWardrobeImage = async (uri: string): Promise<string> => {
 
     console.log("[Wardrobe API] /api/upload/image response:", res.data);
     console.log("[Wardrobe API] Response status:", res.status);
+    console.log("[Wardrobe API] cleanImageUrl:", res.data?.cleanImageUrl || 'null');
 
     if (!res.data?.imageUrl) {
       console.error("[Wardrobe API] Upload response missing imageUrl:", res.data);
@@ -98,7 +103,10 @@ export const uploadWardrobeImage = async (uri: string): Promise<string> => {
     }
 
     console.log("[Wardrobe API] Upload successful, imageUrl =", res.data.imageUrl);
-    return res.data.imageUrl;
+    return {
+      imageUrl: res.data.imageUrl,
+      cleanImageUrl: res.data.cleanImageUrl,
+    };
   } catch (err: any) {
     console.error("[Wardrobe API] uploadWardrobeImage error:", {
       message: err?.message,

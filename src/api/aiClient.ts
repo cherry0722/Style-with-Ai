@@ -4,7 +4,7 @@ import { AI_BASE_URL } from '../config';
 
 const aiClient = axios.create({
   baseURL: AI_BASE_URL,
-  timeout: 8000,
+  timeout: 10000,
 });
 
 aiClient.interceptors.request.use((config) => {

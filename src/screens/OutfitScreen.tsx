@@ -140,6 +140,7 @@ export default function OutfitScreen() {
   // Analysis and draft metadata state
   const [analysisResult, setAnalysisResult] = useState<WardrobeAnalyzeResponse | null>(null);
   const [draftMetadata, setDraftMetadata] = useState<FashionMetadata | null>(null);
+  const [cleanImageUrl, setCleanImageUrl] = useState<string | undefined>(undefined);
 
   const styles = createStyles(theme);
 
@@ -230,8 +231,9 @@ export default function OutfitScreen() {
       console.log("[OutfitScreen] Step A: Uploading image", selectedImage);
 
       // Step A: Upload image
-      const imageUrl = await uploadWardrobeImage(selectedImage);
-      console.log("[OutfitScreen] Upload complete, imageUrl =", imageUrl);
+      const { imageUrl, cleanImageUrl: uploadedCleanImageUrl } = await uploadWardrobeImage(selectedImage);
+      console.log("[OutfitScreen] Upload complete, imageUrl =", imageUrl, "cleanImageUrl =", uploadedCleanImageUrl);
+      setCleanImageUrl(uploadedCleanImageUrl);
 
       // Step B: Analyze image
       console.log("[OutfitScreen] Step B: Analyzing image", {
@@ -325,6 +327,7 @@ export default function OutfitScreen() {
 
       const created: WardrobeItemResponse = await createWardrobeItem({
         imageUrl: analysisResult.imageUrl,
+        cleanImageUrl: cleanImageUrl,
         category: (draftMetadata?.category ?? category) as string,
         colors: color ? [color] : [],
         notes: note || undefined,
@@ -337,6 +340,7 @@ export default function OutfitScreen() {
       const garment: Garment = {
         id: created._id,
         imageUrl: created.imageUrl,
+        cleanImageUrl: created.cleanImageUrl,
         category: created.category as GarmentCategory,
         colors: (created.colors ?? []) as ColorName[],
         notes: created.notes,
@@ -396,6 +400,7 @@ export default function OutfitScreen() {
 
       const created: WardrobeItemResponse = await createWardrobeItem({
         imageUrl: analysisResult.imageUrl,
+        cleanImageUrl: cleanImageUrl,
         category,
         colors: color ? [color] : [],
         notes: note || undefined,
@@ -406,6 +411,7 @@ export default function OutfitScreen() {
       const garment: Garment = {
         id: created._id,
         imageUrl: created.imageUrl,
+        cleanImageUrl: created.cleanImageUrl,
         category: created.category as GarmentCategory,
         colors: (created.colors ?? []) as ColorName[],
         notes: created.notes,
@@ -443,6 +449,7 @@ export default function OutfitScreen() {
     setNote("");
     setAnalysisResult(null);
     setDraftMetadata(null);
+    setCleanImageUrl(undefined);
     setShowAddModal(false);
   };
 

@@ -24,11 +24,13 @@ export default function ClosetScreen() {
       const mapped: Garment[] = data.map((item) => ({
         id: item._id,
         imageUrl: item.imageUrl,
+        cleanImageUrl: item.cleanImageUrl,
         category: item.category,
         colors: item.colors ?? [],
         notes: item.notes,
         isFavorite: item.isFavorite ?? false,
         tags: item.tags ?? [],
+        metadata: item.metadata,
         // no local uri from backend
       }));
 

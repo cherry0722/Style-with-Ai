@@ -36,6 +36,9 @@ app.use("/api/wardrobe", wardrobeRoutes);
 const uploadRoutes = require("./routes/upload");
 app.use("/api/upload", uploadRoutes);
 
+const agentRoutes = require("./routes/agent");
+app.use("/api/ai", agentRoutes);
+
 // Static file serving for uploaded images
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 

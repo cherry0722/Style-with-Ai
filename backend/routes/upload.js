@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const auth = require('../middleware/auth');
+const { removeBackground } = require('../services/backgroundRemoval');
 
 const router = express.Router();
 
@@ -48,7 +49,7 @@ const upload = multer({
 });
 
 // POST /api/upload/image - upload an image file
-router.post('/image', auth, upload.single('image'), (req, res) => {
+router.post('/image', auth, upload.single('image'), async (req, res) => {
   try {
     // Check if file was uploaded
     if (!req.file) {
@@ -61,7 +62,21 @@ router.post('/image', auth, upload.single('image'), (req, res) => {
     const filename = req.file.filename;
     const imageUrl = `${protocol}://${host}/uploads/images/${filename}`;
 
-    return res.status(200).json({ imageUrl });
+    // Try to get background-removed version (stub for now)
+    let cleanImageUrl = null;
+    try {
+      // For now, pass imageUrl to the stub; later we can pass the filesystem path
+      const bgRemovedPathOrUrl = await removeBackground(imageUrl);
+      cleanImageUrl = bgRemovedPathOrUrl || null;
+    } catch (err) {
+      console.warn('[BG-Removal] Failed to remove background:', err.message || err.toString());
+      cleanImageUrl = null;
+    }
+
+    return res.status(200).json({
+      imageUrl,
+      cleanImageUrl, // may be null
+    });
   } catch (err) {
     console.error('[Upload] POST /api/upload/image error:', err);
     return res.status(500).json({ message: 'Failed to upload image' });

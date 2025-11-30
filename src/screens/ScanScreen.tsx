@@ -50,11 +50,12 @@ export default function ScanScreen() {
       setIsSaving(true);
       console.log("[ScanScreen] Starting upload for", imageUri);
 
-      const imageUrl = await uploadWardrobeImage(imageUri);
-      console.log("[ScanScreen] Upload complete, imageUrl =", imageUrl);
+      const { imageUrl, cleanImageUrl } = await uploadWardrobeImage(imageUri);
+      console.log("[ScanScreen] Upload complete, imageUrl =", imageUrl, "cleanImageUrl =", cleanImageUrl);
 
       const payload = {
         imageUrl,
+        cleanImageUrl,
         category,
         colors: [],
         notes: notes || undefined,

@@ -34,6 +34,7 @@ export interface Garment {
   id: string;           // maps from backend _id
   uri?: string;         // local file:// path (optional, for immediate preview)
   imageUrl?: string;    // backend URL (optional, but preferred for rendering)
+  cleanImageUrl?: string; // background-removed version (optional)
   category: GarmentCategory;
   colors: ColorName[];
   brand?: string;

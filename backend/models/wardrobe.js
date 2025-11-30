@@ -43,6 +43,10 @@ const WardrobeSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    cleanImageUrl: {
+      type: String,
+      default: null,
+    },
     category: {
       type: String,
       required: true,

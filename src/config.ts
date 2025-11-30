@@ -6,11 +6,11 @@ export const API_BASE_URL =
     ? process.env.EXPO_PUBLIC_API_URL.trim()
     : 'http://localhost:5001';
 
-// Python AI backend
+// New: point AI base to the Node backend by default
 export const AI_BASE_URL =
   process.env.EXPO_PUBLIC_AI_BASE_URL && process.env.EXPO_PUBLIC_AI_BASE_URL.trim() !== ''
     ? process.env.EXPO_PUBLIC_AI_BASE_URL.trim()
-    : 'http://localhost:8000';
+    : `${API_BASE_URL.replace(/\/$/, '')}/api/ai`;
 
 // AI feature flag
 export const ENABLE_AI = (process.env.EXPO_PUBLIC_ENABLE_AI ?? 'false').toLowerCase() === 'true';

@@ -72,6 +72,7 @@ router.post('/', auth, async (req, res) => {
   try {
     const {
       imageUrl,
+      cleanImageUrl,
       category,
       colors,
       notes,
@@ -140,6 +141,7 @@ router.post('/', auth, async (req, res) => {
     const item = await Wardrobe.create({
       userId,
       imageUrl,
+      cleanImageUrl: cleanImageUrl || undefined,
       category,
       colors: finalColors,
       notes: notes || undefined,
