@@ -65,3 +65,67 @@ export function recommend(closet: Garment[], context: OutfitTemplate["context"],
   // TODO: Implement AI backend call when EXPO_PUBLIC_ENABLE_AI=true
   return localRuleBasedRecommend(closet, context, topK);
 }
+
+// ============================================================================
+// Python AI Backend Integration (Phase 2.2)
+// ============================================================================
+
+export interface WeatherInput {
+  summary?: string;
+  tempF?: number;
+  precipChance?: number;
+}
+
+export interface LocationInput {
+  latitude: number;
+  longitude: number;
+  name?: string;
+}
+
+export interface SuggestOutfitRequest {
+  user_id: string;
+  location: LocationInput;
+  weather: WeatherInput;
+}
+
+export interface OutfitFromAI {
+  items: string[];
+  why: string;
+  items_detail?: Array<Record<string, any>> | null;
+}
+
+export interface SuggestOutfitResponse {
+  outfits: OutfitFromAI[];
+  context: Record<string, any>;
+  used_memory: boolean;
+}
+
+/**
+ * Call the Python AI backend to get an outfit suggestion for a given user.
+ * This uses the /suggest_outfit endpoint on the AI_BASE_URL.
+ */
+export async function suggestOutfitForUser(
+  userId: string,
+  location: LocationInput,
+  weather: WeatherInput
+): Promise<SuggestOutfitResponse> {
+  if (!ENABLE_AI) {
+    console.warn('[Recommender] ENABLE_AI is false. Returning fallback stub.');
+    return {
+      outfits: [],
+      context: { reason: 'AI disabled via config' },
+      used_memory: false,
+    };
+  }
+
+  const payload: SuggestOutfitRequest = {
+    user_id: userId,
+    location,
+    weather,
+  };
+
+  console.log('[Recommender] Calling /suggest_outfit with payload:', payload);
+
+  const res = await aiClient.post<SuggestOutfitResponse>('/suggest_outfit', payload);
+  return res.data;
+}

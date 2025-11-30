@@ -20,6 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
 import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
+import { suggestOutfitForUser, OutfitFromAI } from '../services/recommender';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -32,6 +33,11 @@ export default function HomeScreen() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [location, setLocation] = useState<LocationData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // AI Outfit state (Phase 2.2)
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiOutfit, setAiOutfit] = useState<OutfitFromAI | null>(null);
 
   const firstName = user?.profile?.preferredName || user?.displayName || user?.username || (user?.email ? user.email.split('@')[0] : 'there');
   const today = new Date().toISOString().split('T')[0];
@@ -96,6 +102,49 @@ export default function HomeScreen() {
       case 'calendar':
         // Calendar navigation removed - no longer in bottom tabs
         break;
+    }
+  };
+
+  const handleAskMyraForOutfit = async () => {
+    if (!user?.id) {
+      console.warn('[HomeScreen] No user id, cannot call AI backend.');
+      setAiError('Please log in to get AI outfit suggestions.');
+      return;
+    }
+
+    try {
+      setIsLoadingAI(true);
+      setAiError(null);
+
+      // For now, use simple static location + weather.
+      // Later, this can be wired to real GPS and weather.
+      const location = {
+        latitude: 37.7749,
+        longitude: -122.4194,
+        name: 'San Francisco',
+      };
+
+      const weather = {
+        summary: 'Partly Cloudy',
+        tempF: 65,
+        precipChance: 10,
+      };
+
+      const response = await suggestOutfitForUser(user.id, location, weather);
+      console.log('[HomeScreen] AI outfit response:', response);
+
+      const first = response.outfits?.[0] ?? null;
+      setAiOutfit(first || null);
+    } catch (err: any) {
+      console.error('[HomeScreen] Failed to get AI outfit:', {
+        message: err?.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+        fullError: err,
+      });
+      setAiError(err?.message || 'Failed to get AI outfit. Please try again.');
+    } finally {
+      setIsLoadingAI(false);
     }
   };
 
@@ -189,6 +238,99 @@ export default function HomeScreen() {
             </Pressable>
           )}
         </View>
+      </View>
+
+      {/* === AI Outfit Section (Phase 2.2) === */}
+      <View
+        style={{
+          marginHorizontal: theme.spacing.lg,
+          marginTop: theme.spacing.lg,
+          padding: theme.spacing.lg,
+          borderRadius: theme.borderRadius.lg,
+          backgroundColor: theme.colors.backgroundSecondary,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: theme.typography.base,
+            fontWeight: theme.typography.bold,
+            color: theme.colors.textPrimary,
+            marginBottom: theme.spacing.sm,
+          }}
+        >
+          AI Outfit (Python backend)
+        </Text>
+
+        <Pressable
+          onPress={handleAskMyraForOutfit}
+          disabled={isLoadingAI}
+          style={{
+            backgroundColor: theme.colors.accent,
+            borderRadius: theme.borderRadius.md,
+            paddingVertical: theme.spacing.sm,
+            paddingHorizontal: theme.spacing.lg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: isLoadingAI ? 0.7 : 1,
+            marginBottom: theme.spacing.sm,
+          }}
+        >
+          <Text
+            style={{
+              color: theme.colors.white,
+              fontWeight: theme.typography.bold,
+            }}
+          >
+            {isLoadingAI ? 'Getting outfit...' : 'Ask MYRA for an outfit'}
+          </Text>
+        </Pressable>
+
+        {aiError && (
+          <Text
+            style={{
+              color: theme.colors.error,
+              fontSize: theme.typography.sm,
+              marginBottom: theme.spacing.xs,
+            }}
+          >
+            {aiError}
+          </Text>
+        )}
+
+        {aiOutfit && (
+          <View>
+            <Text
+              style={{
+                fontSize: theme.typography.sm,
+                color: theme.colors.textSecondary,
+                marginBottom: theme.spacing.xs,
+              }}
+            >
+              Items: {aiOutfit.items.join(', ')}
+            </Text>
+            <Text
+              style={{
+                fontSize: theme.typography.sm,
+                color: theme.colors.textSecondary,
+              }}
+            >
+              Why: {aiOutfit.why}
+            </Text>
+          </View>
+        )}
+
+        {!aiOutfit && !aiError && !isLoadingAI && (
+          <Text
+            style={{
+              fontSize: theme.typography.sm,
+              color: theme.colors.textTertiary,
+            }}
+          >
+            Tap the button to get an outfit suggestion using your AI backend.
+          </Text>
+        )}
       </View>
 
       {/* Weather Card */}
