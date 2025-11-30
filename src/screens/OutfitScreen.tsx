@@ -29,6 +29,102 @@ import { useAuth } from '../context/AuthContext';
 const CATEGORIES: GarmentCategory[] = ["top", "bottom", "dress", "outerwear", "shoes", "accessory"];
 const COLORS: ColorName[] = ["black", "white", "gray", "blue", "green", "red", "yellow", "beige", "brown", "pink", "purple"];
 
+// Dropdown options
+const TYPE_OPTIONS = ["t-shirt","shirt","flannel","hoodie","sweater","sweatshirt","polo","jacket","overshirt","denim jacket","puffer","jeans","chinos","trousers","joggers","shorts","cargo pants","sweatpants","sneakers","boots","loafers","oxfords","derbies","sandals","slides","chelseas"];
+const COLOR_NAME_OPTIONS = ["black", "white", "grey", "blue", "green", "red", "beige", "brown", "navy", "olive", "cream"];
+const COLOR_TYPE_OPTIONS: ("neutral" | "warm" | "cool" | "bold" | "pastel")[] = ["neutral", "warm", "cool", "bold", "pastel"];
+const PATTERN_OPTIONS = ["solid", "striped", "checked", "plaid", "floral", "graphic", "colorblock", "textured", "distressed", "embroidered", "cargo-pockets", "unknown"];
+const FIT_OPTIONS = ["slim", "regular", "relaxed", "oversized", "tapered", "skinny", "wide", "unknown"];
+const STYLE_TAG_OPTIONS = ["minimal","streetwear","sporty","classy","formal","casual","retro","edgy","cozy","monochrome","premium","workwear","vintage","smart-casual"];
+const METADATA_CATEGORY_OPTIONS: ("top" | "bottom" | "shoes")[] = ["top", "bottom", "shoes"];
+
+// Simple Dropdown Component
+function Dropdown<T extends string>({
+  value,
+  options,
+  onSelect,
+  placeholder,
+  style,
+}: {
+  value: T | undefined;
+  options: readonly T[];
+  onSelect: (val: T) => void;
+  placeholder?: string;
+  style?: any;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const theme = useTheme();
+
+  return (
+    <View>
+      <Pressable
+        style={[
+          {
+            backgroundColor: theme.colors.backgroundSecondary,
+            borderRadius: theme.borderRadius.md,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          },
+          style,
+        ]}
+        onPress={() => setIsOpen(!isOpen)}
+      >
+        <Text style={{ color: value ? theme.colors.textPrimary : theme.colors.textTertiary }}>
+          {value || placeholder || 'Select...'}
+        </Text>
+        <Ionicons
+          name={isOpen ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={theme.colors.textSecondary}
+        />
+      </Pressable>
+      {isOpen && (
+        <View
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+            backgroundColor: theme.colors.background,
+            borderRadius: theme.borderRadius.md,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            marginTop: 4,
+            maxHeight: 200,
+          }}
+        >
+          <ScrollView>
+            {options.map((opt) => (
+              <Pressable
+                key={opt}
+                style={{
+                  paddingHorizontal: theme.spacing.md,
+                  paddingVertical: theme.spacing.sm,
+                  borderBottomWidth: 1,
+                  borderBottomColor: theme.colors.border,
+                }}
+                onPress={() => {
+                  onSelect(opt);
+                  setIsOpen(false);
+                  hapticFeedback.light();
+                }}
+              >
+                <Text style={{ color: theme.colors.textPrimary }}>{opt}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function OutfitScreen() {
   const theme = useTheme();
   const { user } = useAuth();
@@ -38,18 +134,12 @@ export default function OutfitScreen() {
   const [category, setCategory] = useState<GarmentCategory>("top");
   const [color, setColor] = useState<ColorName>("black");
   const [note, setNote] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isFinalSaving, setIsFinalSaving] = useState(false);
 
-  const [analysis, setAnalysis] = useState<WardrobeAnalyzeResponse | null>(null);
-  const [reviewCategory, setReviewCategory] = useState<string>("top");
-  const [reviewType, setReviewType] = useState<string>("");
-  const [reviewFabric, setReviewFabric] = useState<string>("unknown");
-  const [reviewColorName, setReviewColorName] = useState<string>("");
-  const [reviewColorType, setReviewColorType] = useState<string>("neutral");
-  const [reviewPattern, setReviewPattern] = useState<string>("solid");
-  const [reviewFit, setReviewFit] = useState<string>("unknown");
-  const [reviewStyleTags, setReviewStyleTags] = useState<string>("");
+  // Analysis and draft metadata state
+  const [analysisResult, setAnalysisResult] = useState<WardrobeAnalyzeResponse | null>(null);
+  const [draftMetadata, setDraftMetadata] = useState<FashionMetadata | null>(null);
 
   const styles = createStyles(theme);
 
@@ -113,10 +203,9 @@ export default function OutfitScreen() {
     }
   };
 
-  const saveGarment = async () => {
-    console.log("[OutfitScreen] analyze + preview called", {
+  const handleAnalyze = async () => {
+    console.log("[OutfitScreen] Starting analyze flow", {
       hasUser: !!user,
-      userId: user?.id,
       selectedImage,
       category,
       color,
@@ -128,67 +217,58 @@ export default function OutfitScreen() {
         "Not logged in",
         "Please log in before adding outfits to your wardrobe."
       );
-      console.log("[OutfitScreen] Aborting save: no user");
       return;
     }
 
     if (!selectedImage) {
       Alert.alert("No image", "Please take or select a photo first.");
-      console.log("[OutfitScreen] Aborting analyze: no selectedImage");
       return;
     }
 
     try {
-      setIsSaving(true);
-      console.log("[OutfitScreen] Starting upload for", selectedImage);
+      setIsAnalyzing(true);
+      console.log("[OutfitScreen] Step A: Uploading image", selectedImage);
 
+      // Step A: Upload image
       const imageUrl = await uploadWardrobeImage(selectedImage);
       console.log("[OutfitScreen] Upload complete, imageUrl =", imageUrl);
 
-      console.log("[OutfitScreen] Calling analyzeWardrobeImage with:", {
+      // Step B: Analyze image
+      console.log("[OutfitScreen] Step B: Analyzing image", {
         imageUrl,
         category,
-        colors: [color],
+        colors: color ? [color] : [],
         notes: note || "",
       });
 
-      const analyzeResult = await analyzeWardrobeImage({
+      const result = await analyzeWardrobeImage({
         imageUrl,
         category,
-        colors: [color],
+        colors: color ? [color] : [],
         notes: note || "",
       });
 
-      console.log(
-        "[OutfitScreen] analyzeWardrobeImage result:",
-        analyzeResult
-      );
+      console.log("[OutfitScreen] Analysis result:", result);
 
-      setAnalysis(analyzeResult);
-
-      const m: FashionMetadata | null = analyzeResult.llm_metadata;
-
-      setReviewCategory(m?.category || category || "top");
-      setReviewType(m?.type || "");
-      setReviewFabric(m?.fabric || "unknown");
-      setReviewColorName(
-        m?.color_name ||
-          analyzeResult.color_hint ||
-          (color ? String(color).toLowerCase() : "")
-      );
-      setReviewColorType(m?.color_type || "neutral");
-      setReviewPattern(m?.pattern || "solid");
-      setReviewFit(m?.fit || "unknown");
-      setReviewStyleTags(
-        Array.isArray(m?.style_tags) && m.style_tags.length > 0
-          ? m.style_tags.join(", ")
-          : ""
-      );
-
-      Alert.alert(
-        "Review AI Tags",
-        "We analyzed your item. Review and edit the fields below, then tap \"Save Item to Closet\"."
-      );
+      // Step C: Store results
+      setAnalysisResult(result);
+      
+      const initialMetadata: FashionMetadata = {
+        category: (result.llm_metadata?.category as "top" | "bottom" | "shoes" | undefined) || 
+                  (result.category_hint as "top" | "bottom" | "shoes" | undefined) || 
+                  "top",
+        type: result.llm_metadata?.type,
+        fabric: result.llm_metadata?.fabric,
+        color_name: result.llm_metadata?.color_name || result.color_hint || undefined,
+        color_type: result.llm_metadata?.color_type,
+        pattern: result.llm_metadata?.pattern,
+        fit: result.llm_metadata?.fit,
+        style_tags: result.llm_metadata?.style_tags,
+      };
+      
+      setDraftMetadata(initialMetadata);
+      
+      console.log("[OutfitScreen] Draft metadata initialized:", initialMetadata);
     } catch (err: any) {
       console.error("[OutfitScreen] Failed to analyze outfit:", {
         message: err?.message,
@@ -201,11 +281,11 @@ export default function OutfitScreen() {
         err?.message || "Failed to analyze outfit. Please try again."
       );
     } finally {
-      setIsSaving(false);
+      setIsAnalyzing(false);
     }
   };
 
-  const handleFinalSave = async () => {
+  const handleSaveWithMetadata = async () => {
     if (!user) {
       Alert.alert(
         "Not logged in",
@@ -214,7 +294,7 @@ export default function OutfitScreen() {
       return;
     }
 
-    if (!analysis || !analysis.imageUrl) {
+    if (!analysisResult || !analysisResult.imageUrl) {
       Alert.alert(
         "Missing analysis",
         "Please analyze the image first before saving."
@@ -223,55 +303,36 @@ export default function OutfitScreen() {
     }
 
     try {
-      setIsFinalSaving(true);
+      setIsSaving(true);
 
-      const styleTagsArray = reviewStyleTags
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
+      // Build tags array from draftMetadata
+      const tags: string[] = [];
+      if (draftMetadata?.type) tags.push(draftMetadata.type);
+      if (draftMetadata?.pattern) tags.push(draftMetadata.pattern);
+      if (draftMetadata?.fabric) tags.push(draftMetadata.fabric);
+      if (draftMetadata?.style_tags?.length) {
+        tags.push(...draftMetadata.style_tags);
+      }
 
-      const azureTags = Array.isArray(analysis.azure_tags)
-        ? analysis.azure_tags
-        : [];
+      console.log("[OutfitScreen] Saving with metadata:", {
+        imageUrl: analysisResult.imageUrl,
+        category: draftMetadata?.category ?? category,
+        colors: color ? [color] : [],
+        notes: note,
+        metadata: draftMetadata,
+        tags,
+      });
 
-      const combinedTags = [...azureTags, ...styleTagsArray];
-      const finalTagsArray = Array.from(
-        new Set(
-          combinedTags
-            .map((t) => String(t).trim().toLowerCase())
-            .filter((t) => t.length > 0)
-        )
-      ).slice(0, 20);
-
-      const payload = {
-        category: reviewCategory || category,
-        colors: reviewColorName
-          ? [reviewColorName]
-          : color
-          ? [color]
-          : [],
-        imageUrl: analysis.imageUrl,
+      const created: WardrobeItemResponse = await createWardrobeItem({
+        imageUrl: analysisResult.imageUrl,
+        category: (draftMetadata?.category ?? category) as string,
+        colors: color ? [color] : [],
         notes: note || undefined,
-        type: reviewType || undefined,
-        fabric: reviewFabric || undefined,
-        color_name: reviewColorName || undefined,
-        color_type: reviewColorType || undefined,
-        pattern: reviewPattern || undefined,
-        fit: reviewFit || undefined,
-        style_tags: styleTagsArray.length > 0 ? styleTagsArray : undefined,
-        tags: finalTagsArray,
-      };
-
-      console.log(
-        "[OutfitScreen] Creating wardrobe item with reviewed payload:",
-        payload
-      );
-
-      const created: WardrobeItemResponse = await createWardrobeItem(payload);
+        metadata: draftMetadata ?? undefined,
+        tags,
+      });
 
       console.log("[OutfitScreen] Wardrobe item created:", created);
-      console.log("[OutfitScreen] Created item userId:", created.userId);
-      console.log("[OutfitScreen] Created item _id:", created._id);
 
       const garment: Garment = {
         id: created._id,
@@ -279,29 +340,19 @@ export default function OutfitScreen() {
         category: created.category as GarmentCategory,
         colors: (created.colors ?? []) as ColorName[],
         notes: created.notes,
+        isFavorite: created.isFavorite,
+        tags: created.tags,
+        metadata: created.metadata,
       };
 
       add(garment);
       hapticFeedback.success();
 
-      setSelectedImage(null);
-      setCategory("top");
-      setColor("black");
-      setNote("");
-      setAnalysis(null);
-      setReviewCategory("top");
-      setReviewType("");
-      setReviewFabric("unknown");
-      setReviewColorName("");
-      setReviewColorType("neutral");
-      setReviewPattern("solid");
-      setReviewFit("unknown");
-      setReviewStyleTags("");
-      setShowAddModal(false);
-
+      // Reset state
+      resetForm();
       Alert.alert("Saved", "Item saved to your closet.");
     } catch (err: any) {
-      console.error("[OutfitScreen] Failed to save reviewed outfit:", {
+      console.error("[OutfitScreen] Failed to save item:", {
         message: err?.message,
         status: err?.status ?? err?.response?.status,
         data: err?.response?.data,
@@ -312,7 +363,76 @@ export default function OutfitScreen() {
         err?.message || "Failed to save item. Please try again."
       );
     } finally {
-      setIsFinalSaving(false);
+      setIsSaving(false);
+    }
+  };
+
+  const handleSkipAndSave = async () => {
+    if (!user) {
+      Alert.alert(
+        "Not logged in",
+        "Please log in before adding outfits to your wardrobe."
+      );
+      return;
+    }
+
+    if (!analysisResult || !analysisResult.imageUrl) {
+      Alert.alert(
+        "Missing analysis",
+        "Please analyze the image first before saving."
+      );
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      console.log("[OutfitScreen] Skipping AI and saving without metadata:", {
+        imageUrl: analysisResult.imageUrl,
+        category,
+        colors: color ? [color] : [],
+        notes: note,
+      });
+
+      const created: WardrobeItemResponse = await createWardrobeItem({
+        imageUrl: analysisResult.imageUrl,
+        category,
+        colors: color ? [color] : [],
+        notes: note || undefined,
+      });
+
+      console.log("[OutfitScreen] Wardrobe item created:", created);
+
+      const garment: Garment = {
+        id: created._id,
+        imageUrl: created.imageUrl,
+        category: created.category as GarmentCategory,
+        colors: (created.colors ?? []) as ColorName[],
+        notes: created.notes,
+        isFavorite: created.isFavorite,
+        tags: created.tags,
+        metadata: created.metadata,
+      };
+
+      add(garment);
+      hapticFeedback.success();
+
+      // Reset state
+      resetForm();
+      Alert.alert("Saved", "Item saved to your closet.");
+    } catch (err: any) {
+      console.error("[OutfitScreen] Failed to save item:", {
+        message: err?.message,
+        status: err?.status ?? err?.response?.status,
+        data: err?.response?.data,
+        fullError: err,
+      });
+      Alert.alert(
+        "Error",
+        err?.message || "Failed to save item. Please try again."
+      );
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -321,16 +441,30 @@ export default function OutfitScreen() {
     setCategory("top");
     setColor("black");
     setNote("");
-    setAnalysis(null);
-    setReviewCategory("top");
-    setReviewType("");
-    setReviewFabric("unknown");
-    setReviewColorName("");
-    setReviewColorType("neutral");
-    setReviewPattern("solid");
-    setReviewFit("unknown");
-    setReviewStyleTags("");
+    setAnalysisResult(null);
+    setDraftMetadata(null);
     setShowAddModal(false);
+  };
+
+  const updateDraftMetadata = (updates: Partial<FashionMetadata>) => {
+    setDraftMetadata((prev) => ({
+      ...prev,
+      ...updates,
+    }));
+  };
+
+  const toggleStyleTag = (tag: string) => {
+    setDraftMetadata((prev) => {
+      const currentTags = prev?.style_tags || [];
+      const newTags = currentTags.includes(tag)
+        ? currentTags.filter((t) => t !== tag)
+        : [...currentTags, tag];
+      return {
+        ...prev,
+        style_tags: newTags,
+        category: prev?.category || "top",
+      };
+    });
   };
 
   return (
@@ -371,11 +505,11 @@ export default function OutfitScreen() {
             </Pressable>
             <Text style={styles.modalTitle}>Add Outfit</Text>
             <Pressable
-              onPress={saveGarment}
-              disabled={!selectedImage || isSaving}
-              style={{ opacity: !selectedImage || isSaving ? 0.6 : 1 }}
+              onPress={handleAnalyze}
+              disabled={!selectedImage || isAnalyzing}
+              style={{ opacity: !selectedImage || isAnalyzing ? 0.6 : 1 }}
             >
-              {isSaving ? (
+              {isAnalyzing ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <ActivityIndicator size="small" color={theme.colors.accent} />
                   <Text style={styles.modalSave}>Analyzing...</Text>
@@ -490,27 +624,43 @@ export default function OutfitScreen() {
               </View>
             </View>
 
-            {analysis && (
+            {/* Review Tags Panel */}
+            {analysisResult && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Review AI Tags</Text>
+                <Text style={styles.sectionTitle}>Review Tags</Text>
 
+                {/* Azure Tags - Read-only chips */}
+                {analysisResult.azure_tags && analysisResult.azure_tags.length > 0 && (
+                  <View style={styles.section}>
+                    <Text style={styles.reviewLabel}>Azure Vision Tags</Text>
+                    <View style={styles.tagChipsContainer}>
+                      {analysisResult.azure_tags.map((tag, idx) => (
+                        <View key={idx} style={styles.tagChip}>
+                          <Text style={styles.tagChipText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* Metadata Fields */}
                 <View style={styles.reviewField}>
-                  <Text style={styles.reviewLabel}>Category (top/bottom/shoes)</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewCategory}
-                    onChangeText={setReviewCategory}
-                    autoCapitalize="none"
+                  <Text style={styles.reviewLabel}>Category</Text>
+                  <Dropdown
+                    value={draftMetadata?.category}
+                    options={METADATA_CATEGORY_OPTIONS}
+                    onSelect={(val) => updateDraftMetadata({ category: val })}
+                    placeholder="Select category"
                   />
                 </View>
 
                 <View style={styles.reviewField}>
                   <Text style={styles.reviewLabel}>Type</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewType}
-                    onChangeText={setReviewType}
-                    autoCapitalize="none"
+                  <Dropdown
+                    value={draftMetadata?.type}
+                    options={TYPE_OPTIONS}
+                    onSelect={(val) => updateDraftMetadata({ type: val })}
+                    placeholder="Select type"
                   />
                 </View>
 
@@ -518,81 +668,111 @@ export default function OutfitScreen() {
                   <Text style={styles.reviewLabel}>Fabric</Text>
                   <TextInput
                     style={styles.reviewInput}
-                    value={reviewFabric}
-                    onChangeText={setReviewFabric}
+                    value={draftMetadata?.fabric || ''}
+                    onChangeText={(val) => updateDraftMetadata({ fabric: val || undefined })}
+                    placeholder="e.g. cotton, wool, polyester"
+                    placeholderTextColor={theme.colors.textTertiary}
                     autoCapitalize="none"
                   />
                 </View>
 
                 <View style={styles.reviewField}>
                   <Text style={styles.reviewLabel}>Color Name</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewColorName}
-                    onChangeText={setReviewColorName}
-                    autoCapitalize="none"
+                  <Dropdown
+                    value={draftMetadata?.color_name}
+                    options={COLOR_NAME_OPTIONS}
+                    onSelect={(val) => updateDraftMetadata({ color_name: val })}
+                    placeholder="Select color"
                   />
                 </View>
 
                 <View style={styles.reviewField}>
-                  <Text style={styles.reviewLabel}>Color Type (neutral/warm/cool/bold/pastel)</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewColorType}
-                    onChangeText={setReviewColorType}
-                    autoCapitalize="none"
+                  <Text style={styles.reviewLabel}>Color Type</Text>
+                  <Dropdown
+                    value={draftMetadata?.color_type}
+                    options={COLOR_TYPE_OPTIONS}
+                    onSelect={(val) => updateDraftMetadata({ color_type: val })}
+                    placeholder="Select color type"
                   />
                 </View>
 
                 <View style={styles.reviewField}>
                   <Text style={styles.reviewLabel}>Pattern</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewPattern}
-                    onChangeText={setReviewPattern}
-                    autoCapitalize="none"
+                  <Dropdown
+                    value={draftMetadata?.pattern}
+                    options={PATTERN_OPTIONS}
+                    onSelect={(val) => updateDraftMetadata({ pattern: val })}
+                    placeholder="Select pattern"
                   />
                 </View>
 
                 <View style={styles.reviewField}>
                   <Text style={styles.reviewLabel}>Fit</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewFit}
-                    onChangeText={setReviewFit}
-                    autoCapitalize="none"
+                  <Dropdown
+                    value={draftMetadata?.fit}
+                    options={FIT_OPTIONS}
+                    onSelect={(val) => updateDraftMetadata({ fit: val })}
+                    placeholder="Select fit"
                   />
                 </View>
 
                 <View style={styles.reviewField}>
-                  <Text style={styles.reviewLabel}>Style Tags (comma-separated)</Text>
-                  <TextInput
-                    style={styles.reviewInput}
-                    value={reviewStyleTags}
-                    onChangeText={setReviewStyleTags}
-                    autoCapitalize="none"
-                    placeholder="e.g. casual, minimal, streetwear"
-                    placeholderTextColor={theme.colors.textTertiary}
-                  />
+                  <Text style={styles.reviewLabel}>Style Tags</Text>
+                  <View style={styles.tagChipsContainer}>
+                    {STYLE_TAG_OPTIONS.map((tag) => {
+                      const isSelected = draftMetadata?.style_tags?.includes(tag) || false;
+                      return (
+                        <Pressable
+                          key={tag}
+                          style={[
+                            styles.tagChip,
+                            isSelected && styles.tagChipSelected,
+                          ]}
+                          onPress={() => toggleStyleTag(tag)}
+                        >
+                          <Text
+                            style={[
+                              styles.tagChipText,
+                              isSelected && styles.tagChipTextSelected,
+                            ]}
+                          >
+                            {tag}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
 
+                {/* Save Buttons */}
                 <Pressable
                   style={[
                     styles.ctaButton,
-                    { marginTop: theme.spacing.lg },
-                    isFinalSaving && { opacity: 0.6 },
+                    { marginTop: theme.spacing.lg, marginBottom: theme.spacing.md },
+                    isSaving && { opacity: 0.6 },
                   ]}
-                  onPress={handleFinalSave}
-                  disabled={isFinalSaving}
+                  onPress={handleSaveWithMetadata}
+                  disabled={isSaving}
                 >
-                  {isFinalSaving ? (
+                  {isSaving ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <ActivityIndicator size="small" color={theme.colors.white} />
                       <Text style={styles.ctaButtonText}>Saving...</Text>
                     </View>
                   ) : (
-                    <Text style={styles.ctaButtonText}>Save Item to Closet</Text>
+                    <Text style={styles.ctaButtonText}>Looks good, save item</Text>
                   )}
+                </Pressable>
+
+                <Pressable
+                  style={[
+                    styles.secondaryButton,
+                    isSaving && { opacity: 0.6 },
+                  ]}
+                  onPress={handleSkipAndSave}
+                  disabled={isSaving}
+                >
+                  <Text style={styles.secondaryButtonText}>Skip AI & save anyway</Text>
                 </Pressable>
               </View>
             )}
@@ -658,11 +838,26 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg,
+    alignItems: 'center' as const,
   },
   ctaButtonText: {
     color: theme.colors.white,
     fontSize: theme.typography.base,
     fontWeight: theme.typography.bold,
+  },
+  secondaryButton: {
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderRadius: theme.borderRadius.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg,
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  secondaryButtonText: {
+    color: theme.colors.textPrimary,
+    fontSize: theme.typography.base,
+    fontWeight: theme.typography.medium,
   },
   modalContainer: {
     flex: 1,
@@ -803,8 +998,52 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderColor: theme.colors.border,
     minHeight: 100,
   },
-  notesPlaceholder: {
+  notesInput: {
     fontSize: theme.typography.base,
-    color: theme.colors.textTertiary,
+    color: theme.colors.textPrimary,
+  },
+  reviewField: {
+    marginBottom: theme.spacing.md,
+  },
+  reviewLabel: {
+    fontSize: theme.typography.sm,
+    fontWeight: theme.typography.medium,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.xs,
+  },
+  reviewInput: {
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    fontSize: theme.typography.base,
+    color: theme.colors.textPrimary,
+  },
+  tagChipsContainer: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: theme.spacing.sm,
+  },
+  tagChip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.backgroundSecondary,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  tagChipSelected: {
+    backgroundColor: theme.colors.accent,
+    borderColor: theme.colors.accent,
+  },
+  tagChipText: {
+    fontSize: theme.typography.sm,
+    color: theme.colors.textSecondary,
+  },
+  tagChipTextSelected: {
+    color: theme.colors.white,
+    fontWeight: theme.typography.medium,
   },
 });
