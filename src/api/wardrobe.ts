@@ -1,10 +1,19 @@
 import client from './client';
+import type { FashionMetadata } from '../types';
 
 export interface WardrobeItemPayload {
   imageUrl: string;
   category: string;
   colors?: string[];
   notes?: string;
+  type?: string;
+  fabric?: string;
+  color_name?: string;
+  color_type?: string;
+  pattern?: string;
+  fit?: string;
+  style_tags?: string[];
+  tags?: string[];
 }
 
 export interface WardrobeItemResponse {
@@ -18,6 +27,21 @@ export interface WardrobeItemResponse {
   tags?: string[];
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface WardrobeAnalyzeResponse {
+  imageUrl: string;
+  azure_tags: string[];
+  azure_colors: {
+    dominantColors?: string[];
+    accentColor?: string;
+    dominantForegroundColor?: string;
+    dominantBackgroundColor?: string;
+    [key: string]: any;
+  };
+  llm_metadata: FashionMetadata | null;
+  category_hint: string | null;
+  color_hint: string | null;
 }
 
 const inferMimeTypeFromUri = (uri: string): string => {
@@ -90,6 +114,27 @@ export const uploadWardrobeImage = async (uri: string): Promise<string> => {
     throw err;
   }
 };
+
+export async function analyzeWardrobeImage(payload: {
+  imageUrl: string;
+  category?: string;
+  colors?: string[];
+  notes?: string;
+}): Promise<WardrobeAnalyzeResponse> {
+  console.log(
+    "[Wardrobe API] analyzeWardrobeImage called with payload:",
+    payload
+  );
+  const response = await client.post<WardrobeAnalyzeResponse>(
+    "/api/wardrobe/analyze",
+    payload
+  );
+  console.log(
+    "[Wardrobe API] /api/wardrobe/analyze response:",
+    response.data
+  );
+  return response.data;
+}
 
 export const createWardrobeItem = async (
   payload: WardrobeItemPayload

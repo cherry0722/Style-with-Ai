@@ -24,6 +24,9 @@ const WardrobeSchema = new mongoose.Schema(
     },
 
     // Rich style metadata
+    type: {
+      type: String,
+    },
     formality: {
       type: String, // e.g. "casual", "smart-casual", "business", "formal", "party"
     },
@@ -39,6 +42,12 @@ const WardrobeSchema = new mongoose.Schema(
       type: [String], // e.g. ["streetwear", "minimal", "classic", "sporty", "ethnic"]
       default: [],
     },
+    color_name: {
+      type: String,
+    },
+    color_type: {
+      type: String,
+    },
     fit: {
       type: String, // e.g. "slim", "regular", "oversized", "relaxed"
     },
@@ -48,6 +57,11 @@ const WardrobeSchema = new mongoose.Schema(
     fabric: {
       type: String, // e.g. "cotton", "denim", "linen", "polyester", "wool"
     },
+    style_tags: [
+      {
+        type: String,
+      },
+    ],
 
     isFavorite: {
       type: Boolean,
