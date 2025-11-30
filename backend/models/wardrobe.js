@@ -1,5 +1,37 @@
 const mongoose = require('mongoose');
 
+// Sub-schema for normalized LLM metadata
+const FashionMetadataSchema = new mongoose.Schema(
+  {
+    category: {
+      type: String, // "top" | "bottom" | "shoes"
+    },
+    type: {
+      type: String, // "shirt", "jeans", "sneakers", etc.
+    },
+    fabric: {
+      type: String, // "cotton", "denim", "linen", "blend", "unknown", etc.
+    },
+    color_name: {
+      type: String, // "black", "white", "navy", etc.
+    },
+    color_type: {
+      type: String, // "neutral", "warm", "cool", "bold", "pastel", "unknown"
+    },
+    pattern: {
+      type: String, // "solid", "plaid", "checked", etc.
+    },
+    fit: {
+      type: String, // "slim", "regular", "relaxed", "oversized", "tapered", "skinny", "wide", "unknown"
+    },
+    style_tags: {
+      type: [String], // up to a few items like ["casual", "minimal", "streetwear"]
+      default: [],
+    },
+  },
+  { _id: false } // Don't create _id for subdocuments
+);
+
 const WardrobeSchema = new mongoose.Schema(
   {
     userId: {
@@ -56,6 +88,12 @@ const WardrobeSchema = new mongoose.Schema(
     tags: {
       type: [String], // free-form labels
       default: [],
+    },
+
+    // NEW: Normalized LLM metadata (optional, backward compatible)
+    metadata: {
+      type: FashionMetadataSchema,
+      required: false,
     },
   },
   { timestamps: true }

@@ -1,10 +1,12 @@
 import client from './client';
+import { FashionMetadata } from '../types';
 
 export interface WardrobeItemPayload {
   imageUrl: string;
   category: string;
   colors?: string[];
   notes?: string;
+  metadata?: FashionMetadata;
 }
 
 export interface WardrobeItemResponse {
@@ -16,6 +18,7 @@ export interface WardrobeItemResponse {
   notes?: string;
   isFavorite?: boolean;
   tags?: string[];
+  metadata?: FashionMetadata;
   createdAt?: string;
   updatedAt?: string;
 }

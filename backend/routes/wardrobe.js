@@ -22,6 +22,7 @@ router.post('/', auth, async (req, res) => {
       fabric,
       isFavorite,
       tags,
+      metadata,
     } = req.body || {};
 
     if (!imageUrl || !category) {
@@ -94,6 +95,25 @@ router.post('/', auth, async (req, res) => {
       finalColors = [];
     }
 
+    // Build metadata object if provided
+    let metadataObj = undefined;
+    if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+      metadataObj = {
+        category: metadata.category || undefined,
+        type: metadata.type || undefined,
+        fabric: metadata.fabric || undefined,
+        color_name: metadata.color_name || undefined,
+        color_type: metadata.color_type || undefined,
+        pattern: metadata.pattern || undefined,
+        fit: metadata.fit || undefined,
+        style_tags: Array.isArray(metadata.style_tags) ? metadata.style_tags : [],
+      };
+      // Only set metadata if at least one field is present
+      if (Object.values(metadataObj).every(val => val === undefined || (Array.isArray(val) && val.length === 0))) {
+        metadataObj = undefined;
+      }
+    }
+
     const item = await Wardrobe.create({
       userId,
       imageUrl,
@@ -111,6 +131,7 @@ router.post('/', auth, async (req, res) => {
       isFavorite:
         typeof isFavorite === 'boolean' ? isFavorite : undefined, // let schema default apply
       tags: combinedTags,
+      metadata: metadataObj,
     });
 
     return res.status(201).json(item);

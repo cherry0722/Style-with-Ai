@@ -19,6 +19,17 @@ export type ColorName =
   | "pink"
   | "purple";
 
+export interface FashionMetadata {
+  category?: string;
+  type?: string;
+  fabric?: string;
+  color_name?: string;
+  color_type?: string;
+  pattern?: string;
+  fit?: string;
+  style_tags?: string[];
+}
+
 export interface Garment {
   id: string;           // maps from backend _id
   uri?: string;         // local file:// path (optional, for immediate preview)
@@ -29,6 +40,7 @@ export interface Garment {
   notes?: string;
   isFavorite?: boolean; // favorite status from backend
   tags?: string[];      // tags from backend
+  metadata?: FashionMetadata; // normalized LLM metadata (optional, backward compatible)
 }
 
 export type OutfitContext = "date-night" | "casual" | "formal" | "work" | "party";
