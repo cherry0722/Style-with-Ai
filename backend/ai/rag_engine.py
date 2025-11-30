@@ -29,4 +29,3 @@ def suggest_with_rag(
     
     # If someone accidentally calls this with AI enabled but not implemented, fail clearly:
     raise NotImplementedError("RAG not implemented yet. This is a placeholder stub.")
-

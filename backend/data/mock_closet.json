@@ -1,0 +1,125 @@
+{
+  "wardrobe": [
+    {
+      "user_id": "test_user_1",
+      "id": "item_001",
+      "type": "jacket",
+      "category": "jacket",
+      "name": "Navy Blazer",
+      "color": "navy",
+      "fabric": "wool",
+      "pattern": "solid",
+      "season": ["fall", "winter", "spring"],
+      "formality": "formal",
+      "notes": "Perfect for business meetings"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_002",
+      "type": "top",
+      "category": "top",
+      "name": "White T-shirt",
+      "color": "white",
+      "fabric": "cotton",
+      "pattern": "solid",
+      "season": ["spring", "summer", "fall"],
+      "formality": "casual",
+      "notes": "Versatile basic"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_003",
+      "type": "bottom",
+      "category": "bottom",
+      "name": "Black Jeans",
+      "color": "black",
+      "fabric": "denim",
+      "pattern": "solid",
+      "season": ["spring", "summer", "fall", "winter"],
+      "formality": "casual",
+      "notes": "Everyday staple"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_004",
+      "type": "shoe",
+      "category": "shoe",
+      "name": "White Sneakers",
+      "color": "white",
+      "fabric": "canvas",
+      "pattern": "solid",
+      "season": ["spring", "summer", "fall"],
+      "formality": "casual",
+      "notes": "Comfortable and versatile"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_005",
+      "type": "dress",
+      "category": "dress",
+      "name": "Summer Floral Dress",
+      "color": "multicolor",
+      "fabric": "cotton",
+      "pattern": "floral",
+      "season": ["summer"],
+      "formality": "smart_casual",
+      "notes": "Perfect for warm weather"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_006",
+      "type": "top",
+      "category": "top",
+      "name": "Gray Running Shirt",
+      "color": "gray",
+      "fabric": "polyester",
+      "pattern": "solid",
+      "season": ["spring", "summer", "fall"],
+      "formality": "casual",
+      "notes": "Workout gear"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_007",
+      "type": "bottom",
+      "category": "bottom",
+      "name": "Khaki Shorts",
+      "color": "khaki",
+      "fabric": "cotton",
+      "pattern": "solid",
+      "season": ["summer"],
+      "formality": "casual",
+      "notes": "Summer shorts"
+    },
+    {
+      "user_id": "test_user_1",
+      "id": "item_008",
+      "type": "shoe",
+      "category": "sneakers",
+      "name": "Running Shoes",
+      "color": "black",
+      "fabric": "mesh",
+      "pattern": "solid",
+      "season": ["spring", "summer", "fall"],
+      "formality": "casual",
+      "notes": "For workouts"
+    }
+  ],
+  "user_profile": {
+    "test_user_1": {
+      "_id": "test_user_1",
+      "username": "test_user",
+      "email": "test@example.com",
+      "liked_item_ids": ["item_001", "item_005"],
+      "disliked_item_ids": [],
+      "user_vec": [0.1, 0.2, 0.3],
+      "color_preferences": {
+        "favorite": ["navy", "white", "black"],
+        "avoid": ["bright_pink"]
+      },
+      "formality_preference": "smart_casual",
+      "last_updated": "2025-11-11T00:00:00"
+    }
+  }
+}
+

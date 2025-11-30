@@ -1,0 +1,13 @@
+{
+  "user_id": "test_user_1",
+  "location": {
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "name": "San Francisco"
+  },
+  "weather": {
+    "summary": "Rainy",
+    "tempF": 45,
+    "precipChance": 90
+  }
+}

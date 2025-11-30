@@ -1,0 +1,13 @@
+{
+  "user_id": "unknown_user_999",
+  "location": {
+    "latitude": 40.7128,
+    "longitude": -74.0060,
+    "name": "New York"
+  },
+  "weather": {
+    "summary": "Clear",
+    "tempF": 70,
+    "precipChance": 0
+  }
+}

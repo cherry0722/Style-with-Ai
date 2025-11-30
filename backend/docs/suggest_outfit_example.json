@@ -1,0 +1,16 @@
+{
+  "outfits": [
+    {
+      "items": ["item_002", "item_003", "item_004"],
+      "items_detail": [
+        {"id": "item_002", "name": "White T-shirt", "category": "top", "color": "white", "image_url": null},
+        {"id": "item_003", "name": "Black Jeans", "category": "bottom", "color": "black", "image_url": null},
+        {"id": "item_004", "name": "White Sneakers", "category": "shoe", "color": "white", "image_url": null}
+      ],
+      "why": "Mild weather (65.0F): light layers"
+    }
+  ],
+  "context": {"location": {"latitude": 37.7749, "longitude": -122.4194}, "weather": {"tempF": 65, "summary": "Partly Cloudy", "precipChance": 10}},
+  "used_memory": true
+}
+

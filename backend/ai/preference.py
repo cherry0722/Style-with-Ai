@@ -76,21 +76,3 @@ def update_profile_counts(up: Dict[str, Any], items: List[Dict[str, Any]], label
             form[fm] = form.get(fm, 0) + mul
 
     return up
-
-
-def recompute_user_vec(
-    wardrobe_items: List[Dict[str, Any]],
-    liked_ids: List[str],
-) -> Optional[List[float]]:
-    liked_set = set(liked_ids)
-    vecs = [
-        np.array(it["embedding"], dtype=np.float32)
-        for it in wardrobe_items
-        if it.get("embedding") is not None and it["id"] in liked_set
-    ]
-    if not vecs:
-        return None
-    mat = np.stack(vecs, axis=0)
-    mean_vec = mat.mean(axis=0)
-    norm = np.linalg.norm(mean_vec) + 1e-9
-    return (mean_vec / norm).tolist()
