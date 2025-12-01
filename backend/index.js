@@ -39,6 +39,12 @@ app.use("/api/upload", uploadRoutes);
 const agentRoutes = require("./routes/agent");
 app.use("/api/ai", agentRoutes);
 
+// Dev-only routes (non-production)
+if (process.env.NODE_ENV !== 'production') {
+  const devRoutes = require('./routes/dev');
+  app.use('/api/dev', devRoutes);
+}
+
 // Static file serving for uploaded images
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
