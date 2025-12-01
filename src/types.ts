@@ -146,3 +146,11 @@ export interface AppSettings {
   lastWeatherUpdate?: string;
   preferredLocation?: string;
 }
+
+/** Outfit Preferences (Phase 5B) */
+export interface OutfitPreferences {
+  occasion?: string;          // e.g. "casual", "date-night", "work", "party", "smart-casual"
+  style_vibe?: string;        // e.g. "streetwear", "minimal", "sporty", "classy"
+  prefer_favorites?: boolean;
+  avoid_colors?: string[];    // e.g. ["red", "yellow"]
+}

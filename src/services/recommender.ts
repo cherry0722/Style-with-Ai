@@ -1,5 +1,5 @@
 import topOutfits from "../data/topOutfits";
-import { Garment, OutfitSuggestion, OutfitTemplate } from "../types";
+import { Garment, OutfitSuggestion, OutfitTemplate, OutfitPreferences } from "../types";
 import { ENABLE_AI } from "../config";
 import aiClient from "../api/aiClient";
 
@@ -86,6 +86,7 @@ export interface SuggestOutfitRequest {
   user_id: string;
   location: LocationInput;
   weather: WeatherInput;
+  preferences?: OutfitPreferences;
 }
 
 export interface OutfitItemDetail {
@@ -121,7 +122,8 @@ export interface SuggestOutfitResponse {
 export async function suggestOutfitForUser(
   userId: string,
   location: LocationInput,
-  weather: WeatherInput
+  weather: WeatherInput,
+  preferences?: OutfitPreferences
 ): Promise<SuggestOutfitResponse> {
   if (!ENABLE_AI) {
     console.warn('[Recommender] ENABLE_AI is false. Returning fallback stub.');
@@ -136,9 +138,10 @@ export async function suggestOutfitForUser(
     user_id: userId,
     location,
     weather,
+    preferences,
   };
 
-  console.log('[Recommender] Calling /suggest_outfit with payload:', payload);
+  console.log('[Recommender] Calling /suggest_outfit with payload:', JSON.stringify(payload, null, 2));
 
   const res = await aiClient.post<SuggestOutfitResponse>('/suggest_outfit', payload);
   return res.data;

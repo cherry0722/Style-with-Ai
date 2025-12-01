@@ -54,3 +54,12 @@ backend/uploads/images/
 
 .venv/
 backend/.venv/.venv/
+backend/__pycache__/
+
+backend/ai/__pycache__/
+
+backend/ai/graph/__pycache__/
+
+backend/db/__pycache__/
+
+backend/schemas/__pycache__/
