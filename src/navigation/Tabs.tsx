@@ -5,6 +5,7 @@ import ClosetScreen from "../screens/ClosetScreen";
 import OutfitScreen from "../screens/OutfitScreen";
 import FavoritesScreen from "../screens/FavoritesScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import AvatarScreen from "../screens/AvatarScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal } from "react-native";
 import { useAuth } from "../context/AuthContext";
@@ -17,6 +18,7 @@ export type TabParamList = {
   Home: undefined;
   Explore: undefined;
   Outfit: undefined;
+  Avatar: undefined;
   Favs: undefined;
   Settings: undefined;
 };
@@ -45,6 +47,8 @@ export default function Tabs() {
         return "shirt-outline";
       case "Favs":
         return "heart-outline";
+      case "Avatar":
+        return "person-outline";
       case "Settings":
         return "settings-outline";
       default:
@@ -123,6 +127,11 @@ export default function Tabs() {
           name="Outfit" 
           component={OutfitScreen} 
           options={{ title: "Outfit" }} 
+        />
+        <Tab.Screen
+          name="Avatar"
+          component={AvatarScreen}
+          options={{ title: "Avatar" }}
         />
         <Tab.Screen 
           name="Favs" 
