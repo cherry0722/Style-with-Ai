@@ -43,6 +43,9 @@ app.use("/api/upload", uploadRoutes);
 const agentRoutes = require("./routes/agent");
 app.use("/api/ai", agentRoutes);
 
+const weatherRoutes = require("./routes/weather");
+app.use("/api/weather", weatherRoutes);
+
 // Dev-only routes (non-production)
 if (process.env.NODE_ENV !== 'production') {
   const devRoutes = require('./routes/dev');

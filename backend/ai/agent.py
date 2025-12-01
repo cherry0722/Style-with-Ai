@@ -227,132 +227,31 @@ class MyraAgent:
 
         return "other"
 
-    def _score_item(self, item: WardrobeItem, temp_f: Optional[float], weather: Optional[Dict[str, Any]] = None) -> float:
+    def _score_item(
+        self,
+        item: WardrobeItem,
+        preferences: Optional[Dict[str, Any]],
+        temp_f: Optional[float],
+        weather: Optional[Dict[str, Any]] = None
+    ) -> Tuple[float, Dict[str, float]]:
         """
-        Weather-aware scoring function based on temperature, item type, season tags, and favorites.
-        Higher score = more suitable.
+        Preference + weather scoring for an item.
+        Returns the final numeric score and a breakdown dict for logging.
         """
-        score = 1.0  # Base score
-
-        # Extract fields safely
-        season_tags = [t.lower() for t in (item.seasonTags or [])]
-        is_fav = bool(item.isFavorite)
-        category = self._categorize_item(item)
-        item_type = (item.type or "").lower()
-        color_type = (item.color_type or "").lower() if item.color_type else ""
-        style_tags = [t.lower() for t in (item.style_tags or [])] if item.style_tags else []
+        weather_dict = weather or {}
+        pref_scores = self.score_item_preferences(item, preferences)
+        weather_bonus = self._score_item_weather(item, temp_f, weather_dict)
         
-        # Temperature-based scoring
-        if temp_f is not None:
-            # Define temperature bands
-            is_cold = temp_f <= 55
-            is_mild = 55 < temp_f < 75
-            is_warm = temp_f >= 75
-
-            # Tops scoring
-            if category == "top":
-                # Heavy/warm tops
-                if any(t in item_type for t in ["hoodie", "sweater", "jacket", "cardigan"]):
-                    if is_cold:
-                        score += 2.0
-                    elif is_mild:
-                        score += 0.5
-                    else:  # warm
-                        score -= 1.0
-                
-                # Light/breathable tops
-                elif any(t in item_type for t in ["t-shirt", "shirt", "polo", "tank", "camisole"]):
-                    if is_warm:
-                        score += 1.5
-                    elif is_mild:
-                        score += 0.5
-                    else:  # cold
-                        score -= 1.0
-                
-                # Default top bonus for mild/warm
-                elif is_mild or is_warm:
-                    score += 0.5
-
-            # Bottoms scoring
-            elif category == "bottom":
-                # Shorts
-                if "shorts" in item_type:
-                    if is_warm:
-                        score += 1.5
-                    elif is_mild:
-                        score += 0.3
-                    else:  # cold
-                        score -= 1.5
-                
-                # Full-length bottoms
-                elif any(t in item_type for t in ["jeans", "trousers", "pants"]):
-                    if is_cold or is_mild:
-                        score += 0.5
-                    # Warm: neutral (jeans can work but not ideal)
-
-            # Shoes scoring
-            elif category == "shoe":
-                # Sneakers - versatile for all weather
-                if "sneaker" in item_type or "sneakers" in item_type:
-                    score += 0.5  # Neutral to slightly positive
-                
-                # Boots - better for cold
-                elif "boot" in item_type:
-                    if is_cold:
-                        score += 1.0
-                    elif is_warm:
-                        score -= 0.5
-                
-                # Sandals/slides - better for warm
-                elif any(t in item_type for t in ["sandal", "slide"]):
-                    if is_warm:
-                        score += 1.0
-                    elif is_cold:
-                        score -= 1.0
-
-            # Jacket/outerwear scoring
-            elif category == "jacket":
-                if is_cold:
-                    score += 3.0
-                elif is_mild:
-                    score += 1.0
-                else:  # warm
-                    score -= 1.5  # Avoid heavy jackets in heat
-
-            # Season tags matching
-            if season_tags:
-                if is_cold:
-                    if "winter" in season_tags or "cold" in season_tags:
-                        score += 1.5
-                    elif "summer" in season_tags or "hot" in season_tags:
-                        score -= 1.0  # Mismatch penalty
-                
-                elif is_mild:
-                    if "spring" in season_tags or "fall" in season_tags or "autumn" in season_tags:
-                        score += 1.0
-                
-                elif is_warm:
-                    if "summer" in season_tags or "hot" in season_tags:
-                        score += 1.5
-                    elif "winter" in season_tags or "cold" in season_tags:
-                        score -= 1.0  # Mismatch penalty
-
-        # Favorites boost
-        if is_fav:
-            score += 1.0
-
-        # Lightweight color/style hints (don't dominate)
-        if color_type:
-            # Neutral colors work well in all situations (tiny boost)
-            if color_type in ["neutral"]:
-                score += 0.2
-        
-        if style_tags:
-            # Casual style is a good default (tiny boost)
-            if "casual" in style_tags:
-                score += 0.2
-
-        return score
+        total_score = pref_scores["total"] + weather_bonus
+        components = {
+            "total": total_score,
+            "occasion": pref_scores["occasion"],
+            "style": pref_scores["style"],
+            "favorite": pref_scores["favorite"],
+            "avoid_penalty": pref_scores["avoid_penalty"],
+            "weather": weather_bonus,
+        }
+        return total_score, components
 
     def _describe_item(self, item: WardrobeItem) -> str:
         """
@@ -401,18 +300,17 @@ class MyraAgent:
         Compute detailed preference scores for a wardrobe item.
         Returns a dict with component scores and total.
         
-        Phase 5C: Real Preference Scoring with Stronger Weights
+        Phase 6B: Strong preference-aware scoring.
         
-        Scoring rules (stronger, more decisive):
-        - occasion_score: +2.5 if exact match in occasionTags, +1.5 if match in tags
-        - style_score: +2.0 if match in styleVibe, +1.5 if match in tags
-        - favorite_score: +2.5 if prefer_favorites is True and item.isFavorite is True
-        - avoid_penalty: -3.0 if item color is in avoid_colors
+        Scoring rules:
+        - occasion_score: +3.0 for exact match in occasionTags, +2.0 if tags contain occasion keyword
+        - style_score: +3.0 for exact match in styleVibe, +2.0 if tag contains style keyword
+        - favorite_score: +4.0 when prefer_favorites=True and item.isFavorite=True
+        - avoid_penalty: -100.0 if item matches any avoided color
         
         Returns:
             Dict with keys: "total", "occasion", "style", "favorite", "avoid_penalty"
         """
-        # Initialize component scores
         occasion_score = 0.0
         style_score = 0.0
         favorite_score = 0.0
@@ -427,61 +325,49 @@ class MyraAgent:
                 "avoid_penalty": avoid_penalty,
             }
         
-        # Normalize item data access
-        item_tags = set([tag.lower() for tag in (item.tags or [])])
-        occasion_tags = set([tag.lower() for tag in (item.occasionTags or [])])
+        item_tags = [tag.lower() for tag in (item.tags or [])]
+        occasion_tags = [tag.lower() for tag in (item.occasionTags or [])]
         style_vibe = item.styleVibe
+        style_tags = [tag.lower() for tag in (item.style_tags or [])]
         item_color = (item.color or "").lower().strip()
         item_colors = [c.lower().strip() for c in (item.colors or []) if c]
         is_favorite = bool(item.isFavorite)
         
-        # Normalize preferences access
         pref_occasion = preferences.get("occasion")
         pref_style = preferences.get("style_vibe")
-        pref_avoid_colors = preferences.get("avoid_colors")
-        pref_avoid_colors = [c.lower().strip() for c in (pref_avoid_colors or []) if c]
-        pref_fav = bool(preferences.get("prefer_favorites", False))
+        pref_avoid_colors = [c.lower().strip() for c in (preferences.get("avoid_colors") or []) if c]
+        pref_fav = bool(preferences.get("prefer_favorites"))
         
-        # 1) Occasion match – strong boost
         if pref_occasion:
-            pref_occasion_lower = pref_occasion.lower().strip()
-            # Exact match in occasionTags
-            if pref_occasion_lower in occasion_tags:
-                occasion_score = 2.5
-            # Flexible tag matching
-            elif any(pref_occasion_lower in tag or tag in pref_occasion_lower for tag in item_tags):
-                occasion_score = 1.5
+            pref_occ = pref_occasion.lower().strip()
+            if pref_occ in occasion_tags:
+                occasion_score = 3.0
+            elif any(pref_occ in tag or tag in pref_occ for tag in item_tags):
+                occasion_score = 2.0
         
-        # 2) Style vibe – strong boost
         if pref_style:
             pref_style_lower = pref_style.lower().strip()
-            # Direct style vibe field match
             if style_vibe:
                 if isinstance(style_vibe, list):
-                    style_vibe_str = " ".join([str(s).lower() for s in style_vibe])
+                    normalized = " ".join([str(s).lower() for s in style_vibe])
                 else:
-                    style_vibe_str = str(style_vibe).lower()
-                
-                if pref_style_lower in style_vibe_str:
+                    normalized = str(style_vibe).lower()
+                if pref_style_lower == normalized:
+                    style_score = 3.0
+                elif pref_style_lower in normalized:
                     style_score = 2.0
-            # Tag contains style vibes (e.g., 'streetwear', 'classy')
             if style_score == 0.0:
-                if any(pref_style_lower in tag for tag in item_tags):
-                    style_score = 1.5
+                combined_tags = item_tags + style_tags
+                if any(pref_style_lower in tag or tag in pref_style_lower for tag in combined_tags):
+                    style_score = 2.0
         
-        # 3) Favorites – only if user prefers favorites
         if pref_fav and is_favorite:
-            favorite_score = 2.5
+            favorite_score = 4.0
         
-        # 4) Avoid colors – strong negative
         if pref_avoid_colors:
-            # Check main color against avoid list
-            if item_color and item_color in pref_avoid_colors:
-                avoid_penalty = -3.0
-            # Check colors list
-            if avoid_penalty == 0.0:
-                if any(c in pref_avoid_colors for c in item_colors):
-                    avoid_penalty = -3.0
+            all_colors = set(filter(None, [item_color] + item_colors))
+            if any(color in pref_avoid_colors for color in all_colors):
+                avoid_penalty = -100.0
         
         total = occasion_score + style_score + favorite_score + avoid_penalty
         
@@ -492,6 +378,55 @@ class MyraAgent:
             "favorite": favorite_score,
             "avoid_penalty": avoid_penalty,
         }
+
+    def _score_item_weather(
+        self,
+        item: WardrobeItem,
+        temp_f: Optional[float],
+        weather: Dict[str, Any]
+    ) -> float:
+        """
+        Simple weather-aware adjustments.
+        Encourages breathable items in heat, layers in cold, and rain-friendly materials.
+        """
+        if temp_f is None:
+            temp_f = weather.get("tempF")
+        if temp_f is None:
+            temp_f = weather.get("tempf")
+        
+        summary = (weather.get("summary") or "").lower()
+        category = self._categorize_item(item)
+        item_tags = [tag.lower() for tag in (item.tags or [])]
+        style_tags = [tag.lower() for tag in (item.style_tags or [])]
+        fabric = (item.fabric or "").lower()
+        item_type = (item.type or "").lower()
+        
+        weather_bonus = 0.0
+        
+        try:
+            if temp_f is not None:
+                if temp_f >= 85:
+                    if category == "jacket" or any(tag in item_tags for tag in ["jacket", "coat", "hoodie"]):
+                        weather_bonus -= 2.0
+                    if (
+                        "minimal" in style_tags
+                        or "sporty" in style_tags
+                        or (category == "top" and "hoodie" not in item_tags)
+                    ):
+                        weather_bonus += 1.0
+                elif temp_f <= 55:
+                    if category == "jacket" or any(tag in item_tags for tag in ["jacket", "coat", "hoodie", "sweater"]):
+                        weather_bonus += 2.0
+                    if category == "bottom" and ("shorts" in item_type or "short" in item_type):
+                        weather_bonus -= 2.0
+            if "rain" in summary:
+                if category == "shoe" and ("canvas" in fabric or "canvas" in item_tags):
+                    weather_bonus -= 1.0
+        except Exception as weather_err:
+            logger.warning(f"[MyraAgent] Weather scoring failed for item {item.id}: {weather_err}")
+            return 0.0
+        
+        return weather_bonus
 
     def _rank_items_for_preferences(
         self,
@@ -677,11 +612,35 @@ class MyraAgent:
                 f"categories: {dict(category_counts)}"
             )
         
-        # Score items
+        # Score items with preferences and weather
         scored_items = []
+        item_score_details: Dict[str, Dict[str, float]] = {}
         for item in wardrobe_items:
-            score = self._score_item(item, temp_f, weather_dict)
+            try:
+                score, components = self._score_item(item, preferences, temp_f, weather_dict)
+            except Exception as scoring_err:
+                logger.warning(f"[MyraAgent] Scoring failed for item {item.id}: {scoring_err}")
+                score = 0.0
+                components = {
+                    "total": 0.0,
+                    "occasion": 0.0,
+                    "style": 0.0,
+                    "favorite": 0.0,
+                    "avoid_penalty": 0.0,
+                    "weather": 0.0,
+                }
             scored_items.append((score, item))
+            item_score_details[item.id] = components
+            logger.info(
+                "[MyraAgent] Score for item %s: %.2f (occasion=%.2f, style=%.2f, favorite=%.2f, avoid_penalty=%.2f, weather=%.2f)",
+                item.id,
+                score,
+                components.get("occasion", 0.0),
+                components.get("style", 0.0),
+                components.get("favorite", 0.0),
+                components.get("avoid_penalty", 0.0),
+                components.get("weather", 0.0),
+            )
 
         # Sort by score descending
         scored_items.sort(key=lambda x: x[0], reverse=True)
@@ -784,45 +743,34 @@ class MyraAgent:
             if not chosen_items:
                 chosen_items = [item for _, item in scored_items[:3]]
             
-            # Compute preference scores for fallback items
-            if preferences:
-                for item in chosen_items:
-                    item_scores_final[item.id] = self.score_item_preferences(item, preferences)
+            for item in chosen_items:
+                if item.id in item_score_details:
+                    item_scores_final[item.id] = item_score_details[item.id]
+                else:
+                    _, comp = self._score_item(item, preferences, temp_f, weather_dict)
+                    item_scores_final[item.id] = comp
         else:
             # Score each candidate outfit
             scored_candidates = []
             for outfit_items, _, _ in candidate_outfits:
-                # Compute base outfit score (sum of temperature/weather scores)
                 base_outfit_score = 0.0
-                for item in outfit_items:
-                    # Find the base score for this item
-                    for score, scored_item in scored_items:
-                        if scored_item.id == item.id:
-                            base_outfit_score += score
-                            break
-                
-                # Compute preference scores for this outfit
-                item_scores = {}
-                total_preference_score = 0.0
                 has_avoided_colors = False
+                combined_components: Dict[str, Dict[str, float]] = {}
                 
-                if preferences:
-                    for item in outfit_items:
-                        score_dict = self.score_item_preferences(item, preferences)
-                        item_scores[item.id] = score_dict
-                        total_preference_score += score_dict["total"]
-                        # Check if this item has avoided colors
-                        if score_dict["avoid_penalty"] < 0:
-                            has_avoided_colors = True
-                
-                # Combined score: base + preference
-                combined_score = base_outfit_score + total_preference_score
+                for item in outfit_items:
+                    components = item_score_details.get(item.id)
+                    if not components:
+                        _, components = self._score_item(item, preferences, temp_f, weather_dict)
+                    combined_components[item.id] = components
+                    base_outfit_score += components.get("total", 0.0)
+                    if components.get("avoid_penalty", 0.0) < 0:
+                        has_avoided_colors = True
                 
                 scored_candidates.append((
                     outfit_items,
-                    combined_score,
+                    base_outfit_score,
                     has_avoided_colors,
-                    item_scores,
+                    combined_components,
                     base_outfit_score,
                 ))
             
@@ -834,7 +782,11 @@ class MyraAgent:
             chosen_items = best_outfit[0]
             item_scores_final = best_outfit[3]
         
-        logger.info(f"[MyraAgent] Selected outfit items: {[item.id for item in chosen_items]}")
+        selected_with_scores = []
+        for item in chosen_items:
+            comp = item_scores_final.get(item.id) or item_score_details.get(item.id) or {}
+            selected_with_scores.append(f"{item.id}:{comp.get('total', 0.0):.2f}")
+        logger.info("[MyraAgent] Selected outfit items with scores: %s", ", ".join(selected_with_scores))
         
         # Enhanced logging for preference scores - detailed breakdown (Phase 5C)
         if preferences:
@@ -848,27 +800,25 @@ class MyraAgent:
             )
             
             # Ensure we have scores for all selected items
-            final_item_scores = {}
-            if item_scores_final:
-                final_item_scores = item_scores_final.copy()
-            
-            # Compute scores for any items that weren't already scored
+            final_item_scores = item_scores_final.copy()
             for item in chosen_items:
                 if item.id not in final_item_scores:
-                    final_item_scores[item.id] = self.score_item_preferences(item, preferences)
+                    _, comp = self._score_item(item, preferences, temp_f, weather_dict)
+                    final_item_scores[item.id] = comp
             
             # Log detailed per-item scores - one log line per item for clarity
             for item in chosen_items:
                 item_id = item.id
                 scores = final_item_scores.get(item_id, {})
                 logger.info(
-                    "[MyraAgent] Preference score for item %s: total=%.2f, occasion=%.2f, style=%.2f, favorite=%.2f, avoid_penalty=%.2f",
+                    "[MyraAgent] Preference score for item %s: total=%.2f, occasion=%.2f, style=%.2f, favorite=%.2f, avoid_penalty=%.2f, weather=%.2f",
                     item_id,
                     float(scores.get("total", 0.0)),
                     float(scores.get("occasion", 0.0)),
                     float(scores.get("style", 0.0)),
                     float(scores.get("favorite", 0.0)),
                     float(scores.get("avoid_penalty", 0.0)),
+                    float(scores.get("weather", 0.0)),
                 )
 
         # Build items_detail payload
@@ -973,3 +923,10 @@ class MyraAgent:
             },
             used_memory=False,
         )
+
+# Phase 6B scoring summary:
+# - Occasion/style matches add up to +3 points each for exact matches (+2 for partials).
+# - Favorite items gain +4 points when the user prefers favorites.
+# - Avoided colors apply a -100 penalty but remain available as a fallback.
+# - Weather adjustments provide +/-2 point nudges for heat/cold/rain scenarios.
+# - Candidate outfits prefer combinations without avoided colors; penalties apply only if no clean outfit exists.

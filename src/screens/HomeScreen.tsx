@@ -15,14 +15,14 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../store/settings';
 import { useCalendar } from '../store/calendar';
 import { useNotifications } from '../store/notifications';
-import { getWeatherData, convertTemperature, getWeatherIconUrl } from '../services/weather';
-import { WeatherData, LocationData } from '../types';
+import { getWeatherData, convertTemperature, getWeatherIconUrl, clampTemperatureF } from '../services/weather';
+import { WeatherData, LocationData, OutfitPreferences } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
 import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
 import { suggestOutfitForUser, OutfitFromAI, OutfitItemDetail } from '../services/recommender';
-import { OutfitPreferences } from '../types';
+import { PreferencesPanel, Preferences } from '../components/PreferencesPanel';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -43,11 +43,14 @@ export default function HomeScreen() {
   const [aiWhy, setAiWhy] = useState<string | null>(null);
   const [aiItemsDetail, setAiItemsDetail] = useState<OutfitItemDetail[] | null>(null);
 
-  // Outfit Preferences state (Phase 5B)
-  const [occasion, setOccasion] = useState<string | undefined>();
-  const [styleVibe, setStyleVibe] = useState<string | undefined>();
-  const [preferFavorites, setPreferFavorites] = useState(false);
-  const [avoidColors, setAvoidColors] = useState<string[]>([]);
+  // Outfit Preferences state (Phase 6A) - stored as a single preferences object
+  // Defaults are empty so we only send preferences when the user makes a choice
+  const [preferences, setPreferences] = useState<Preferences>({
+    occasion: undefined,
+    style_vibe: undefined,
+    prefer_favorites: false,
+    avoid_colors: [],
+  });
 
   const firstName = user?.profile?.preferredName || user?.displayName || user?.username || (user?.email ? user.email.split('@')[0] : 'there');
   const today = new Date().toISOString().split('T')[0];
@@ -115,14 +118,27 @@ export default function HomeScreen() {
     }
   };
 
-  // Build preferences object from state (Phase 5B)
-  const buildPreferences = (): OutfitPreferences | undefined => {
-    const prefs: OutfitPreferences = {};
-    if (occasion) prefs.occasion = occasion;
-    if (styleVibe) prefs.style_vibe = styleVibe;
-    if (preferFavorites) prefs.prefer_favorites = true;
-    if (avoidColors.length > 0) prefs.avoid_colors = avoidColors;
-    return Object.keys(prefs).length > 0 ? prefs : undefined;
+  // Remove empty preference fields before sending to backend
+  const removeEmptyPreferences = (prefs: Preferences): OutfitPreferences => {
+    const cleaned: OutfitPreferences = {};
+
+    if (prefs.occasion && prefs.occasion.trim().length > 0) {
+      cleaned.occasion = prefs.occasion;
+    }
+    if (prefs.style_vibe && prefs.style_vibe.trim().length > 0) {
+      cleaned.style_vibe = prefs.style_vibe;
+    }
+    // Preserve boolean false explicitly (user may deselect prefer_favorites)
+    if (typeof prefs.prefer_favorites === 'boolean') {
+      if (prefs.prefer_favorites) {
+        cleaned.prefer_favorites = true;
+      }
+    }
+    if (prefs.avoid_colors && prefs.avoid_colors.length > 0) {
+      cleaned.avoid_colors = prefs.avoid_colors;
+    }
+
+    return cleaned;
   };
 
   const handleAskMyraForOutfit = async () => {
@@ -144,14 +160,16 @@ export default function HomeScreen() {
       };
 
       const weatherData = convertedWeather ? {
-        summary: convertedWeather.description,
-        tempF: settings.temperatureUnit === 'fahrenheit' 
-          ? convertedWeather.temperature 
-          : (convertedWeather.temperature * 9/5) + 32,
+        summary: convertedWeather.description || 'Mild',
+        tempF: clampTemperatureF(
+          settings.temperatureUnit === 'fahrenheit' 
+            ? convertedWeather.temperature 
+            : (convertedWeather.temperature * 9/5) + 32
+        ),
         precipChance: 10, // Weather service doesn't provide this yet
       } : {
-        summary: 'Partly Cloudy',
-        tempF: 65,
+        summary: 'Mild',
+        tempF: 72,
         precipChance: 10,
       };
 
@@ -161,13 +179,15 @@ export default function HomeScreen() {
         name: locationData.city || locationData.name || 'Current Location',
       };
 
-      const preferences = buildPreferences();
+      const cleanedPreferences = removeEmptyPreferences(preferences);
+      const prefsForAI: OutfitPreferences | undefined =
+        Object.keys(cleanedPreferences).length > 0 ? cleanedPreferences : undefined;
 
       const response = await suggestOutfitForUser(
         user.id, 
         locationPayload, 
         weatherData,
-        preferences
+        prefsForAI
       );
       console.log('[HomeScreen] AI outfit response:', response);
 
@@ -313,180 +333,8 @@ export default function HomeScreen() {
           AI Outfit (Python backend)
         </Text>
 
-        {/* Outfit Preferences Section (Phase 5B) */}
         <View style={{ marginBottom: theme.spacing.md }}>
-          <Text
-            style={{
-              fontSize: theme.typography.sm,
-              fontWeight: theme.typography.medium,
-              color: theme.colors.textSecondary,
-              marginBottom: theme.spacing.sm,
-            }}
-          >
-            Outfit Preferences
-          </Text>
-
-          {/* Occasion Dropdown */}
-          <View style={{ marginBottom: theme.spacing.sm }}>
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.textSecondary,
-                marginBottom: theme.spacing.xs,
-              }}
-            >
-              Occasion
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-              {['casual', 'work', 'date-night', 'party', 'smart-casual'].map((opt) => (
-                <Pressable
-                  key={opt}
-                  onPress={() => {
-                    hapticFeedback.selection();
-                    setOccasion(occasion === opt ? undefined : opt);
-                  }}
-                  style={{
-                    paddingHorizontal: theme.spacing.sm,
-                    paddingVertical: theme.spacing.xs,
-                    borderRadius: theme.borderRadius.md,
-                    backgroundColor: occasion === opt ? theme.colors.accent : theme.colors.background,
-                    borderWidth: 1,
-                    borderColor: occasion === opt ? theme.colors.accent : theme.colors.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: theme.typography.xs,
-                      color: occasion === opt ? theme.colors.white : theme.colors.textPrimary,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {opt.replace('-', ' ')}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Style Vibe Dropdown */}
-          <View style={{ marginBottom: theme.spacing.sm }}>
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.textSecondary,
-                marginBottom: theme.spacing.xs,
-              }}
-            >
-              Style Vibe
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-              {['streetwear', 'minimal', 'sporty', 'classy'].map((opt) => (
-                <Pressable
-                  key={opt}
-                  onPress={() => {
-                    hapticFeedback.selection();
-                    setStyleVibe(styleVibe === opt ? undefined : opt);
-                  }}
-                  style={{
-                    paddingHorizontal: theme.spacing.sm,
-                    paddingVertical: theme.spacing.xs,
-                    borderRadius: theme.borderRadius.md,
-                    backgroundColor: styleVibe === opt ? theme.colors.accent : theme.colors.background,
-                    borderWidth: 1,
-                    borderColor: styleVibe === opt ? theme.colors.accent : theme.colors.border,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: theme.typography.xs,
-                      color: styleVibe === opt ? theme.colors.white : theme.colors.textPrimary,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {opt}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Prefer Favorites Switch */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: theme.spacing.sm,
-              paddingVertical: theme.spacing.xs,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.textSecondary,
-              }}
-            >
-              Prefer favorite items
-            </Text>
-            <Switch
-              value={preferFavorites}
-              onValueChange={(value) => {
-                hapticFeedback.selection();
-                setPreferFavorites(value);
-              }}
-              trackColor={{ false: theme.colors.border, true: theme.colors.accent + '80' }}
-              thumbColor={preferFavorites ? theme.colors.accent : theme.colors.textTertiary}
-            />
-          </View>
-
-          {/* Avoid Colors */}
-          <View>
-            <Text
-              style={{
-                fontSize: theme.typography.xs,
-                color: theme.colors.textSecondary,
-                marginBottom: theme.spacing.xs,
-              }}
-            >
-              Avoid Colors
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs }}>
-              {['red', 'yellow', 'green', 'blue', 'black', 'white'].map((color) => {
-                const isSelected = avoidColors.includes(color);
-                return (
-                  <Pressable
-                    key={color}
-                    onPress={() => {
-                      hapticFeedback.selection();
-                      setAvoidColors(
-                        isSelected
-                          ? avoidColors.filter((c) => c !== color)
-                          : [...avoidColors, color]
-                      );
-                    }}
-                    style={{
-                      paddingHorizontal: theme.spacing.sm,
-                      paddingVertical: theme.spacing.xs,
-                      borderRadius: theme.borderRadius.md,
-                      backgroundColor: isSelected ? theme.colors.error : theme.colors.background,
-                      borderWidth: 1,
-                      borderColor: isSelected ? theme.colors.error : theme.colors.border,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: theme.typography.xs,
-                        color: isSelected ? theme.colors.white : theme.colors.textPrimary,
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {color}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+          <PreferencesPanel value={preferences} onChange={setPreferences} />
         </View>
 
         <Pressable

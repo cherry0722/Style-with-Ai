@@ -111,6 +111,18 @@ function getFallbackCityName(lat: number, lon: number): string {
   return closestCity;
 }
 
+/**
+ * Clamp temperature to realistic bounds for Fahrenheit
+ * Ensures temperatures are always between -10°F and 110°F
+ */
+export function clampTemperatureF(raw: number): number {
+  if (!Number.isFinite(raw)) return 72;
+  // Hard safety bounds
+  if (raw < -10) return -10;
+  if (raw > 110) return 110;
+  return raw;
+}
+
 async function fetchWeatherData(
   location: LocationData,
   unit: "celsius" | "fahrenheit"
@@ -128,71 +140,79 @@ async function fetchWeatherData(
     const response = await fetch(url);
 
     if (!response.ok) {
-      console.warn(`Weather API error: ${response.status}, using mock data`);
+      console.warn("Weather API error, using safe mock data", { status: response.status });
       return getMockWeatherData(unit);
     }
 
     const data = await response.json();
     console.log("Weather data fetched successfully:", data.weather[0].main);
 
+    // Clamp temperatures to realistic bounds
+    const tempRaw = unit === "fahrenheit" ? data.main.temp : (data.main.temp * 9/5 + 32);
+    const feelsLikeRaw = unit === "fahrenheit" ? data.main.feels_like : (data.main.feels_like * 9/5 + 32);
+    const minTempRaw = unit === "fahrenheit" ? data.main.temp_min : (data.main.temp_min * 9/5 + 32);
+    const maxTempRaw = unit === "fahrenheit" ? data.main.temp_max : (data.main.temp_max * 9/5 + 32);
+
+    const tempF = clampTemperatureF(tempRaw);
+    const feelsLikeF = clampTemperatureF(feelsLikeRaw);
+    const minTempF = clampTemperatureF(minTempRaw);
+    const maxTempF = clampTemperatureF(maxTempRaw);
+
+    // Convert back to requested unit if needed
+    const temperature = unit === "fahrenheit" ? Math.round(tempF) : Math.round((tempF - 32) * 5/9);
+    const feelsLike = unit === "fahrenheit" ? Math.round(feelsLikeF) : Math.round((feelsLikeF - 32) * 5/9);
+    const minTemp = unit === "fahrenheit" ? Math.round(minTempF) : Math.round((minTempF - 32) * 5/9);
+    const maxTemp = unit === "fahrenheit" ? Math.round(maxTempF) : Math.round((maxTempF - 32) * 5/9);
+
     return {
-      temperature: Math.round(data.main.temp),
-      feelsLike: Math.round(data.main.feels_like),
-      minTemp: Math.round(data.main.temp_min),
-      maxTemp: Math.round(data.main.temp_max),
+      temperature,
+      feelsLike,
+      minTemp,
+      maxTemp,
       condition: data.weather[0].main,
       conditionIcon: data.weather[0].icon,
       humidity: data.main.humidity,
       windSpeed: data.wind.speed,
       description: data.weather[0].description,
-      outfitTip: generateOutfitTip(data.main.temp, data.weather[0].main, unit),
+      outfitTip: generateOutfitTip(temperature, data.weather[0].main, unit),
     };
   } catch (error) {
-    console.error("Error fetching weather data:", error);
+    console.warn("Weather API error, using safe mock data", error);
     return getMockWeatherData(unit);
   }
 }
 
 function getMockWeatherData(unit: "celsius" | "fahrenheit"): WeatherData {
-  const now = new Date();
-  const hour = now.getHours();
-  const month = now.getMonth();
+  // Use stable, realistic default suitable for Denton, TX
+  // Safe fallback: Mild weather, 72°F (22°C)
+  const baseTempF = 72;
+  const baseTempC = 22;
 
-  const seasonalAdjustment =
-    month >= 11 || month <= 2 ? -10 : month >= 6 && month <= 8 ? 10 : 0;
-  const timeAdjustment =
-    hour >= 22 || hour <= 6 ? -5 : hour >= 12 && hour <= 16 ? 5 : 0;
+  // Clamp to ensure realistic values
+  const tempF = clampTemperatureF(baseTempF);
+  const temp = unit === "celsius" ? baseTempC : tempF;
+  const feelsLike = temp;
+  const minTemp = temp - 5;
+  const maxTemp = temp + 5;
 
-  const baseTemp = unit === "celsius" ? 22 : 72;
-  const variation = Math.floor(Math.random() * 8) - 4;
-  const temp = baseTemp + variation + seasonalAdjustment + timeAdjustment;
-  const feelsLike = temp + (Math.floor(Math.random() * 3) - 1);
-  const minTemp = temp - Math.floor(Math.random() * 6) - 3;
-  const maxTemp = temp + Math.floor(Math.random() * 6) + 3;
-
-  const weatherConditions = [
-    { condition: "Clear", icon: "01d", description: "clear sky" },
-    { condition: "Clouds", icon: "02d", description: "few clouds" },
-    { condition: "Rain", icon: "10d", description: "rain" },
-    { condition: "Thunderstorm", icon: "11d", description: "thunderstorm" },
-    { condition: "Snow", icon: "13d", description: "snow" },
-    { condition: "Mist", icon: "50d", description: "mist" },
-  ];
-
-  const selectedWeather =
-    weatherConditions[Math.floor(Math.random() * weatherConditions.length)];
+  // Use mild, realistic weather condition
+  const selectedWeather = {
+    condition: "Clear",
+    icon: "01d",
+    description: "clear sky",
+  };
 
   const outfitTip = generateOutfitTip(temp, selectedWeather.condition, unit);
 
   return {
-    temperature: temp,
-    feelsLike,
-    minTemp,
-    maxTemp,
+    temperature: Math.round(temp),
+    feelsLike: Math.round(feelsLike),
+    minTemp: Math.round(minTemp),
+    maxTemp: Math.round(maxTemp),
     condition: selectedWeather.condition,
     conditionIcon: selectedWeather.icon,
-    humidity: 50 + Math.floor(Math.random() * 30),
-    windSpeed: 1 + Math.random() * 5,
+    humidity: 50,
+    windSpeed: 5,
     description: selectedWeather.description,
     outfitTip,
   };
