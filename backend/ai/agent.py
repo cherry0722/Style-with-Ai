@@ -1,7 +1,11 @@
 # ai/agent.py
 from typing import Dict, Any, Optional, List, Tuple
 import os
+import logging
 from urllib.parse import urlparse
+
+# Set up logger for this module
+logger = logging.getLogger(__name__)
 
 from db.mongo import get_db, get_user_profile, get_user_wardrobe, get_items_by_ids
 from calendar_helper import get_events_for_today
@@ -388,76 +392,106 @@ class MyraAgent:
         
         return desc.lower() if desc else "item"
 
-    def _score_item_for_preferences(
+    def score_item_preferences(
         self,
         item: WardrobeItem,
         preferences: Optional[Dict[str, Any]]
-    ) -> float:
+    ) -> Dict[str, float]:
         """
-        Compute a numeric score for a wardrobe item given user preferences.
-        If preferences is None or empty, return 0.0.
-        Higher is better.
+        Compute detailed preference scores for a wardrobe item.
+        Returns a dict with component scores and total.
+        
+        Phase 5C: Real Preference Scoring with Stronger Weights
+        
+        Scoring rules (stronger, more decisive):
+        - occasion_score: +2.5 if exact match in occasionTags, +1.5 if match in tags
+        - style_score: +2.0 if match in styleVibe, +1.5 if match in tags
+        - favorite_score: +2.5 if prefer_favorites is True and item.isFavorite is True
+        - avoid_penalty: -3.0 if item color is in avoid_colors
+        
+        Returns:
+            Dict with keys: "total", "occasion", "style", "favorite", "avoid_penalty"
         """
+        # Initialize component scores
+        occasion_score = 0.0
+        style_score = 0.0
+        favorite_score = 0.0
+        avoid_penalty = 0.0
+        
         if not preferences:
-            return 0.0
+            return {
+                "total": 0.0,
+                "occasion": occasion_score,
+                "style": style_score,
+                "favorite": favorite_score,
+                "avoid_penalty": avoid_penalty,
+            }
         
-        score = 0.0
+        # Normalize item data access
+        item_tags = set([tag.lower() for tag in (item.tags or [])])
+        occasion_tags = set([tag.lower() for tag in (item.occasionTags or [])])
+        style_vibe = item.styleVibe
+        item_color = (item.color or "").lower().strip()
+        item_colors = [c.lower().strip() for c in (item.colors or []) if c]
+        is_favorite = bool(item.isFavorite)
         
-        # Occasion matching
-        occasion = preferences.get("occasion")
-        if occasion:
-            occasion_lower = occasion.lower().strip()
-            item_occasion_tags = [tag.lower() for tag in (item.occasionTags or [])]
-            
-            # Exact match (case-insensitive)
-            if occasion_lower in item_occasion_tags:
-                score += 3.0
-            else:
-                # Partial match (substring)
-                for tag in item_occasion_tags:
-                    if occasion_lower in tag or tag in occasion_lower:
-                        score += 2.0
-                        break  # Only count once
+        # Normalize preferences access
+        pref_occasion = preferences.get("occasion")
+        pref_style = preferences.get("style_vibe")
+        pref_avoid_colors = preferences.get("avoid_colors")
+        pref_avoid_colors = [c.lower().strip() for c in (pref_avoid_colors or []) if c]
+        pref_fav = bool(preferences.get("prefer_favorites", False))
         
-        # Style vibe matching
-        style_vibe = preferences.get("style_vibe")
-        if style_vibe:
-            style_vibe_lower = style_vibe.lower().strip()
-            # Handle styleVibe as either a list or a string
-            item_style_vibe = item.styleVibe
-            if item_style_vibe:
-                if isinstance(item_style_vibe, list):
-                    # If it's a list, check each element
-                    style_vibe_str = " ".join([str(s).lower() for s in item_style_vibe])
+        # 1) Occasion match – strong boost
+        if pref_occasion:
+            pref_occasion_lower = pref_occasion.lower().strip()
+            # Exact match in occasionTags
+            if pref_occasion_lower in occasion_tags:
+                occasion_score = 2.5
+            # Flexible tag matching
+            elif any(pref_occasion_lower in tag or tag in pref_occasion_lower for tag in item_tags):
+                occasion_score = 1.5
+        
+        # 2) Style vibe – strong boost
+        if pref_style:
+            pref_style_lower = pref_style.lower().strip()
+            # Direct style vibe field match
+            if style_vibe:
+                if isinstance(style_vibe, list):
+                    style_vibe_str = " ".join([str(s).lower() for s in style_vibe])
                 else:
-                    # If it's a string, use it directly
-                    style_vibe_str = str(item_style_vibe).lower()
+                    style_vibe_str = str(style_vibe).lower()
                 
-                # Exact match (case-insensitive)
-                if style_vibe_str == style_vibe_lower:
-                    score += 2.0
-                # Substring match
-                elif style_vibe_lower in style_vibe_str:
-                    score += 1.0
+                if pref_style_lower in style_vibe_str:
+                    style_score = 2.0
+            # Tag contains style vibes (e.g., 'streetwear', 'classy')
+            if style_score == 0.0:
+                if any(pref_style_lower in tag for tag in item_tags):
+                    style_score = 1.5
         
-        # Favorites preference
-        prefer_favorites = preferences.get("prefer_favorites")
-        if prefer_favorites and item.isFavorite:
-            score += 2.0
+        # 3) Favorites – only if user prefers favorites
+        if pref_fav and is_favorite:
+            favorite_score = 2.5
         
-        # Avoid colors
-        avoid_colors = preferences.get("avoid_colors")
-        if avoid_colors and isinstance(avoid_colors, list):
-            item_colors = [c.lower() if c else "" for c in (item.colors or [])]
-            for avoid_color in avoid_colors:
-                if avoid_color:
-                    avoid_color_lower = avoid_color.lower().strip()
-                    # Check if this color appears in item colors (case-insensitive)
-                    if any(avoid_color_lower in color or color in avoid_color_lower for color in item_colors):
-                        score -= 2.0
-                        break  # Only subtract once per color
+        # 4) Avoid colors – strong negative
+        if pref_avoid_colors:
+            # Check main color against avoid list
+            if item_color and item_color in pref_avoid_colors:
+                avoid_penalty = -3.0
+            # Check colors list
+            if avoid_penalty == 0.0:
+                if any(c in pref_avoid_colors for c in item_colors):
+                    avoid_penalty = -3.0
         
-        return score
+        total = occasion_score + style_score + favorite_score + avoid_penalty
+        
+        return {
+            "total": total,
+            "occasion": occasion_score,
+            "style": style_score,
+            "favorite": favorite_score,
+            "avoid_penalty": avoid_penalty,
+        }
 
     def _rank_items_for_preferences(
         self,
@@ -474,8 +508,9 @@ class MyraAgent:
         # Compute scores and keep original index for stable sorting
         scored_items = []
         for idx, item in enumerate(items):
-            score = self._score_item_for_preferences(item, preferences)
-            scored_items.append((score, idx, item))
+            score_dict = self.score_item_preferences(item, preferences)
+            total_score = score_dict["total"]
+            scored_items.append((total_score, idx, item))
         
         # Sort by score descending, then by original index (for stability)
         scored_items.sort(key=lambda x: (-x[0], x[1]))
@@ -538,7 +573,7 @@ class MyraAgent:
                     preferences = None
         
         # Log preferences (Phase 5A)
-        print(
+        logger.info(
             f"[MyraAgent] Preferences: occasion={preferences.get('occasion') if preferences else None}, "
             f"style_vibe={preferences.get('style_vibe') if preferences else None}, "
             f"prefer_favorites={preferences.get('prefer_favorites') if preferences else None}, "
@@ -552,7 +587,7 @@ class MyraAgent:
         usable_dicts, hygiene_stats = filter_usable_items(raw_wardrobe_dicts)
         
         # Log wardrobe hygiene stats
-        print(
+        logger.info(
             f"[MyraAgent] Wardrobe hygiene: total={hygiene_stats['total_count']} "
             f"usable={hygiene_stats['usable_count']} "
             f"by_category={hygiene_stats['counts_by_category']} "
@@ -561,7 +596,7 @@ class MyraAgent:
         
         # Fallback to raw items if filtering left us with nothing
         if not usable_dicts:
-            print("[MyraAgent] Warning: No usable items after filtering; falling back to raw wardrobe set.")
+            logger.warning("[MyraAgent] Warning: No usable items after filtering; falling back to raw wardrobe set.")
             usable_dicts = raw_wardrobe_dicts
         
         # Convert usable items to WardrobeItem objects
@@ -592,11 +627,11 @@ class MyraAgent:
                 )
                 wardrobe_items.append(wardrobe_item)
             except Exception as e:
-                print(f"[MyraAgent] Warning: failed to convert wardrobe item to WardrobeItem: {e}")
+                logger.warning(f"[MyraAgent] Warning: failed to convert wardrobe item to WardrobeItem: {e}")
                 continue
         
         wardrobe_count = len(wardrobe_items)
-        print(
+        logger.info(
             f"[MyraAgent] Database={getattr(self.db, 'database_type', 'unknown')}, "
             f"user_id={user_id}, wardrobe_count={wardrobe_count}"
         )
@@ -637,7 +672,7 @@ class MyraAgent:
             category_counts[cat] = category_counts.get(cat, 0) + 1
         
         if temp_f is not None:
-            print(
+            logger.info(
                 f"[MyraAgent] Temperature: {temp_f:.0f}°F ({temp_band}), "
                 f"categories: {dict(category_counts)}"
             )
@@ -709,34 +744,132 @@ class MyraAgent:
         shoes = shoes_ranked
         jackets = jackets_ranked
 
-        chosen_items: List[WardrobeItem] = []
-
-        # Try to build a basic outfit: top + bottom + optional shoe + optional jacket
-        if tops:
-            chosen_items.append(tops[0][1])
-        if bottoms:
-            chosen_items.append(bottoms[0][1])
-        if shoes:
-            chosen_items.append(shoes[0][1])
-
-        # Optional jacket in colder weather
-        if temp_f is not None and temp_f <= 55 and jackets:
-            chosen_items.append(jackets[0][1])
-
-        # Fallback: if we still have nothing, just take the top N scored items
-        if not chosen_items:
-            chosen_items = [item for _, item in scored_items[:3]]
-
-        print(f"[MyraAgent] Selected outfit items: {[item.id for item in chosen_items]}")
+        # Phase 5C: Generate candidate outfits and score them with preferences
+        candidate_outfits: List[Tuple[List[WardrobeItem], float, bool]] = []
+        item_scores_final: Dict[str, Dict[str, float]] = {}
         
-        # Optional: log preference scores for selected items (Phase 5A)
+        # Generate candidate outfits (top + bottom + shoe + optional jacket)
+        # Consider top 3 items from each category to create multiple candidates
+        top_candidates = [item for _, item in tops[:3]] if tops else []
+        bottom_candidates = [item for _, item in bottoms[:3]] if bottoms else []
+        shoe_candidates = [item for _, item in shoes[:3]] if shoes else []
+        jacket_candidates = [item for _, item in jackets[:3]] if jackets else []
+        
+        # Generate combinations (limit to reasonable number)
+        for top_item in top_candidates[:2]:  # Limit to top 2 to avoid too many combinations
+            for bottom_item in bottom_candidates[:2]:
+                for shoe_item in shoe_candidates[:2]:
+                    outfit_items = [top_item, bottom_item, shoe_item]
+                    
+                    # Add jacket if cold weather
+                    if temp_f is not None and temp_f <= 55 and jacket_candidates:
+                        for jacket_item in jacket_candidates[:1]:  # Just top jacket
+                            candidate = outfit_items + [jacket_item]
+                            candidate_outfits.append((candidate, 0.0, False))
+                    else:
+                        candidate_outfits.append((outfit_items, 0.0, False))
+        
+        # Fallback: if no candidates generated, use simple selection
+        item_scores_final: Dict[str, Dict[str, float]] = {}
+        if not candidate_outfits:
+            chosen_items: List[WardrobeItem] = []
+            if tops:
+                chosen_items.append(tops[0][1])
+            if bottoms:
+                chosen_items.append(bottoms[0][1])
+            if shoes:
+                chosen_items.append(shoes[0][1])
+            if temp_f is not None and temp_f <= 55 and jackets:
+                chosen_items.append(jackets[0][1])
+            if not chosen_items:
+                chosen_items = [item for _, item in scored_items[:3]]
+            
+            # Compute preference scores for fallback items
+            if preferences:
+                for item in chosen_items:
+                    item_scores_final[item.id] = self.score_item_preferences(item, preferences)
+        else:
+            # Score each candidate outfit
+            scored_candidates = []
+            for outfit_items, _, _ in candidate_outfits:
+                # Compute base outfit score (sum of temperature/weather scores)
+                base_outfit_score = 0.0
+                for item in outfit_items:
+                    # Find the base score for this item
+                    for score, scored_item in scored_items:
+                        if scored_item.id == item.id:
+                            base_outfit_score += score
+                            break
+                
+                # Compute preference scores for this outfit
+                item_scores = {}
+                total_preference_score = 0.0
+                has_avoided_colors = False
+                
+                if preferences:
+                    for item in outfit_items:
+                        score_dict = self.score_item_preferences(item, preferences)
+                        item_scores[item.id] = score_dict
+                        total_preference_score += score_dict["total"]
+                        # Check if this item has avoided colors
+                        if score_dict["avoid_penalty"] < 0:
+                            has_avoided_colors = True
+                
+                # Combined score: base + preference
+                combined_score = base_outfit_score + total_preference_score
+                
+                scored_candidates.append((
+                    outfit_items,
+                    combined_score,
+                    has_avoided_colors,
+                    item_scores,
+                    base_outfit_score,
+                ))
+            
+            # Sort candidates: prefer outfits without avoided colors, then by score
+            scored_candidates.sort(key=lambda x: (x[2], -x[1]))  # has_avoided_colors (False first), then -score (higher first)
+            
+            # Select best outfit
+            best_outfit = scored_candidates[0]
+            chosen_items = best_outfit[0]
+            item_scores_final = best_outfit[3]
+        
+        logger.info(f"[MyraAgent] Selected outfit items: {[item.id for item in chosen_items]}")
+        
+        # Enhanced logging for preference scores - detailed breakdown (Phase 5C)
         if preferences:
-            selected_scores = []
+            # Log preference summary
+            logger.info(
+                "[MyraAgent] Preferences: occasion=%s, style_vibe=%s, prefer_favorites=%s, avoid_colors=%s",
+                preferences.get('occasion'),
+                preferences.get('style_vibe'),
+                preferences.get('prefer_favorites'),
+                preferences.get('avoid_colors'),
+            )
+            
+            # Ensure we have scores for all selected items
+            final_item_scores = {}
+            if item_scores_final:
+                final_item_scores = item_scores_final.copy()
+            
+            # Compute scores for any items that weren't already scored
             for item in chosen_items:
-                score = self._score_item_for_preferences(item, preferences)
-                selected_scores.append(f"{item.id}:{score:.1f}")
-            if selected_scores:
-                print(f"[MyraAgent] Preference scores for selected items: {', '.join(selected_scores)}")
+                if item.id not in final_item_scores:
+                    final_item_scores[item.id] = self.score_item_preferences(item, preferences)
+            
+            # Log detailed per-item scores - one log line per item for clarity
+            for item in chosen_items:
+                item_id = item.id
+                scores = final_item_scores.get(item_id, {})
+                logger.info(
+                    "[MyraAgent] Preference score for item %s: total=%.2f, occasion=%.2f, style=%.2f, favorite=%.2f, avoid_penalty=%.2f",
+                    item_id,
+                    float(scores.get("total", 0.0)),
+                    float(scores.get("occasion", 0.0)),
+                    float(scores.get("style", 0.0)),
+                    float(scores.get("favorite", 0.0)),
+                    float(scores.get("avoid_penalty", 0.0)),
+                )
 
         # Build items_detail payload
         items_detail = []

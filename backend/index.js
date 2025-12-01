@@ -6,6 +6,10 @@ const path = require('path');
 const connectDB = require('./db');
 
 const app = express();
+
+// Trust the first proxy (e.g., ngrok) so express-rate-limit can use X-Forwarded-For safely
+app.set('trust proxy', 1);
+
 app.use(express.json());
 
 const isProd = process.env.NODE_ENV === 'production';
