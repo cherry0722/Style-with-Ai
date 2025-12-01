@@ -1,6 +1,7 @@
 # ai/agent.py
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 import os
+from urllib.parse import urlparse
 
 from db.mongo import get_db, get_user_profile, get_user_wardrobe, get_items_by_ids
 from calendar_helper import get_events_for_today
@@ -17,6 +18,162 @@ except Exception:
 
 # Module-level DB instance
 db = get_db()
+
+
+# ============================================================================
+# Wardrobe Filtering Helpers (Phase 4D)
+# ============================================================================
+
+def _is_local_host(host: str) -> bool:
+    """
+    Check if a host string represents a local-only host.
+    Returns True for localhost, localhost with port, or 192.168.* IPs.
+    """
+    if not host:
+        return False
+    
+    host_lower = host.lower().strip()
+    
+    # Check for localhost
+    if host_lower == "localhost" or host_lower.startswith("localhost:"):
+        return True
+    
+    # Check for 192.168.* IP addresses
+    if host_lower.startswith("192.168."):
+        return True
+    
+    # Check for 127.0.0.1
+    if host_lower.startswith("127.0.0.1") or host_lower == "127.0.0.1":
+        return True
+    
+    return False
+
+
+def _is_dummy_image(image_url: str) -> bool:
+    """
+    Check if an image URL points to an obviously dummy/placeholder image.
+    """
+    if not image_url:
+        return True
+    
+    image_url_lower = image_url.lower()
+    
+    # Check for common placeholder patterns
+    dummy_patterns = [
+        "your_image_here",
+        "placeholder",
+        "dummy",
+        "sample",
+        "example",
+        "test_image",
+        "no_image",
+        "image_coming_soon",
+    ]
+    
+    for pattern in dummy_patterns:
+        if pattern in image_url_lower:
+            return True
+    
+    return False
+
+
+def _is_valid_category(category: Optional[str]) -> bool:
+    """
+    Check if a category is valid for AI outfit selection.
+    Only allows: "top", "bottom", "shoes".
+    """
+    if not category:
+        return False
+    
+    category_lower = category.lower().strip()
+    allowed_categories = ["top", "bottom", "shoes"]
+    
+    return category_lower in allowed_categories
+
+
+def _is_usable_item(item_dict: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """
+    Check if a wardrobe item dictionary is usable for AI outfit selection.
+    Returns (is_usable, reason_if_not_usable).
+    
+    Rules:
+    - Must have a valid category (top, bottom, shoes)
+    - Must have a non-empty imageUrl
+    - imageUrl must not be a localhost/local IP
+    - imageUrl must not be a dummy/placeholder image
+    """
+    # Check category
+    category = item_dict.get("category")
+    if not _is_valid_category(category):
+        return (False, "invalid_category")
+    
+    # Check imageUrl
+    image_url = item_dict.get("imageUrl") or item_dict.get("image_url")
+    if not image_url or not isinstance(image_url, str) or not image_url.strip():
+        return (False, "missing_image_url")
+    
+    # Check for dummy/placeholder images
+    if _is_dummy_image(image_url):
+        return (False, "dummy_image")
+    
+    # Check host
+    try:
+        parsed = urlparse(image_url)
+        host = parsed.netloc or parsed.hostname
+        
+        if not host:
+            # Relative URL or malformed
+            return (False, "invalid_url")
+        
+        if _is_local_host(host):
+            return (False, "host_local")
+    
+    except Exception:
+        # Invalid URL format
+        return (False, "invalid_url")
+    
+    # All checks passed
+    return (True, None)
+
+
+def filter_usable_items(raw_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Filter wardrobe items to only include usable items for AI outfit selection.
+    
+    Args:
+        raw_items: List of wardrobe item dictionaries from MongoDB
+    
+    Returns:
+        Tuple of (usable_items, stats):
+        - usable_items: List of filtered item dictionaries
+        - stats: Dictionary with filtering statistics
+    """
+    total_count = len(raw_items)
+    usable_items = []
+    ignored_by_reason: Dict[str, int] = {}
+    counts_by_category: Dict[str, int] = {}
+    
+    for item in raw_items:
+        is_usable, reason = _is_usable_item(item)
+        
+        if is_usable:
+            usable_items.append(item)
+            # Count by category
+            category = (item.get("category") or "unknown").lower()
+            counts_by_category[category] = counts_by_category.get(category, 0) + 1
+        else:
+            # Track ignored items by reason
+            reason_key = reason or "unknown"
+            ignored_by_reason[reason_key] = ignored_by_reason.get(reason_key, 0) + 1
+    
+    stats = {
+        "total_count": total_count,
+        "usable_count": len(usable_items),
+        "counts_by_category": counts_by_category,
+        "ignored_by_reason": ignored_by_reason,
+    }
+    
+    return (usable_items, stats)
 
 
 class MyraAgent:
@@ -274,9 +431,27 @@ class MyraAgent:
         weather = request.weather
 
         # Fetch wardrobe from DB (returns dicts, convert to WardrobeItem)
-        wardrobe_dicts = self.db.get_user_wardrobe(user_id)
+        raw_wardrobe_dicts = self.db.get_user_wardrobe(user_id)
+        
+        # Filter to usable items only (Phase 4D: wardrobe hygiene)
+        usable_dicts, hygiene_stats = filter_usable_items(raw_wardrobe_dicts)
+        
+        # Log wardrobe hygiene stats
+        print(
+            f"[MyraAgent] Wardrobe hygiene: total={hygiene_stats['total_count']} "
+            f"usable={hygiene_stats['usable_count']} "
+            f"by_category={hygiene_stats['counts_by_category']} "
+            f"ignored={hygiene_stats['ignored_by_reason']}"
+        )
+        
+        # Fallback to raw items if filtering left us with nothing
+        if not usable_dicts:
+            print("[MyraAgent] Warning: No usable items after filtering; falling back to raw wardrobe set.")
+            usable_dicts = raw_wardrobe_dicts
+        
+        # Convert usable items to WardrobeItem objects
         wardrobe_items: List[WardrobeItem] = []
-        for item_dict in wardrobe_dicts:
+        for item_dict in usable_dicts:
             try:
                 # Convert dict to WardrobeItem, handling missing fields gracefully
                 wardrobe_item = WardrobeItem(
