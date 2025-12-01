@@ -14,6 +14,10 @@ router.post('/suggest_outfit', async (req, res) => {
 
   console.log('[AgentRoute] Forwarding request to AI service:', targetUrl);
   console.log('[AgentRoute] Request body:', req.body);
+  
+  // Log preferences presence (Phase 5A)
+  const hasPreferences = req.body && req.body.preferences;
+  console.log('[AgentRoute] Preferences present:', hasPreferences ? 'yes' : 'no');
 
   try {
     const response = await axios.post(targetUrl, req.body, {

@@ -388,6 +388,101 @@ class MyraAgent:
         
         return desc.lower() if desc else "item"
 
+    def _score_item_for_preferences(
+        self,
+        item: WardrobeItem,
+        preferences: Optional[Dict[str, Any]]
+    ) -> float:
+        """
+        Compute a numeric score for a wardrobe item given user preferences.
+        If preferences is None or empty, return 0.0.
+        Higher is better.
+        """
+        if not preferences:
+            return 0.0
+        
+        score = 0.0
+        
+        # Occasion matching
+        occasion = preferences.get("occasion")
+        if occasion:
+            occasion_lower = occasion.lower().strip()
+            item_occasion_tags = [tag.lower() for tag in (item.occasionTags or [])]
+            
+            # Exact match (case-insensitive)
+            if occasion_lower in item_occasion_tags:
+                score += 3.0
+            else:
+                # Partial match (substring)
+                for tag in item_occasion_tags:
+                    if occasion_lower in tag or tag in occasion_lower:
+                        score += 2.0
+                        break  # Only count once
+        
+        # Style vibe matching
+        style_vibe = preferences.get("style_vibe")
+        if style_vibe:
+            style_vibe_lower = style_vibe.lower().strip()
+            # Handle styleVibe as either a list or a string
+            item_style_vibe = item.styleVibe
+            if item_style_vibe:
+                if isinstance(item_style_vibe, list):
+                    # If it's a list, check each element
+                    style_vibe_str = " ".join([str(s).lower() for s in item_style_vibe])
+                else:
+                    # If it's a string, use it directly
+                    style_vibe_str = str(item_style_vibe).lower()
+                
+                # Exact match (case-insensitive)
+                if style_vibe_str == style_vibe_lower:
+                    score += 2.0
+                # Substring match
+                elif style_vibe_lower in style_vibe_str:
+                    score += 1.0
+        
+        # Favorites preference
+        prefer_favorites = preferences.get("prefer_favorites")
+        if prefer_favorites and item.isFavorite:
+            score += 2.0
+        
+        # Avoid colors
+        avoid_colors = preferences.get("avoid_colors")
+        if avoid_colors and isinstance(avoid_colors, list):
+            item_colors = [c.lower() if c else "" for c in (item.colors or [])]
+            for avoid_color in avoid_colors:
+                if avoid_color:
+                    avoid_color_lower = avoid_color.lower().strip()
+                    # Check if this color appears in item colors (case-insensitive)
+                    if any(avoid_color_lower in color or color in avoid_color_lower for color in item_colors):
+                        score -= 2.0
+                        break  # Only subtract once per color
+        
+        return score
+
+    def _rank_items_for_preferences(
+        self,
+        items: List[WardrobeItem],
+        preferences: Optional[Dict[str, Any]]
+    ) -> List[WardrobeItem]:
+        """
+        Return items sorted by preference score (descending),
+        keeping the original order for ties (i.e., use a stable sort with score as the key).
+        """
+        if not preferences:
+            return items
+        
+        # Compute scores and keep original index for stable sorting
+        scored_items = []
+        for idx, item in enumerate(items):
+            score = self._score_item_for_preferences(item, preferences)
+            scored_items.append((score, idx, item))
+        
+        # Sort by score descending, then by original index (for stability)
+        scored_items.sort(key=lambda x: (-x[0], x[1]))
+        
+        # Return items in sorted order
+        return [item for _, _, item in scored_items]
+
     def recommend(self, req: RecommendRequest) -> RecommendResponse:
         user_id = req.user_id
         event_text = req.event
@@ -429,6 +524,26 @@ class MyraAgent:
         user_id = request.user_id
         location = request.location
         weather = request.weather
+        
+        # Parse preferences from request (Phase 5A)
+        preferences = None
+        if request.preferences:
+            # Convert Pydantic model to dict for easier handling
+            prefs_dict = request.preferences.dict() if hasattr(request.preferences, "dict") else request.preferences
+            # Remove None values to treat empty dict as no preferences
+            if prefs_dict:
+                preferences = {k: v for k, v in prefs_dict.items() if v is not None}
+                # If all values were None, treat as no preferences
+                if not preferences:
+                    preferences = None
+        
+        # Log preferences (Phase 5A)
+        print(
+            f"[MyraAgent] Preferences: occasion={preferences.get('occasion') if preferences else None}, "
+            f"style_vibe={preferences.get('style_vibe') if preferences else None}, "
+            f"prefer_favorites={preferences.get('prefer_favorites') if preferences else None}, "
+            f"avoid_colors={preferences.get('avoid_colors') if preferences else None}"
+        )
 
         # Fetch wardrobe from DB (returns dicts, convert to WardrobeItem)
         raw_wardrobe_dicts = self.db.get_user_wardrobe(user_id)
@@ -556,6 +671,44 @@ class MyraAgent:
             else:
                 others.append((score, item))
 
+        # Apply preference ranking per category (Phase 5A)
+        # Extract items from (score, item) tuples, rank them, then reconstruct tuples
+        tops_items = [item for _, item in tops]
+        bottoms_items = [item for _, item in bottoms]
+        shoes_items = [item for _, item in shoes]
+        jackets_items = [item for _, item in jackets]
+        
+        # Rank items by preferences
+        tops_items = self._rank_items_for_preferences(tops_items, preferences)
+        bottoms_items = self._rank_items_for_preferences(bottoms_items, preferences)
+        shoes_items = self._rank_items_for_preferences(shoes_items, preferences)
+        jackets_items = self._rank_items_for_preferences(jackets_items, preferences)
+        
+        # Reconstruct tuples with original scores (for compatibility with existing selection logic)
+        # We'll use the preference-ranked order but keep scores for logging
+        tops_ranked = []
+        bottoms_ranked = []
+        shoes_ranked = []
+        jackets_ranked = []
+        
+        # Create a lookup for scores by item id
+        score_lookup = {item.id: score for score, item in scored_items}
+        
+        for item in tops_items:
+            tops_ranked.append((score_lookup.get(item.id, 0.0), item))
+        for item in bottoms_items:
+            bottoms_ranked.append((score_lookup.get(item.id, 0.0), item))
+        for item in shoes_items:
+            shoes_ranked.append((score_lookup.get(item.id, 0.0), item))
+        for item in jackets_items:
+            jackets_ranked.append((score_lookup.get(item.id, 0.0), item))
+        
+        # Update category lists with ranked versions
+        tops = tops_ranked
+        bottoms = bottoms_ranked
+        shoes = shoes_ranked
+        jackets = jackets_ranked
+
         chosen_items: List[WardrobeItem] = []
 
         # Try to build a basic outfit: top + bottom + optional shoe + optional jacket
@@ -575,6 +728,15 @@ class MyraAgent:
             chosen_items = [item for _, item in scored_items[:3]]
 
         print(f"[MyraAgent] Selected outfit items: {[item.id for item in chosen_items]}")
+        
+        # Optional: log preference scores for selected items (Phase 5A)
+        if preferences:
+            selected_scores = []
+            for item in chosen_items:
+                score = self._score_item_for_preferences(item, preferences)
+                selected_scores.append(f"{item.id}:{score:.1f}")
+            if selected_scores:
+                print(f"[MyraAgent] Preference scores for selected items: {', '.join(selected_scores)}")
 
         # Build items_detail payload
         items_detail = []

@@ -54,10 +54,18 @@ class RecommendRequest(BaseModel):
     weather: Optional[Weather] = None
 
 
+class Preferences(BaseModel):
+    occasion: Optional[str] = Field(None, description="Occasion type, e.g. 'date-night', 'casual', 'formal', 'office'")
+    style_vibe: Optional[str] = Field(None, description="Style vibe, e.g. 'smart-casual', 'streetwear', 'minimal'")
+    prefer_favorites: Optional[bool] = Field(None, description="Whether to prefer favorite items")
+    avoid_colors: Optional[List[str]] = Field(None, description="List of colors to avoid")
+
+
 class SuggestRequest(BaseModel):
     user_id: str = Field(..., description="User ID from your auth system/app")
     location: Location = Field(..., description="Location (lat/lon) used to fetch weather if needed")
     weather: Weather = Field(..., description="Current weather summary and numeric fields")
+    preferences: Optional[Preferences] = Field(None, description="Optional user preferences for outfit selection")
 
 
 class Outfit(BaseModel):

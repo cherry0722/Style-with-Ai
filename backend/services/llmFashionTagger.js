@@ -1,11 +1,20 @@
-const OpenAI = require("openai");
-
+let OpenAI = null;
 let client = null;
 
 function getClient() {
   if (!process.env.OPENAI_API_KEY) {
     console.warn("[LLM Fashion Tagger] OPENAI_API_KEY not set. Skipping LLM metadata generation.");
     return null;
+  }
+
+  // Lazy load OpenAI module only when needed
+  if (!OpenAI) {
+    try {
+      OpenAI = require("openai");
+    } catch (err) {
+      console.warn("[LLM Fashion Tagger] 'openai' module not installed. Install it with: npm install openai");
+      return null;
+    }
   }
 
   if (!client) {
