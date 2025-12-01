@@ -2,7 +2,7 @@
 from typing import Dict, Any, Optional
 import os
 
-from db.mongo import get_user_profile, get_user_wardrobe, get_items_by_ids
+from db.mongo import get_db, get_user_profile, get_user_wardrobe, get_items_by_ids
 from calendar_helper import get_events_for_today
 from ai.preference import PreferenceScorer
 from ai.rag_engine import suggest_with_rag
@@ -23,6 +23,10 @@ class MyraAgent:
       - Applies preference-aware reranking
       - Calls RAG+LLM to get outfits
     """
+    
+    def __init__(self):
+        """Initialize agent with DB instance."""
+        self.db = get_db()
 
     def recommend(self, req: RecommendRequest) -> RecommendResponse:
         user_id = req.user_id
@@ -75,6 +79,13 @@ class MyraAgent:
         # Load wardrobe and profile
         wardrobe = get_user_wardrobe(user_id) or []
         profile = get_user_profile(user_id) or {}
+        
+        # Debug logging
+        database_type = getattr(self.db, 'database_type', 'unknown')
+        print(
+            f"[MyraAgent] Database={database_type}, "
+            f"user_id={user_id}, wardrobe_count={len(wardrobe)}"
+        )
 
         # If LLM is enabled and graph is available, use it (non-breaking)
         if USE_LLM and run_graph is not None:

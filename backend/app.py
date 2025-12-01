@@ -9,7 +9,7 @@ load_dotenv()
 
 from schemas.models import SuggestRequest, RecommendResponse
 from ai.agent import MyraAgent
-from db.mongo import db, _client, USE_MOCK_DB_ENV
+from db.mongo import get_db
 
 app = FastAPI(title="MYRA AI Backend", version="0.1.0")
 
@@ -34,13 +34,20 @@ def root():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    if USE_MOCK_DB_ENV or _client is None:
-        return {"status": "healthy", "database": "mock"}
-    try:
-        _client.admin.command('ping')
-        return {"status": "healthy", "database": "connected"}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"DB down: {e}")
+    db = get_db()
+    
+    # Check database type
+    if hasattr(db, 'database_type'):
+        db_type = db.database_type
+        if db_type == "mongo":
+            try:
+                db.client.admin.command('ping')
+                return {"status": "healthy", "database": "mongo"}
+            except Exception as e:
+                raise HTTPException(status_code=503, detail=f"DB down: {e}")
+    
+    # Default to mock
+    return {"status": "healthy", "database": "mock"}
 
 
 @app.post("/suggest_outfit", response_model=RecommendResponse)
