@@ -106,6 +106,26 @@ export interface OutfitFromAI {
   items_detail?: OutfitItemDetail[] | null;
 }
 
+export interface OutfitContextMeta {
+  location?: {
+    latitude: number;
+    longitude: number;
+    name?: string;
+  };
+  weather?: {
+    summary?: string;
+    tempF?: number;
+    precipChance?: number;
+  };
+}
+
+export interface CurrentOutfit {
+  items: string[];
+  items_detail: OutfitItemDetail[];
+  why: string;
+  context?: OutfitContextMeta;
+}
+
 export interface SuggestOutfitResponse {
   outfits: OutfitFromAI[];
   context: {

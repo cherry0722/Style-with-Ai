@@ -4,6 +4,7 @@ const Wardrobe = require('../models/wardrobe');
 const { analyzeImage } = require('../services/azureVisionService');
 const { generateFashionMetadata } = require('../services/llmFashionTagger');
 
+// NOTE: All wardrobe routes are auth-protected and scoped to the current user.
 const router = express.Router();
 
 // POST /api/wardrobe/analyze - analyze an image and return AI metadata (no DB write)
@@ -15,7 +16,7 @@ router.post('/analyze', auth, async (req, res) => {
       return res.status(400).json({ message: 'imageUrl is required' });
     }
 
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
@@ -98,7 +99,7 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
@@ -175,7 +176,7 @@ router.post('/', auth, async (req, res) => {
 // GET /api/wardrobe - get wardrobe items for the logged-in user
 router.get('/', auth, async (req, res) => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
@@ -206,7 +207,7 @@ router.patch('/:id/favorite', auth, async (req, res) => {
       });
     }
 
-    const userId = req.user?.userId;
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
@@ -232,6 +233,34 @@ router.patch('/:id/favorite', auth, async (req, res) => {
     return res
       .status(500)
       .json({ message: 'Failed to update favorite status' });
+  }
+});
+
+// DELETE /api/wardrobe/:id - delete a wardrobe item
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid auth payload' });
+    }
+
+    // Make sure the item belongs to this user
+    const item = await Wardrobe.findOne({ _id: id, userId });
+    if (!item) {
+      return res.status(404).json({ message: 'Item not found' });
+    }
+
+    await item.deleteOne();
+
+    return res.json({ success: true, id });
+  } catch (err) {
+    console.error('[Wardrobe] Delete error:', err);
+    if (err.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid wardrobe item ID' });
+    }
+    return res.status(500).json({ message: 'Failed to delete wardrobe item' });
   }
 });
 

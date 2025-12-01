@@ -21,8 +21,9 @@ import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
 import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
-import { suggestOutfitForUser, OutfitFromAI, OutfitItemDetail } from '../services/recommender';
+import { suggestOutfitForUser, OutfitFromAI, OutfitItemDetail, CurrentOutfit } from '../services/recommender';
 import { PreferencesPanel, Preferences } from '../components/PreferencesPanel';
+import { useCurrentOutfitStore } from '../store/useCurrentOutfitStore';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -42,6 +43,7 @@ export default function HomeScreen() {
   const [aiOutfit, setAiOutfit] = useState<OutfitFromAI | null>(null);
   const [aiWhy, setAiWhy] = useState<string | null>(null);
   const [aiItemsDetail, setAiItemsDetail] = useState<OutfitItemDetail[] | null>(null);
+  const { setCurrentOutfit } = useCurrentOutfitStore();
 
   // Outfit Preferences state (Phase 6A) - stored as a single preferences object
   // Defaults are empty so we only send preferences when the user makes a choice
@@ -197,10 +199,32 @@ export default function HomeScreen() {
         setAiWhy(firstOutfit.why);
         setAiItemsDetail(firstOutfit.items_detail ?? []);
         console.log('[HomeScreen] Using items_detail for outfit:', firstOutfit.items_detail);
+
+        const contextForStore: CurrentOutfit["context"] = {
+          location: {
+            latitude: (response.context as any)?.location?.latitude ?? locationPayload.latitude,
+            longitude: (response.context as any)?.location?.longitude ?? locationPayload.longitude,
+            name: (response.context as any)?.location?.name ?? locationPayload.name,
+          },
+          weather: {
+            summary: (response.context as any)?.weather?.summary ?? weatherData.summary,
+            tempF: (response.context as any)?.weather?.tempF ?? weatherData.tempF,
+            precipChance: (response.context as any)?.weather?.precipChance ?? weatherData.precipChance,
+          },
+        };
+
+        setCurrentOutfit({
+          items: firstOutfit.items,
+          items_detail: firstOutfit.items_detail ?? [],
+          why: firstOutfit.why,
+          context: contextForStore,
+        });
+        console.log('[HomeScreen] Stored current outfit in store.');
       } else {
         setAiOutfit(null);
         setAiWhy(null);
         setAiItemsDetail(null);
+        setCurrentOutfit(null);
       }
     } catch (err: any) {
       console.error('[HomeScreen] Failed to get AI outfit:', {
@@ -213,6 +237,7 @@ export default function HomeScreen() {
       setAiOutfit(null);
       setAiWhy(null);
       setAiItemsDetail(null);
+      setCurrentOutfit(null);
     } finally {
       setIsLoadingAI(false);
     }

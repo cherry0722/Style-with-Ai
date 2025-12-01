@@ -203,3 +203,21 @@ export const toggleFavorite = async (
     throw err;
   }
 };
+
+export async function deleteWardrobeItem(id: string): Promise<void> {
+  console.log("[Wardrobe API] deleteWardrobeItem called with id:", id);
+
+  try {
+    console.log("[Wardrobe API] Calling DELETE /api/wardrobe/:id");
+    await client.delete(`/api/wardrobe/${id}`);
+    console.log("[Wardrobe API] Delete successful for id:", id);
+  } catch (err: any) {
+    console.error("[Wardrobe API] deleteWardrobeItem error:", {
+      message: err?.message,
+      status: err?.status ?? err?.response?.status,
+      data: err?.response?.data,
+      fullError: err,
+    });
+    throw err;
+  }
+}

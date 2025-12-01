@@ -1,14 +1,22 @@
+// NOTE: ClosetScreen requires an authenticated user; logged-out users see a login prompt.
 import React, { useEffect, useState, useCallback } from "react";
-import { View, FlatList, Text, ActivityIndicator, Alert } from "react-native";
-import { useIsFocused } from "@react-navigation/native";
+import { View, FlatList, Text, ActivityIndicator, Alert, SafeAreaView, Pressable } from "react-native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { RootStackParamList } from "../navigation/RootNavigator";
 import ClothingCard from "../components/ClothingCard";
 import { useCloset } from "../store/closet";
-import { fetchWardrobeItems, toggleFavorite, WardrobeItemResponse } from "../api/wardrobe";
+import { useAuth } from "../context/AuthContext";
+import { fetchWardrobeItems, toggleFavorite, deleteWardrobeItem, WardrobeItemResponse } from "../api/wardrobe";
 import { Garment } from "../types";
+import { useTheme } from "../context/ThemeContext";
 
 export default function ClosetScreen() {
+  const { user } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [loading, setLoading] = useState(false);
   const isFocused = useIsFocused();
+  const theme = useTheme();
 
   const items = useCloset((state) => state.items);
   const setItems = useCloset((state) => state.setItems);
@@ -16,6 +24,12 @@ export default function ClosetScreen() {
   const updateItem = useCloset((state) => state.updateItem);
 
   const loadWardrobe = async () => {
+    if (!user) {
+      // Clear items when logging out
+      setItems([]);
+      return;
+    }
+
     try {
       setLoading(true);
       console.log('[ClosetScreen] Fetching wardrobe items from backend...');
@@ -76,17 +90,75 @@ export default function ClosetScreen() {
     [items, updateItem]
   );
 
+  const handleDeleteItem = useCallback(
+    (id: string) => {
+      if (!user) return; // extra safety
+
+      Alert.alert(
+        'Delete item?',
+        'This will remove this clothing item from your Myra wardrobe.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await deleteWardrobeItem(id);
+                // Update local state to remove it from the list
+                remove(id);
+                console.log('[ClosetScreen] Item deleted successfully:', id);
+              } catch (err: any) {
+                console.error('[ClosetScreen] Failed to delete', err);
+                Alert.alert('Error', 'Could not delete this item. Please try again.');
+              }
+            },
+          },
+        ],
+      );
+    },
+    [remove, user]
+  );
+
   useEffect(() => {
-    if (isFocused) {
+    if (isFocused && user) {
       loadWardrobe();
+    } else if (!user) {
+      // Clear items when logging out
+      setItems([]);
     }
-  }, [isFocused]);
+  }, [isFocused, user]);
+
+  // Show login prompt if user is not authenticated
+  if (!user) {
+    return (
+      <SafeAreaView style={{ flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 8, color: theme.colors.textPrimary }}>
+          Sign in to see your wardrobe
+        </Text>
+        <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginBottom: 16 }}>
+          Upload outfits, manage your closet, and let Myra suggest looks just for you.
+        </Text>
+        <Pressable
+          onPress={() => navigation.replace('Login')}
+          style={{
+            backgroundColor: theme.colors.accent,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: theme.borderRadius.md,
+          }}
+        >
+          <Text style={{ color: theme.colors.white, fontWeight: '600' }}>Go to login</Text>
+        </Pressable>
+      </SafeAreaView>
+    );
+  }
 
   if (loading && items.length === 0) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator />
-        <Text style={{ marginTop: 12, color: '#666' }}>Loading your wardrobe...</Text>
+        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading your wardrobe...</Text>
       </View>
     );
   }
@@ -95,7 +167,7 @@ export default function ClosetScreen() {
     <View style={{ flex: 1, padding: 16 }}>
       {items.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 40 }}>
-          <Text style={{ textAlign: "center", fontSize: 16, color: "#666" }}>
+          <Text style={{ textAlign: "center", fontSize: 16, color: theme.colors.textSecondary }}>
             Your closet is empty. Use the Scan tab to add garments.
           </Text>
         </View>
@@ -106,7 +178,7 @@ export default function ClosetScreen() {
           renderItem={({ item }) => (
             <ClothingCard
               item={item}
-              onDelete={(id) => remove(id)}
+              onDelete={handleDeleteItem}
               onToggleFavorite={handleToggleFavorite}
             />
           )}
