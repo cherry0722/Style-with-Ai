@@ -20,7 +20,7 @@ import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
 import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
-import { suggestOutfitForUser, OutfitFromAI } from '../services/recommender';
+import { suggestOutfitForUser, OutfitFromAI, OutfitItemDetail } from '../services/recommender';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -38,6 +38,8 @@ export default function HomeScreen() {
   const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiOutfit, setAiOutfit] = useState<OutfitFromAI | null>(null);
+  const [aiWhy, setAiWhy] = useState<string | null>(null);
+  const [aiItemsDetail, setAiItemsDetail] = useState<OutfitItemDetail[] | null>(null);
 
   const firstName = user?.profile?.preferredName || user?.displayName || user?.username || (user?.email ? user.email.split('@')[0] : 'there');
   const today = new Date().toISOString().split('T')[0];
@@ -133,8 +135,17 @@ export default function HomeScreen() {
       const response = await suggestOutfitForUser(user.id, location, weather);
       console.log('[HomeScreen] AI outfit response:', response);
 
-      const first = response.outfits?.[0] ?? null;
-      setAiOutfit(first || null);
+      const firstOutfit = response.outfits?.[0];
+      if (firstOutfit) {
+        setAiOutfit(firstOutfit);
+        setAiWhy(firstOutfit.why);
+        setAiItemsDetail(firstOutfit.items_detail ?? []);
+        console.log('[HomeScreen] Using items_detail for outfit:', firstOutfit.items_detail);
+      } else {
+        setAiOutfit(null);
+        setAiWhy(null);
+        setAiItemsDetail(null);
+      }
     } catch (err: any) {
       console.error('[HomeScreen] Failed to get AI outfit:', {
         message: err?.message,
@@ -143,6 +154,9 @@ export default function HomeScreen() {
         fullError: err,
       });
       setAiError(err?.message || 'Failed to get AI outfit. Please try again.');
+      setAiOutfit(null);
+      setAiWhy(null);
+      setAiItemsDetail(null);
     } finally {
       setIsLoadingAI(false);
     }
@@ -299,26 +313,34 @@ export default function HomeScreen() {
           </Text>
         )}
 
-        {aiOutfit && (
-          <View>
-            <Text
-              style={{
-                fontSize: theme.typography.sm,
-                color: theme.colors.textSecondary,
-                marginBottom: theme.spacing.xs,
-              }}
-            >
-              Items: {aiOutfit.items.join(', ')}
-            </Text>
-            <Text
-              style={{
-                fontSize: theme.typography.sm,
-                color: theme.colors.textSecondary,
-              }}
-            >
-              Why: {aiOutfit.why}
-            </Text>
-          </View>
+        {aiWhy && (
+          <>
+            <Text style={styles.aiWhyText}>{aiWhy}</Text>
+
+            {aiItemsDetail && aiItemsDetail.length > 0 ? (
+              <View style={styles.aiPreviewContainer}>
+                {aiItemsDetail[0].imageUrl ? (
+                  <Image
+                    source={{ uri: aiItemsDetail[0].imageUrl }}
+                    style={styles.aiPreviewImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.aiPlaceholder}>
+                    <Text style={styles.aiPlaceholderText}>No preview image</Text>
+                  </View>
+                )}
+
+                <Text style={styles.aiMetaText}>
+                  {(aiItemsDetail[0].category ?? "Item") +
+                    " · " +
+                    (aiItemsDetail[0].color ?? "Unknown color")}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.aiMetaText}>No detailed items returned yet.</Text>
+            )}
+          </>
         )}
 
         {!aiOutfit && !aiError && !isLoadingAI && (
@@ -761,5 +783,39 @@ const createStyles = (theme: any) => ({
     textAlign: 'center' as const,
     fontStyle: 'italic' as const,
     marginTop: theme.spacing.lg,
+  },
+  aiWhyText: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.typography.sm,
+    color: theme.colors.textSecondary,
+  },
+  aiPreviewContainer: {
+    marginTop: theme.spacing.sm,
+    alignItems: 'flex-start' as const,
+  },
+  aiPreviewImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  aiPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border || '#ccc',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: 4,
+    backgroundColor: theme.colors.backgroundSecondary,
+  },
+  aiPlaceholderText: {
+    fontSize: theme.typography.xs,
+    color: theme.colors.textSecondary,
+  },
+  aiMetaText: {
+    fontSize: theme.typography.xs,
+    color: theme.colors.textSecondary,
   },
 });

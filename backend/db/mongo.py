@@ -144,6 +144,11 @@ class MongoDB:
         Map MongoDB wardrobe document to WardrobeItem-compatible dictionary.
         Handles both Mongoose schema fields and mock data structure.
         """
+        # Optional one-time debug to inspect schema (can leave or remove later)
+        if not hasattr(self, '_debug_logged'):
+            print(f"[DB] Sample wardrobe doc structure: {list(doc.keys())[:10]}...")  # Log first 10 keys
+            self._debug_logged = True
+        
         # Handle ObjectId for _id
         item_id = str(doc.get("_id", ""))
         
@@ -157,25 +162,38 @@ class MongoDB:
         item_type = doc.get("type") or doc.get("category", "")
         category = doc.get("category") or doc.get("type", "")
         
-        # Color can be a string or list (colors)
+        # Color - check multiple sources
         color = doc.get("color_name") or doc.get("color", "")
         if not color and doc.get("colors") and isinstance(doc.get("colors"), list) and len(doc.get("colors", [])) > 0:
             color = doc.get("colors")[0]
         
-        # Fabric
-        fabric = doc.get("fabric", "unknown")
-        if doc.get("metadata") and doc["metadata"].get("fabric"):
+        # Colors list
+        colors = doc.get("colors", [])
+        if not isinstance(colors, list):
+            colors = [colors] if colors else []
+        
+        # Fabric - check metadata subdocument
+        fabric = doc.get("fabric")
+        if not fabric and doc.get("metadata") and doc["metadata"].get("fabric"):
             fabric = doc["metadata"]["fabric"]
         
-        # Pattern
+        # Pattern - check metadata subdocument
         pattern = doc.get("pattern")
-        if doc.get("metadata") and doc["metadata"].get("pattern"):
+        if not pattern and doc.get("metadata") and doc["metadata"].get("pattern"):
             pattern = doc["metadata"]["pattern"]
         
-        # Season
+        # Season - handle both seasonTags and season
         season = doc.get("seasonTags") or doc.get("season", [])
         if not isinstance(season, list):
             season = [season] if season else []
+        seasonTags = doc.get("seasonTags", [])
+        if not isinstance(seasonTags, list):
+            seasonTags = [seasonTags] if seasonTags else []
+        
+        # Occasion tags
+        occasionTags = doc.get("occasionTags", [])
+        if not isinstance(occasionTags, list):
+            occasionTags = [occasionTags] if occasionTags else []
         
         # Formality
         formality = doc.get("formality")
@@ -191,36 +209,63 @@ class MongoDB:
         if not isinstance(tags, list):
             tags = [tags] if tags else []
         
-        # Occasion
-        occasion = None
-        if doc.get("occasionTags") and isinstance(doc.get("occasionTags"), list) and len(doc.get("occasionTags", [])) > 0:
-            occasion = doc.get("occasionTags")[0]
-        occasion = occasion or doc.get("occasion")
+        # Style tags (from metadata or top-level)
+        style_tags = doc.get("style_tags", [])
+        if not style_tags and doc.get("metadata") and doc["metadata"].get("style_tags"):
+            style_tags = doc["metadata"]["style_tags"]
+        if not isinstance(style_tags, list):
+            style_tags = [style_tags] if style_tags else []
+        
+        # Style vibe
+        styleVibe = doc.get("styleVibe", [])
+        if not isinstance(styleVibe, list):
+            styleVibe = [styleVibe] if styleVibe else []
+        
+        # Additional metadata fields
+        color_name = doc.get("color_name")
+        if not color_name and doc.get("metadata") and doc["metadata"].get("color_name"):
+            color_name = doc["metadata"]["color_name"]
+        
+        color_type = doc.get("color_type")
+        if not color_type and doc.get("metadata") and doc["metadata"].get("color_type"):
+            color_type = doc["metadata"]["color_type"]
+        
+        fit = doc.get("fit")
+        if not fit and doc.get("metadata") and doc["metadata"].get("fit"):
+            fit = doc["metadata"]["fit"]
         
         # Build the WardrobeItem-compatible dict
         wardrobe_item = {
             "user_id": str(user_id),
             "id": item_id,
-            "type": item_type or category,
-            "category": category or item_type,  # Include for compatibility
-            "name": name,
-            "color": str(color) if color else "unknown",
-            "fabric": str(fabric) if fabric else "unknown",
+            "type": item_type or None,
+            "category": category or None,
+            "name": name or None,
+            "color": str(color) if color else None,
+            "colors": colors if colors else None,
+            "fabric": str(fabric) if fabric else None,
             "pattern": pattern,
-            "season": season if isinstance(season, list) else ([season] if season else None),
+            "season": season if season else None,
+            "seasonTags": seasonTags if seasonTags else None,
+            "occasionTags": occasionTags if occasionTags else None,
             "formality": formality,
             "notes": notes,
-            "imageUrl": doc.get("imageUrl") or doc.get("image_url"),  # Include for compatibility
-            "cleanImageUrl": doc.get("cleanImageUrl") or doc.get("clean_image_url"),  # Include for compatibility
-            "uri": doc.get("imageUrl") or doc.get("image_url"),  # Agent uses this
-            "image_url": doc.get("imageUrl") or doc.get("image_url"),  # Agent uses this
-            "isFavorite": doc.get("isFavorite", False),
-            "tags": tags,
-            "occasion": occasion,
+            "imageUrl": doc.get("imageUrl"),
+            "cleanImageUrl": doc.get("cleanImageUrl"),
+            "tags": tags if tags else None,
+            "styleVibe": styleVibe if styleVibe else None,
+            "isFavorite": doc.get("isFavorite", False) if doc.get("isFavorite") is not None else None,
+            "color_name": color_name,
+            "color_type": color_type,
+            "fit": fit,
+            "style_tags": style_tags if style_tags else None,
+            # Backward compatibility fields
+            "uri": doc.get("imageUrl") or doc.get("image_url"),
+            "image_url": doc.get("imageUrl") or doc.get("image_url"),
         }
         
-        # Remove None values for cleaner output
-        return {k: v for k, v in wardrobe_item.items() if v is not None}
+        # Remove None values for cleaner output, but keep False values
+        return {k: v for k, v in wardrobe_item.items() if v is not None or v is False}
     
     def get_user_wardrobe(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all wardrobe items for a user. Returns list of WardrobeItem-compatible dicts."""

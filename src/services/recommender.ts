@@ -88,15 +88,29 @@ export interface SuggestOutfitRequest {
   weather: WeatherInput;
 }
 
+export interface OutfitItemDetail {
+  id: string;
+  imageUrl?: string | null;
+  category?: string | null;
+  color?: string | null;
+  tags?: string[];
+  seasonTags?: string[];
+  occasionTags?: string[];
+  isFavorite?: boolean;
+}
+
 export interface OutfitFromAI {
   items: string[];
   why: string;
-  items_detail?: Array<Record<string, any>> | null;
+  items_detail?: OutfitItemDetail[] | null;
 }
 
 export interface SuggestOutfitResponse {
   outfits: OutfitFromAI[];
-  context: Record<string, any>;
+  context: {
+    location: any;
+    weather: any;
+  };
   used_memory: boolean;
 }
 

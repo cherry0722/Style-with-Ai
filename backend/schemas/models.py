@@ -6,15 +6,34 @@ from pydantic import BaseModel, Field
 class WardrobeItem(BaseModel):
     user_id: str
     id: str
-    type: str
-    name: str
-    color: str
-    fabric: str
+    type: Optional[str] = None
+    name: Optional[str] = None
+    color: Optional[str] = None
+    colors: Optional[List[str]] = None
+    fabric: Optional[str] = None
     pattern: Optional[str] = None
     season: Optional[List[str]] = None
+    seasonTags: Optional[List[str]] = None
+    occasionTags: Optional[List[str]] = None
     formality: Optional[str] = None
     notes: Optional[str] = None
     embedding: Optional[List[float]] = None  # 768-d e5 vector (optional for now)
+    
+    # Image fields
+    imageUrl: Optional[str] = None
+    cleanImageUrl: Optional[str] = None
+    
+    # Category and metadata
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
+    styleVibe: Optional[List[str]] = None
+    isFavorite: Optional[bool] = None
+    
+    # Additional metadata fields from Mongoose schema
+    color_name: Optional[str] = None
+    color_type: Optional[str] = None
+    fit: Optional[str] = None
+    style_tags: Optional[List[str]] = None
 
 
 class Weather(BaseModel):

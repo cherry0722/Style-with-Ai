@@ -1,12 +1,12 @@
 # ai/agent.py
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import os
 
 from db.mongo import get_db, get_user_profile, get_user_wardrobe, get_items_by_ids
 from calendar_helper import get_events_for_today
 from ai.preference import PreferenceScorer
 from ai.rag_engine import suggest_with_rag
-from schemas.models import RecommendRequest, RecommendResponse
+from schemas.models import RecommendRequest, RecommendResponse, SuggestRequest, WardrobeItem
 
 # LLM opt-in toggle - gracefully fallback if not enabled
 USE_LLM = os.getenv('ENABLE_LLM', 'false').lower() == 'true' or os.getenv('OPENAI_API_KEY') is not None
@@ -14,6 +14,9 @@ try:
     from .graph.graph import run_graph
 except Exception:
     run_graph = None
+
+# Module-level DB instance
+db = get_db()
 
 
 class MyraAgent:
@@ -26,7 +29,77 @@ class MyraAgent:
     
     def __init__(self):
         """Initialize agent with DB instance."""
-        self.db = get_db()
+        self.db = db
+    
+    def _categorize_item(self, item: WardrobeItem) -> str:
+        """
+        Rough category classification: top, bottom, shoe, jacket, other.
+        Uses item.category and tags as hints.
+        """
+        cat = (item.category or "").lower()
+        tags = [t.lower() for t in (item.tags or [])]
+
+        # Tops
+        top_keywords = ["top", "tshirt", "t-shirt", "shirt", "blouse", "hoodie", "sweater"]
+        if any(k in cat for k in top_keywords) or any(k in tags for k in top_keywords):
+            return "top"
+
+        # Bottoms
+        bottom_keywords = ["jeans", "pants", "trousers", "skirt", "shorts", "bottom"]
+        if any(k in cat for k in bottom_keywords) or any(k in tags for k in bottom_keywords):
+            return "bottom"
+
+        # Shoes
+        shoe_keywords = ["shoe", "sneaker", "boot", "heel", "sandal"]
+        if any(k in cat for k in shoe_keywords) or any(k in tags for k in shoe_keywords):
+            return "shoe"
+
+        # Jackets / outerwear
+        jacket_keywords = ["jacket", "coat", "blazer", "overcoat"]
+        if any(k in cat for k in jacket_keywords) or any(k in tags for k in jacket_keywords):
+            return "jacket"
+
+        return "other"
+
+    def _score_item(self, item: WardrobeItem, temp_f: Optional[float]) -> float:
+        """
+        Simple scoring function based on temperature, season tags, and favorites.
+        Higher score = more suitable.
+        """
+        score = 1.0
+
+        season_tags = [t.lower() for t in (item.seasonTags or [])]
+        is_fav = bool(item.isFavorite)
+        category = self._categorize_item(item)
+
+        # Temperature-based preferences
+        if temp_f is not None:
+            if temp_f <= 50:
+                # Cold: jackets and heavier pieces
+                if category == "jacket":
+                    score += 3.0
+                if "winter" in season_tags or "cold" in season_tags:
+                    score += 2.0
+            elif 50 < temp_f < 75:
+                # Mild: layers
+                if category in ("top", "bottom"):
+                    score += 1.5
+                if "spring" in season_tags or "fall" in season_tags:
+                    score += 1.0
+            else:
+                # Warm: breathable
+                if category in ("top", "bottom"):
+                    score += 2.0
+                if "summer" in season_tags or "hot" in season_tags:
+                    score += 1.5
+                if category == "jacket":
+                    score -= 1.0  # avoid heavy jackets in heat
+
+        # Favorites get a small boost
+        if is_fav:
+            score += 1.0
+
+        return score
 
     def recommend(self, req: RecommendRequest) -> RecommendResponse:
         user_id = req.user_id
@@ -61,155 +134,160 @@ class MyraAgent:
             used_memory=bool(profile),
         )
 
-    def suggest_outfit(self, req) -> RecommendResponse:
+    def suggest_outfit(self, request: SuggestRequest) -> RecommendResponse:
         """
-        Lightweight rule-based outfit suggester used as an MVP.
-        Expects req with attributes: user_id, location, weather
+        Selects an outfit using scoring based on wardrobe items, temperature, and favorites.
+        Returns both item IDs and rich items_detail, plus a human-readable 'why'.
         """
-        user_id = getattr(req, 'user_id', None) or req.get('user_id')
-        location = getattr(req, 'location', None) or req.get('location')
-        weather = getattr(req, 'weather', None) or req.get('weather')
+        user_id = request.user_id
+        location = request.location
+        weather = request.weather
 
-        # Convert Pydantic models to dicts if needed
-        if hasattr(location, 'dict'):
-            location = location.dict()
-        if hasattr(weather, 'dict'):
-            weather = weather.dict()
-
-        # Load wardrobe and profile
-        wardrobe = get_user_wardrobe(user_id) or []
-        profile = get_user_profile(user_id) or {}
+        # Fetch wardrobe from DB (returns dicts, convert to WardrobeItem)
+        wardrobe_dicts = self.db.get_user_wardrobe(user_id)
+        wardrobe_items: List[WardrobeItem] = []
+        for item_dict in wardrobe_dicts:
+            try:
+                # Convert dict to WardrobeItem, handling missing fields gracefully
+                wardrobe_item = WardrobeItem(
+                    user_id=item_dict.get('user_id', user_id),
+                    id=item_dict.get('id', ''),
+                    type=item_dict.get('type'),
+                    name=item_dict.get('name'),
+                    color=item_dict.get('color'),
+                    colors=item_dict.get('colors'),
+                    fabric=item_dict.get('fabric'),
+                    pattern=item_dict.get('pattern'),
+                    season=item_dict.get('season'),
+                    seasonTags=item_dict.get('seasonTags'),
+                    occasionTags=item_dict.get('occasionTags'),
+                    formality=item_dict.get('formality'),
+                    notes=item_dict.get('notes'),
+                    imageUrl=item_dict.get('imageUrl'),
+                    cleanImageUrl=item_dict.get('cleanImageUrl'),
+                    category=item_dict.get('category'),
+                    tags=item_dict.get('tags'),
+                    styleVibe=item_dict.get('styleVibe'),
+                    isFavorite=item_dict.get('isFavorite'),
+                )
+                wardrobe_items.append(wardrobe_item)
+            except Exception as e:
+                print(f"[MyraAgent] Warning: failed to convert wardrobe item to WardrobeItem: {e}")
+                continue
         
-        # Debug logging
-        database_type = getattr(self.db, 'database_type', 'unknown')
+        wardrobe_count = len(wardrobe_items)
         print(
-            f"[MyraAgent] Database={database_type}, "
-            f"user_id={user_id}, wardrobe_count={len(wardrobe)}"
+            f"[MyraAgent] Database={getattr(self.db, 'database_type', 'unknown')}, "
+            f"user_id={user_id}, wardrobe_count={wardrobe_count}"
         )
 
-        # If LLM is enabled and graph is available, use it (non-breaking)
-        if USE_LLM and run_graph is not None:
-            try:
-                graph_out = run_graph(user_id, location, weather)
-                return RecommendResponse(outfits=[o for o in graph_out.get('outfits', [])], context=graph_out.get('context', {}), used_memory=bool(profile))
-            except Exception as e:
-                print(f"[Agent] LLM graph failed, falling back to rule-based: {e}")
+        # If no wardrobe, keep a safe fallback
+        if wardrobe_count == 0:
+            why = "I couldn't find any wardrobe items for you yet. Add some clothes to your closet so I can suggest an outfit."
+            return RecommendResponse(
+                outfits=[{
+                    "items": [],
+                    "why": why,
+                    "items_detail": []
+                }],
+                context={
+                    "location": location.dict() if hasattr(location, "dict") else location,
+                    "weather": weather.dict() if hasattr(weather, "dict") else weather,
+                },
+                used_memory=False,
+            )
 
-        # Optional calendar events (calendar integration is optional)
-        events = []
-        try:
-            events = get_events_for_today(user_id)
-        except Exception:
-            events = []
+        temp_f = getattr(weather, "tempF", None)
+        # Score items
+        scored_items = []
+        for item in wardrobe_items:
+            score = self._score_item(item, temp_f)
+            scored_items.append((score, item))
 
-        # Simple rule-based logic:
-        # - If tempF < 50 -> recommend layers (jacket + top + bottoms)
-        # - If tempF between 50 and 75 -> recommend light layers (top + bottoms)
-        # - If tempF > 75 -> recommend breathable items (shorts / light dress)
-        temp = None
-        try:
-            temp = weather.get('tempF') if isinstance(weather, dict) else getattr(weather, 'tempF', None)
-        except Exception:
-            temp = None
+        # Sort by score descending
+        scored_items.sort(key=lambda x: x[0], reverse=True)
 
-        def choose_by_category(cat):
-            for item in wardrobe:
-                if item.get('type') == cat or item.get('category') == cat:
-                    return item
-            return None
+        # Separate into rough categories
+        tops = []
+        bottoms = []
+        shoes = []
+        jackets = []
+        others = []
 
-        outfits = []
-        # If events found, map keywords to outfit templates
-        event_keywords = []
-        for e in events:
-            title = e.get('title', '') or ''
-            event_keywords += title.lower().split()
-
-        def event_priority():
-            # Check for common keywords
-            if any(k in event_keywords for k in ['gym', 'workout']):
-                return 'casual_active'
-            if any(k in event_keywords for k in ['meeting', 'interview', 'client']):
-                return 'formal'
-            if any(k in event_keywords for k in ['dinner', 'party', 'date']):
-                return 'smart_casual'
-            return None
-
-        priority = event_priority()
-
-        # Basic templates
-        if temp is None:
-            # fallback: pick any 3 items
-            chosen = [i for i in wardrobe][:3]
-            outfits.append({"items": [c.get('id') for c in chosen], "why": "Fallback selection"})
-        else:
-            if temp < 50:
-                pieces = []
-                # For formal events prefer a blazer if available
-                if priority == 'formal':
-                    cats = ['blazer', 'jacket', 'top', 'bottom']
-                else:
-                    cats = ['jacket', 'top', 'bottom']
-                for cat in cats:
-                    it = choose_by_category(cat)
-                    if it:
-                        pieces.append(it.get('id'))
-                outfits.append({"items": pieces, "why": f"Cold weather ({temp}F): layers recommended"})
-            elif temp < 75:
-                pieces = []
-                # For active events prefer comfortable shoes
-                if priority == 'casual_active':
-                    cats = ['top', 'bottom', 'sneakers']
-                elif priority == 'formal':
-                    cats = ['top', 'bottom', 'shoe']
-                else:
-                    cats = ['top', 'bottom', 'shoe']
-                for cat in cats:
-                    it = choose_by_category(cat)
-                    if it:
-                        pieces.append(it.get('id'))
-                outfits.append({"items": pieces, "why": f"Mild weather ({temp}F): light layers"})
+        for score, item in scored_items:
+            cat = self._categorize_item(item)
+            if cat == "top":
+                tops.append((score, item))
+            elif cat == "bottom":
+                bottoms.append((score, item))
+            elif cat == "shoe":
+                shoes.append((score, item))
+            elif cat == "jacket":
+                jackets.append((score, item))
             else:
-                pieces = []
-                # Warm weather: if smart_casual event, prefer light dress/top
-                if priority == 'smart_casual':
-                    cats = ['dress', 'top', 'bottom']
-                else:
-                    cats = ['dress', 'shorts', 'top']
-                for cat in cats:
-                    it = choose_by_category(cat)
-                    if it:
-                        pieces.append(it.get('id'))
-                outfits.append({"items": pieces, "why": f"Warm weather ({temp}F): breathable pieces"})
+                others.append((score, item))
 
-        # Enrich item IDs with light metadata for frontend convenience
-        enriched_outfits = []
-        for o in outfits:
-            ids = o.get('items', [])
-            items_detail = []
-            try:
-                # fetch minimal item metadata from DB: id, name, category, color, image_url
-                db_items = get_items_by_ids(user_id, ids) if ids else []
-                for di in db_items:
-                    items_detail.append({
-                        'id': di.get('id'),
-                        'name': di.get('name') or di.get('type') or di.get('category'),
-                        'category': di.get('category') or di.get('type'),
-                        'color': di.get('color'),
-                        'image_url': di.get('uri') or di.get('image_url'),
-                    })
-            except Exception as e:
-                # If enrichment fails, continue returning IDs only
-                print(f"[Agent] Warning: failed to enrich items: {e}")
+        chosen_items: List[WardrobeItem] = []
 
-            enriched_outfits.append({
-                'items': o['items'],
-                'items_detail': items_detail,
-                'why': o['why']
+        # Try to build a basic outfit: top + bottom + optional shoe + optional jacket
+        if tops:
+            chosen_items.append(tops[0][1])
+        if bottoms:
+            chosen_items.append(bottoms[0][1])
+        if shoes:
+            chosen_items.append(shoes[0][1])
+
+        # Optional jacket in colder weather
+        if temp_f is not None and temp_f <= 55 and jackets:
+            chosen_items.append(jackets[0][1])
+
+        # Fallback: if we still have nothing, just take the top N scored items
+        if not chosen_items:
+            chosen_items = [item for _, item in scored_items[:3]]
+
+        print(f"[MyraAgent] Selected outfit items: {[item.id for item in chosen_items]}")
+
+        # Build items_detail payload
+        items_detail = []
+        favorite_count = 0
+        for item in chosen_items:
+            if item.isFavorite:
+                favorite_count += 1
+            # Prefer cleanImageUrl if available
+            img = item.cleanImageUrl or item.imageUrl
+            items_detail.append({
+                "id": item.id,
+                "imageUrl": img,
+                "category": item.category,
+                "color": item.color or (item.colors[0] if item.colors else None),
+                "tags": item.tags or [],
+                "seasonTags": item.seasonTags or [],
+                "occasionTags": item.occasionTags or [],
+                "isFavorite": bool(item.isFavorite),
             })
 
-        # Log enrichment summary
-        total_enriched = sum(len(o.get('items_detail', [])) for o in enriched_outfits)
-        print(f"[Agent] Enriched outfit items count: {total_enriched}")
+        # Build explanation
+        temp_str = f"{temp_f:.0f}°F" if temp_f is not None else "today's weather"
+        loc_name = getattr(location, "name", None) if location else None
+        loc_part = f"in {loc_name}" if loc_name else ""
+        fav_part = ""
+        if favorite_count > 0:
+            fav_part = f" and included {favorite_count} of your favorites"
 
-        return RecommendResponse(outfits=enriched_outfits, context={"location": location, "weather": weather}, used_memory=bool(profile))
+        why = (
+            f"For {temp_str} {loc_part}, I picked a simple outfit that balances comfort and style"
+            f"{fav_part} based on what you have in your wardrobe."
+        ).strip()
+
+        return RecommendResponse(
+            outfits=[{
+                "items": [item.id for item in chosen_items],
+                "why": why,
+                "items_detail": items_detail,
+            }],
+            context={
+                "location": location.dict() if hasattr(location, "dict") else location,
+                "weather": weather.dict() if hasattr(weather, "dict") else weather,
+            },
+            used_memory=False,
+        )
