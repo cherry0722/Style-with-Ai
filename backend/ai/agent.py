@@ -507,12 +507,14 @@ class MyraAgent:
                 if not preferences:
                     preferences = None
         
-        # Log preferences (Phase 5A)
+        # Log incoming request (high-level, no PII)
+        logger.info("[AI] Suggest outfit for user: %s", user_id)
         logger.info(
-            f"[MyraAgent] Preferences: occasion={preferences.get('occasion') if preferences else None}, "
-            f"style_vibe={preferences.get('style_vibe') if preferences else None}, "
-            f"prefer_favorites={preferences.get('prefer_favorites') if preferences else None}, "
-            f"avoid_colors={preferences.get('avoid_colors') if preferences else None}"
+            "[MyraAgent] Preferences: occasion=%s, style_vibe=%s, prefer_favorites=%s, avoid_colors=%s",
+            preferences.get("occasion") if preferences else None,
+            preferences.get("style_vibe") if preferences else None,
+            preferences.get("prefer_favorites") if preferences else None,
+            preferences.get("avoid_colors") if preferences else None,
         )
 
         # Fetch wardrobe from DB (returns dicts, convert to WardrobeItem)
@@ -567,8 +569,10 @@ class MyraAgent:
         
         wardrobe_count = len(wardrobe_items)
         logger.info(
-            f"[MyraAgent] Database={getattr(self.db, 'database_type', 'unknown')}, "
-            f"user_id={user_id}, wardrobe_count={wardrobe_count}"
+            "[MyraAgent] Database=%s, user_id=%s, wardrobe_count=%s",
+            getattr(self.db, "database_type", "unknown"),
+            user_id,
+            wardrobe_count,
         )
 
         # If no wardrobe, keep a safe fallback

@@ -25,6 +25,10 @@ router.post('/analyze', auth, async (req, res) => {
     let azureColors = {};
 
     try {
+      console.log('[Wardrobe] Analyzing image with Azure Vision', {
+        userId,
+        imageUrl,
+      });
       const aiResult = await analyzeImage(imageUrl);
       if (aiResult) {
         azureTags = Array.isArray(aiResult.tags) ? aiResult.tags : [];
@@ -49,7 +53,13 @@ router.post('/analyze', auth, async (req, res) => {
       description: null,
     };
 
+    console.log('[Wardrobe] Vision tags:', azureTags.slice(0, 10));
     const llmMetadata = await generateFashionMetadata(llmPayload);
+    if (llmMetadata) {
+      console.log('[Wardrobe] Final fashion metadata:', llmMetadata);
+    } else {
+      console.log('[Wardrobe] No LLM metadata generated (null result).');
+    }
 
     return res.status(200).json({
       imageUrl,
@@ -99,15 +109,17 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    const userId =
+      req.user?.userId ||
+      req.user?._id?.toString() ||
+      req.user?.id ||
+      req.user?._id;
     if (!userId) {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
 
     // Determine colors: use request colors if provided, otherwise fallback to empty array.
-    const finalColors = Array.isArray(colors)
-      ? colors
-      : [];
+    const finalColors = Array.isArray(colors) ? colors : [];
 
     // Tags: for backwards compatibility, accept any provided tags and store directly.
     const finalTags = Array.isArray(tags)
@@ -134,10 +146,23 @@ router.post('/', auth, async (req, res) => {
         style_tags: Array.isArray(metadata.style_tags) ? metadata.style_tags : [],
       };
       // Only set metadata if at least one field is present
-      if (Object.values(metadataObj).every(val => val === undefined || (Array.isArray(val) && val.length === 0))) {
+      if (
+        Object.values(metadataObj).every(
+          (val) =>
+            val === undefined || (Array.isArray(val) && val.length === 0)
+        )
+      ) {
         metadataObj = undefined;
       }
     }
+
+    console.log('[Wardrobe] Saving item with metadata', {
+      userId,
+      category,
+      colors: finalColors,
+      tags: finalTags.slice(0, 10),
+      hasMetadata: !!metadataObj,
+    });
 
     const item = await Wardrobe.create({
       userId,

@@ -9,6 +9,7 @@ export interface WardrobeItemPayload {
   notes?: string;
   metadata?: FashionMetadata;
   tags?: string[];
+  styleVibe?: string[];
 }
 
 export interface WardrobeItemResponse {
@@ -22,6 +23,7 @@ export interface WardrobeItemResponse {
   isFavorite?: boolean;
   tags?: string[];
   metadata?: FashionMetadata;
+  styleVibe?: string[];
   createdAt?: string;
   updatedAt?: string;
 }

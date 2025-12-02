@@ -10,9 +10,11 @@ import {
   StyleSheet,
   ActivityIndicator,
   TextInput,
-  SafeAreaView,
+  Platform,
+  ActionSheetIOS,
   FlatList,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
@@ -39,6 +41,7 @@ const CATEGORIES: GarmentCategory[] = ["top", "bottom", "dress", "outerwear", "s
 const COLORS: ColorName[] = ["black", "white", "gray", "blue", "green", "red", "yellow", "beige", "brown", "pink", "purple"];
 
 type ClosetCategoryFilter = "all" | "top" | "bottom" | "outerwear" | "shoes" | "accessory" | "favorites";
+type AddFlowStep = "idle" | "analyzing" | "review" | "error";
 
 const FILTER_OPTIONS: { key: ClosetCategoryFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -49,6 +52,115 @@ const FILTER_OPTIONS: { key: ClosetCategoryFilter; label: string }[] = [
   { key: "accessory", label: "Accessories" },
   { key: "favorites", label: "Favorites" },
 ];
+
+const META_TYPE_OPTIONS = [
+  "t-shirt",
+  "shirt",
+  "polo",
+  "hoodie",
+  "sweater",
+  "jeans",
+  "trousers",
+  "shorts",
+  "skirt",
+  "dress",
+  "jacket",
+  "coat",
+  "shoes",
+  "sneakers",
+  "boots",
+  "heels",
+];
+
+const META_PATTERN_OPTIONS = [
+  "solid",
+  "striped",
+  "plaid",
+  "checkered",
+  "printed",
+  "floral",
+  "graphic",
+  "color-block",
+];
+
+const META_FIT_OPTIONS = [
+  "regular",
+  "slim",
+  "relaxed",
+  "oversized",
+  "tailored",
+];
+
+const META_COLOR_NAME_OPTIONS: ColorName[] = COLORS;
+
+const META_COLOR_TONE_OPTIONS = [
+  "neutral",
+  "warm",
+  "cool",
+  "bold",
+  "pastel",
+] as const;
+
+const META_FABRIC_OPTIONS = [
+  "cotton",
+  "denim",
+  "wool",
+  "linen",
+  "silk",
+  "polyester",
+  "leather",
+  "synthetic",
+  "unknown",
+];
+
+const STYLE_VIBE_OPTIONS = [
+  "casual",
+  "minimal",
+  "streetwear",
+  "sporty",
+  "formal",
+  "party",
+];
+
+const normalizeCategory = (value?: string | null, fallback: GarmentCategory = "top"): GarmentCategory => {
+  if (!value) return fallback;
+  const lower = value.toLowerCase();
+  if (lower === "unknown") return fallback;
+  if (lower.includes("dress")) return "dress";
+  if (lower.includes("coat") || lower.includes("jacket") || lower.includes("outerwear") || lower.includes("hoodie"))
+    return "outerwear";
+  if (lower.startsWith("top")) return "top";
+  if (lower.startsWith("bottom") || lower.includes("pant") || lower.includes("jean") || lower.includes("skirt"))
+    return "bottom";
+  if (lower.includes("shoe") || lower.includes("sneaker") || lower.includes("boot"))
+    return "shoes";
+  if (lower.includes("accessor")) return "accessory";
+  return fallback;
+};
+
+const normalizeColorToPalette = (value?: string | null): ColorName | null => {
+  if (!value) return null;
+  const lower = value.toLowerCase();
+  if (lower === "unknown") return null;
+  const match = COLORS.find((color) => lower.includes(color));
+  return match ?? null;
+};
+
+const isDefined = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
+
+const buildTagList = (analysis?: WardrobeAnalyzeResponse | null): string[] => {
+  if (!analysis) {
+    return [];
+  }
+  const azure = Array.isArray(analysis.azure_tags) ? analysis.azure_tags : [];
+  return Array.from(
+    new Set(
+      azure
+        .map((tag) => (typeof tag === "string" ? tag.trim().toLowerCase() : ""))
+        .filter((tag) => tag.length > 0)
+    )
+  ).slice(0, 20);
+};
 
 export default function ClosetCaptureScreen() {
   const { user } = useAuth();
@@ -65,8 +177,16 @@ export default function ClosetCaptureScreen() {
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [category, setCategory] = useState<GarmentCategory>("top");
-  const [color, setColor] = useState<ColorName>("black");
+  const [addStep, setAddStep] = useState<AddFlowStep>("idle");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [reviewCategory, setReviewCategory] = useState<GarmentCategory>("top");
+  const [reviewColor, setReviewColor] = useState<ColorName | null>(null);
+  const [metaType, setMetaType] = useState<string | null>(null);
+  const [metaPattern, setMetaPattern] = useState<string | null>(null);
+  const [metaFit, setMetaFit] = useState<string | null>(null);
+  const [metaColorName, setMetaColorName] = useState<string | null>(null);
+  const [metaColorTone, setMetaColorTone] = useState<string | null>(null);
+  const [metaFabric, setMetaFabric] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -74,6 +194,7 @@ export default function ClosetCaptureScreen() {
   const [cleanImageUrl, setCleanImageUrl] = useState<string | undefined>(undefined);
   const [previewItem, setPreviewItem] = useState<Garment | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ClosetCategoryFilter>("all");
+  const [selectedStyleVibes, setSelectedStyleVibes] = useState<string[]>([]);
 
   const loadWardrobe = useCallback(async () => {
     if (!user) {
@@ -166,7 +287,93 @@ export default function ClosetCaptureScreen() {
     [remove, user]
   );
 
-  const takePicture = async () => {
+  const runAnalysis = useCallback(
+    async (uri: string) => {
+      try {
+        setIsAnalyzing(true);
+        setAnalysisError(null);
+        setAddStep("analyzing");
+
+        const { imageUrl, cleanImageUrl: uploadedCleanImageUrl } = await uploadWardrobeImage(uri);
+        setCleanImageUrl(uploadedCleanImageUrl);
+
+        const result = await analyzeWardrobeImage({
+          imageUrl,
+        });
+
+        setAnalysisResult(result);
+
+        const rawLLMCategory = result.llm_metadata?.category as string | undefined;
+        const llmCategory =
+          rawLLMCategory && rawLLMCategory !== "unknown"
+            ? normalizeCategory(rawLLMCategory)
+            : null;
+        const hintCategory = result.category_hint ? normalizeCategory(result.category_hint) : null;
+        setReviewCategory(llmCategory || hintCategory || "top");
+
+        const inferredColor =
+          normalizeColorToPalette(result.color_hint) ||
+          normalizeColorToPalette(result.llm_metadata?.color_name) ||
+          normalizeColorToPalette(result.azure_colors?.dominantColors?.[0]) ||
+          null;
+        setReviewColor(inferredColor);
+
+        const baseMeta = (result.llm_metadata || {}) as FashionMetadata;
+        const pickFromOptions = (val: string | undefined, opts: readonly string[]) => {
+          if (!val) return null;
+          const lower = val.toLowerCase();
+          return opts.find((opt) => opt.toLowerCase() === lower) || null;
+        };
+
+        setMetaType(pickFromOptions(baseMeta.type, META_TYPE_OPTIONS));
+        setMetaPattern(pickFromOptions(baseMeta.pattern, META_PATTERN_OPTIONS));
+        setMetaFit(pickFromOptions(baseMeta.fit, META_FIT_OPTIONS));
+        setMetaColorName(
+          pickFromOptions(baseMeta.color_name, META_COLOR_NAME_OPTIONS as unknown as string[])
+        );
+        setMetaColorTone(pickFromOptions(baseMeta.color_type, META_COLOR_TONE_OPTIONS));
+        setMetaFabric(pickFromOptions(baseMeta.fabric, META_FABRIC_OPTIONS));
+
+        const baseStyleTags = Array.isArray(baseMeta.style_tags) ? baseMeta.style_tags : [];
+        const initialVibes = STYLE_VIBE_OPTIONS.filter((opt) =>
+          baseStyleTags.some((tag) => typeof tag === "string" && tag.toLowerCase() === opt.toLowerCase())
+        );
+        setSelectedStyleVibes(initialVibes);
+        setAddStep("review");
+      } catch (err: any) {
+        console.error("[ClosetCaptureScreen] Analysis failed:", err);
+        setAnalysisError(err?.message || "Failed to analyze image. Please try again.");
+        setAddStep("error");
+      } finally {
+        setIsAnalyzing(false);
+      }
+    },
+    []
+  );
+
+  const openAddFlowWithImage = useCallback(
+    (uri: string) => {
+      setSelectedImage(uri);
+      setShowAddModal(true);
+      setAnalysisResult(null);
+      setReviewCategory("top");
+      setReviewColor(null);
+      setMetaType(null);
+      setMetaPattern(null);
+      setMetaFit(null);
+      setMetaColorName(null);
+      setMetaColorTone(null);
+      setMetaFabric(null);
+      setSelectedStyleVibes([]);
+      setNote("");
+      setCleanImageUrl(undefined);
+      setAddStep("analyzing");
+      runAnalysis(uri);
+    },
+    [runAnalysis]
+  );
+
+  const pickImageFromCamera = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== "granted") {
@@ -175,52 +382,86 @@ export default function ClosetCaptureScreen() {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 0.85,
       });
 
-      if (!result.canceled) {
-        setSelectedImage(result.assets[0].uri);
-        setShowAddModal(true);
+      if (!result.canceled && result.assets?.length) {
+        openAddFlowWithImage(result.assets[0].uri);
       }
     } catch (error) {
+      console.error("[ClosetCaptureScreen] Camera launch failed:", error);
       Alert.alert("Error", "Failed to take picture. Please try again.");
     }
-  };
+  }, [openAddFlowWithImage]);
 
-  const handleAnalyze = async () => {
-    if (!user) {
-      Alert.alert("Not logged in", "Please log in before adding items to your wardrobe.");
-      return;
-    }
-
-    if (!selectedImage) {
-      Alert.alert("No image", "Please take a photo first.");
-      return;
-    }
-
+  const pickImageFromLibrary = useCallback(async () => {
     try {
-      setIsAnalyzing(true);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Library access is needed to pick photos.");
+        return;
+      }
 
-      const { imageUrl, cleanImageUrl: uploadedCleanImageUrl } = await uploadWardrobeImage(selectedImage);
-      setCleanImageUrl(uploadedCleanImageUrl);
-
-      const result = await analyzeWardrobeImage({
-        imageUrl,
-        category,
-        colors: color ? [color] : [],
-        notes: note || "",
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
       });
 
-      setAnalysisResult(result);
-    } catch (err: any) {
-      Alert.alert("Error", err?.message || "Failed to analyze image. Please try again.");
-    } finally {
-      setIsAnalyzing(false);
+      if (!result.canceled && result.assets?.length) {
+        openAddFlowWithImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("[ClosetCaptureScreen] Library pick failed:", error);
+      Alert.alert("Error", "Failed to choose a photo. Please try again.");
     }
-  };
+  }, [openAddFlowWithImage]);
+
+  const showImageSourceSheet = useCallback(() => {
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Take photo", "Choose from library"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            pickImageFromCamera();
+          } else if (buttonIndex === 2) {
+            pickImageFromLibrary();
+          }
+        }
+      );
+    } else {
+      Alert.alert("Add a new piece", "Choose an image source", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Take photo",
+          onPress: () => {
+            pickImageFromCamera();
+          },
+        },
+        {
+          text: "Choose from gallery",
+          onPress: () => {
+            pickImageFromLibrary();
+          },
+        },
+      ]);
+    }
+  }, [pickImageFromCamera, pickImageFromLibrary]);
+
+  const toggleStyleVibe = useCallback((vibe: string) => {
+    setSelectedStyleVibes((prev) =>
+      prev.includes(vibe)
+        ? prev.filter((existing) => existing !== vibe)
+        : [...prev, vibe]
+    );
+  }, []);
 
   const handleSave = async () => {
     if (!user || !analysisResult) {
@@ -230,12 +471,37 @@ export default function ClosetCaptureScreen() {
     try {
       setIsSaving(true);
 
+      // Prefer user-selected primary color; fall back to Azure dominantColors
+      const fallbackColors = (analysisResult.azure_colors?.dominantColors || [])
+        .map((entry) => normalizeColorToPalette(entry))
+        .filter(isDefined);
+      const inferredColors: ColorName[] = reviewColor ? [reviewColor] : fallbackColors;
+
+      // Build editable metadata, starting from LLM base
+      const baseMeta = (analysisResult.llm_metadata || {}) as FashionMetadata;
+      const finalMetadata: FashionMetadata = {
+        ...baseMeta,
+        type: metaType ?? baseMeta.type ?? "unknown",
+        pattern: metaPattern ?? baseMeta.pattern ?? "unknown",
+        fit: metaFit ?? baseMeta.fit ?? "unknown",
+        color_name: metaColorName ?? baseMeta.color_name ?? "unknown",
+        color_type: (metaColorTone ?? baseMeta.color_type ?? "unknown") as FashionMetadata["color_type"],
+        fabric: metaFabric ?? baseMeta.fabric ?? "unknown",
+        style_tags:
+          selectedStyleVibes.length > 0
+            ? selectedStyleVibes
+            : baseMeta.style_tags ?? [],
+      };
+
       const created: WardrobeItemResponse = await createWardrobeItem({
         imageUrl: analysisResult.imageUrl,
         cleanImageUrl: cleanImageUrl,
-        category,
-        colors: color ? [color] : [],
+        category: reviewCategory,
+        colors: inferredColors.length > 0 ? inferredColors : undefined,
         notes: note || undefined,
+        metadata: finalMetadata,
+        tags: analysisResult.azure_tags || [],
+        styleVibe: selectedStyleVibes.length > 0 ? selectedStyleVibes : undefined,
       });
 
       const garment: Garment = {
@@ -264,11 +530,20 @@ export default function ClosetCaptureScreen() {
 
   const resetForm = () => {
     setSelectedImage(null);
-    setCategory("top");
-    setColor("black");
+    setReviewCategory("top");
+    setReviewColor(null);
+    setMetaType(null);
+    setMetaPattern(null);
+    setMetaFit(null);
+    setMetaColorName(null);
+    setMetaColorTone(null);
+    setMetaFabric(null);
+    setSelectedStyleVibes([]);
     setNote("");
     setAnalysisResult(null);
     setCleanImageUrl(undefined);
+    setAnalysisError(null);
+    setAddStep("idle");
     setShowAddModal(false);
   };
 
@@ -336,9 +611,9 @@ export default function ClosetCaptureScreen() {
 
           {/* Add from camera card */}
           <Pressable
-            onPress={async () => {
+            onPress={() => {
               hapticFeedback.light();
-              await takePicture();
+              showImageSourceSheet();
             }}
             style={themeStyles.addCard}
           >
@@ -346,7 +621,7 @@ export default function ClosetCaptureScreen() {
             <View style={themeStyles.addCardText}>
               <Text style={themeStyles.addCardTitle}>Add a new piece</Text>
               <Text style={themeStyles.addCardSubtext}>
-                Open camera to capture a new clothing item
+                Capture or upload a new clothing item
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={theme.colors.textTertiary} />
@@ -467,142 +742,412 @@ export default function ClosetCaptureScreen() {
               <Text style={themeStyles.modalCancel}>Cancel</Text>
             </Pressable>
             <Text style={themeStyles.modalTitle}>Add Item</Text>
-            <Pressable
-              onPress={handleAnalyze}
-              disabled={!selectedImage || isAnalyzing}
-              style={{ opacity: !selectedImage || isAnalyzing ? 0.6 : 1 }}
-            >
-              {isAnalyzing ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <ActivityIndicator size="small" color={theme.colors.accent} />
-                  <Text style={themeStyles.modalAction}>Analyzing...</Text>
-                </View>
-              ) : (
-                <Text style={themeStyles.modalAction}>Analyze</Text>
-              )}
-            </Pressable>
+            {addStep === "review" ? (
+              <Pressable
+                onPress={() => selectedImage && runAnalysis(selectedImage)}
+                disabled={isAnalyzing}
+                style={{ opacity: isAnalyzing ? 0.5 : 1 }}
+              >
+                <Text style={themeStyles.modalAction}>Re-run AI</Text>
+              </Pressable>
+            ) : addStep === "analyzing" ? (
+              <View style={themeStyles.modalHeaderSpinner}>
+                <ActivityIndicator size="small" color={theme.colors.accent} />
+              </View>
+            ) : (
+              <View style={{ width: 64 }} />
+            )}
           </View>
 
-          <ScrollView style={themeStyles.modalContent}>
-            {/* Image selection */}
+          <ScrollView style={themeStyles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={themeStyles.modalSection}>
-              <Text style={themeStyles.modalSectionTitle}>Add Photo</Text>
+              <Text style={themeStyles.modalSectionTitle}>Photo</Text>
               {selectedImage ? (
-                <View style={themeStyles.imageContainer}>
-                  <Image source={{ uri: selectedImage }} style={themeStyles.selectedImage} />
-                  <Pressable
-                    style={themeStyles.changeImageButton}
-                    onPress={() => {
-                      setSelectedImage(null);
-                      setAnalysisResult(null);
-                    }}
-                  >
-                    <Ionicons name="close" size={20} color={theme.colors.white} />
-                  </Pressable>
-                </View>
+                <>
+                  <View style={themeStyles.imageContainer}>
+                    <Image source={{ uri: selectedImage }} style={themeStyles.selectedImage} />
+                  </View>
+                  <View style={themeStyles.photoActions}>
+                    <Pressable
+                      style={themeStyles.secondaryPhotoButton}
+                      onPress={showImageSourceSheet}
+                    >
+                      <Ionicons name="refresh" size={16} color={theme.colors.accent} />
+                      <Text style={themeStyles.secondaryPhotoButtonText}>Replace photo</Text>
+                    </Pressable>
+                    <Pressable
+                      style={themeStyles.secondaryPhotoButton}
+                      onPress={() => {
+                        setSelectedImage(null);
+                        setAnalysisResult(null);
+                        setAddStep("idle");
+                        setReviewColor(null);
+                        setReviewCategory("top");
+                        setCleanImageUrl(undefined);
+                        setAnalysisError(null);
+                        setMetaType(null);
+                        setMetaPattern(null);
+                        setMetaFit(null);
+                        setMetaColorName(null);
+                        setMetaColorTone(null);
+                        setMetaFabric(null);
+                        setSelectedStyleVibes([]);
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
+                      <Text style={[themeStyles.secondaryPhotoButtonText, { color: theme.colors.error }]}>
+                        Remove
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
               ) : (
-                <Pressable
-                  style={themeStyles.cameraButton}
-                  onPress={async () => {
-                    await takePicture();
-                  }}
-                >
-                  <Ionicons name="camera" size={32} color={theme.colors.accent} />
-                  <Text style={themeStyles.cameraButtonText}>Take Photo</Text>
+                <Pressable style={themeStyles.cameraButton} onPress={showImageSourceSheet}>
+                  <Ionicons name="images-outline" size={32} color={theme.colors.accent} />
+                  <Text style={themeStyles.cameraButtonText}>Choose photo</Text>
                 </Pressable>
               )}
             </View>
 
-            {/* Category selection */}
-            <View style={themeStyles.modalSection}>
-              <Text style={themeStyles.modalSectionTitle}>Category</Text>
-              <View style={themeStyles.categoryGrid}>
-                {CATEGORIES.map((cat) => (
-                  <Pressable
-                    key={cat}
-                    style={[
-                      themeStyles.categoryChip,
-                      category === cat && themeStyles.categoryChipActive,
-                    ]}
-                    onPress={() => {
-                      hapticFeedback.light();
-                      setCategory(cat);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        themeStyles.categoryChipText,
-                        category === cat && themeStyles.categoryChipTextActive,
-                      ]}
-                    >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </Text>
-                  </Pressable>
-                ))}
+            {addStep === "analyzing" && (
+              <View style={themeStyles.analysisState}>
+                <ActivityIndicator size="large" color={theme.colors.accent} />
+                <Text style={themeStyles.analysisTitle}>Analyzing your piece</Text>
+                <Text style={themeStyles.analysisSubtitle}>
+                  MYRA is uploading your photo and generating fashion tags automatically.
+                </Text>
               </View>
-            </View>
+            )}
 
-            {/* Color selection */}
-            <View style={themeStyles.modalSection}>
-              <Text style={themeStyles.modalSectionTitle}>Primary Color</Text>
-              <View style={themeStyles.colorGrid}>
-                {COLORS.map((col) => (
-                  <Pressable
-                    key={col}
-                    style={[
-                      themeStyles.colorChip,
-                      color === col && themeStyles.colorChipActive,
-                    ]}
-                    onPress={() => {
-                      hapticFeedback.light();
-                      setColor(col);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        themeStyles.colorChipText,
-                        color === col && themeStyles.colorChipTextActive,
-                      ]}
-                    >
-                      {col.charAt(0).toUpperCase() + col.slice(1)}
-                    </Text>
-                  </Pressable>
-                ))}
+            {addStep === "error" && (
+              <View style={themeStyles.analysisState}>
+                <Ionicons name="alert-circle" size={36} color={theme.colors.error} />
+                <Text style={themeStyles.errorTitle}>We couldn’t analyze this photo</Text>
+                <Text style={themeStyles.errorSubtitle}>{analysisError}</Text>
+                <Pressable
+                  style={themeStyles.retryButton}
+                  onPress={() => selectedImage && runAnalysis(selectedImage)}
+                >
+                  <Text style={themeStyles.retryButtonText}>Try again</Text>
+                </Pressable>
               </View>
-            </View>
+            )}
 
-            {/* Notes */}
-            <View style={themeStyles.modalSection}>
-              <Text style={themeStyles.modalSectionTitle}>Notes (Optional)</Text>
-              <TextInput
-                style={themeStyles.notesInput}
-                placeholder="Add any notes about this item..."
-                placeholderTextColor={theme.colors.textTertiary}
-                value={note}
-                onChangeText={setNote}
-                multiline
-              />
-            </View>
-
-            {/* Save button (only shown after analysis) */}
-            {analysisResult && (
-              <Pressable
-                style={[
-                  themeStyles.saveButton,
-                  isSaving && { opacity: 0.6 },
-                ]}
-                onPress={handleSave}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <ActivityIndicator size="small" color={theme.colors.white} />
-                    <Text style={themeStyles.saveButtonText}>Saving...</Text>
+            {addStep === "review" && analysisResult && (
+              <>
+                <View style={themeStyles.modalSection}>
+                  <Text style={themeStyles.modalSectionTitle}>Category</Text>
+                  <View style={themeStyles.categoryGrid}>
+                    {CATEGORIES.map((cat) => {
+                      const isActive = reviewCategory === cat;
+                      return (
+                        <Pressable
+                          key={cat}
+                          style={[
+                            themeStyles.categoryChip,
+                            isActive && themeStyles.categoryChipActive,
+                          ]}
+                          onPress={() => {
+                            hapticFeedback.light();
+                            setReviewCategory(cat);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              themeStyles.categoryChipText,
+                              isActive && themeStyles.categoryChipTextActive,
+                            ]}
+                          >
+                            {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
-                ) : (
-                  <Text style={themeStyles.saveButtonText}>Looks good, save item</Text>
-                )}
-              </Pressable>
+                </View>
+
+                <View style={themeStyles.modalSection}>
+                  <Text style={themeStyles.modalSectionTitle}>Primary Color</Text>
+                  <View style={themeStyles.colorGrid}>
+                    <Pressable
+                      key="auto"
+                      style={[
+                        themeStyles.colorChip,
+                        reviewColor === null && themeStyles.colorChipActive,
+                      ]}
+                      onPress={() => {
+                        hapticFeedback.light();
+                        setReviewColor(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          themeStyles.colorChipText,
+                          reviewColor === null && themeStyles.colorChipTextActive,
+                        ]}
+                      >
+                        Auto
+                      </Text>
+                    </Pressable>
+                    {COLORS.map((col) => {
+                      const isActive = reviewColor === col;
+                      return (
+                        <Pressable
+                          key={col}
+                          style={[
+                            themeStyles.colorChip,
+                            isActive && themeStyles.colorChipActive,
+                          ]}
+                          onPress={() => {
+                            hapticFeedback.light();
+                            setReviewColor(col);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              themeStyles.colorChipText,
+                              isActive && themeStyles.colorChipTextActive,
+                            ]}
+                          >
+                            {col.charAt(0).toUpperCase() + col.slice(1)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={themeStyles.modalSection}>
+                  <Text style={themeStyles.modalSectionTitle}>AI Metadata</Text>
+                  <View style={themeStyles.metadataCard}>
+                    {/* Type */}
+                    <Text style={themeStyles.metadataLabel}>Type</Text>
+                    <View style={themeStyles.tagChipsContainer}>
+                      {META_TYPE_OPTIONS.map((opt) => {
+                        const isActive =
+                          (metaType ?? analysisResult.llm_metadata?.type) === opt;
+                        return (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              themeStyles.tagChipSelectable,
+                              isActive && themeStyles.tagChipSelected,
+                            ]}
+                            onPress={() => setMetaType(opt)}
+                          >
+                            <Text
+                              style={[
+                                themeStyles.tagChipText,
+                                isActive && themeStyles.tagChipTextSelected,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {/* Pattern */}
+                    <Text style={themeStyles.metadataLabel}>Pattern</Text>
+                    <View style={themeStyles.tagChipsContainer}>
+                      {META_PATTERN_OPTIONS.map((opt) => {
+                        const isActive =
+                          (metaPattern ?? analysisResult.llm_metadata?.pattern) === opt;
+                        return (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              themeStyles.tagChipSelectable,
+                              isActive && themeStyles.tagChipSelected,
+                            ]}
+                            onPress={() => setMetaPattern(opt)}
+                          >
+                            <Text
+                              style={[
+                                themeStyles.tagChipText,
+                                isActive && themeStyles.tagChipTextSelected,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {/* Fit */}
+                    <Text style={themeStyles.metadataLabel}>Fit</Text>
+                    <View style={themeStyles.tagChipsContainer}>
+                      {META_FIT_OPTIONS.map((opt) => {
+                        const isActive =
+                          (metaFit ?? analysisResult.llm_metadata?.fit) === opt;
+                        return (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              themeStyles.tagChipSelectable,
+                              isActive && themeStyles.tagChipSelected,
+                            ]}
+                            onPress={() => setMetaFit(opt)}
+                          >
+                            <Text
+                              style={[
+                                themeStyles.tagChipText,
+                                isActive && themeStyles.tagChipTextSelected,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {/* Detected color name */}
+                    <Text style={themeStyles.metadataLabel}>Detected color</Text>
+                    <View style={themeStyles.tagChipsContainer}>
+                      {COLORS.map((opt) => {
+                        const isActive =
+                          (metaColorName ?? analysisResult.llm_metadata?.color_name) === opt;
+                        return (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              themeStyles.tagChipSelectable,
+                              isActive && themeStyles.tagChipSelected,
+                            ]}
+                            onPress={() => setMetaColorName(opt)}
+                          >
+                            <Text
+                              style={[
+                                themeStyles.tagChipText,
+                                isActive && themeStyles.tagChipTextSelected,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {/* Color tone */}
+                    <Text style={themeStyles.metadataLabel}>Color tone</Text>
+                    <View style={themeStyles.tagChipsContainer}>
+                      {META_COLOR_TONE_OPTIONS.map((opt) => {
+                        const isActive =
+                          (metaColorTone ?? analysisResult.llm_metadata?.color_type) === opt;
+                        return (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              themeStyles.tagChipSelectable,
+                              isActive && themeStyles.tagChipSelected,
+                            ]}
+                            onPress={() => setMetaColorTone(opt)}
+                          >
+                            <Text
+                              style={[
+                                themeStyles.tagChipText,
+                                isActive && themeStyles.tagChipTextSelected,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+
+                    {/* Fabric */}
+                    <Text style={themeStyles.metadataLabel}>Fabric</Text>
+                    <View style={themeStyles.tagChipsContainer}>
+                      {META_FABRIC_OPTIONS.map((opt) => {
+                        const isActive =
+                          (metaFabric ?? analysisResult.llm_metadata?.fabric) === opt;
+                        return (
+                          <Pressable
+                            key={opt}
+                            style={[
+                              themeStyles.tagChipSelectable,
+                              isActive && themeStyles.tagChipSelected,
+                            ]}
+                            onPress={() => setMetaFabric(opt)}
+                          >
+                            <Text
+                              style={[
+                                themeStyles.tagChipText,
+                                isActive && themeStyles.tagChipTextSelected,
+                              ]}
+                            >
+                              {opt}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                </View>
+
+                <View style={themeStyles.modalSection}>
+                  <Text style={themeStyles.modalSectionTitle}>Style vibe</Text>
+                  <View style={themeStyles.tagChipsContainer}>
+                    {STYLE_VIBE_OPTIONS.map((vibe) => {
+                      const isSelected = selectedStyleVibes.includes(vibe);
+                      return (
+                        <Pressable
+                          key={vibe}
+                          onPress={() => toggleStyleVibe(vibe)}
+                          style={[
+                            themeStyles.tagChipSelectable,
+                            isSelected && themeStyles.tagChipSelected,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              themeStyles.tagChipText,
+                              isSelected && themeStyles.tagChipTextSelected,
+                            ]}
+                          >
+                            {vibe}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={themeStyles.modalSection}>
+                  <Text style={themeStyles.modalSectionTitle}>Notes (optional)</Text>
+                  <TextInput
+                    style={themeStyles.notesInput}
+                    placeholder="Where would you wear this? Any fit notes?"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={note}
+                    onChangeText={setNote}
+                    multiline
+                  />
+                </View>
+
+                <Pressable
+                  style={[
+                    themeStyles.saveButton,
+                    isSaving && { opacity: 0.6 },
+                  ]}
+                  onPress={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <ActivityIndicator size="small" color={theme.colors.white} />
+                      <Text style={themeStyles.saveButtonText}>Saving...</Text>
+                    </View>
+                  ) : (
+                    <Text style={themeStyles.saveButtonText}>Save to closet</Text>
+                  )}
+                </Pressable>
+              </>
             )}
           </ScrollView>
         </View>
@@ -819,6 +1364,10 @@ const styles = (theme: any) =>
       color: theme.colors.accent,
       fontWeight: theme.typography.semibold,
     },
+    modalHeaderSpinner: {
+      width: 64,
+      alignItems: "flex-end",
+    },
     modalContent: {
       flex: 1,
       paddingHorizontal: theme.spacing.lg,
@@ -842,16 +1391,27 @@ const styles = (theme: any) =>
       height: 200,
       borderRadius: theme.borderRadius.lg,
     },
-    changeImageButton: {
-      position: "absolute",
-      top: 8,
-      right: 8,
-      backgroundColor: theme.colors.error,
-      borderRadius: theme.borderRadius.full,
-      width: 32,
-      height: 32,
+    photoActions: {
+      flexDirection: "row",
       justifyContent: "center",
+      gap: theme.spacing.md,
+      marginTop: theme.spacing.md,
+    },
+    secondaryPhotoButton: {
+      flexDirection: "row",
       alignItems: "center",
+      gap: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    secondaryPhotoButtonText: {
+      fontSize: theme.typography.sm,
+      color: theme.colors.accent,
+      fontWeight: theme.typography.medium,
     },
     cameraButton: {
       backgroundColor: theme.colors.backgroundSecondary,
@@ -867,6 +1427,53 @@ const styles = (theme: any) =>
       fontSize: theme.typography.base,
       color: theme.colors.accent,
       fontWeight: theme.typography.medium,
+    },
+    analysisState: {
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderRadius: theme.borderRadius.xl,
+      padding: theme.spacing.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: "center",
+      marginBottom: theme.spacing.xl,
+    },
+    analysisTitle: {
+      marginTop: theme.spacing.md,
+      fontSize: theme.typography.lg,
+      fontWeight: theme.typography.semibold,
+      color: theme.colors.textPrimary,
+    },
+    analysisSubtitle: {
+      marginTop: theme.spacing.sm,
+      fontSize: theme.typography.sm,
+      lineHeight: theme.typography.sm * theme.typography.lineHeight,
+      color: theme.colors.textSecondary,
+      textAlign: "center",
+    },
+    errorTitle: {
+      marginTop: theme.spacing.md,
+      fontSize: theme.typography.base,
+      fontWeight: theme.typography.semibold,
+      color: theme.colors.textPrimary,
+      textAlign: "center",
+    },
+    errorSubtitle: {
+      marginTop: theme.spacing.xs,
+      fontSize: theme.typography.sm,
+      color: theme.colors.textSecondary,
+      textAlign: "center",
+      lineHeight: theme.typography.sm * theme.typography.lineHeight,
+    },
+    retryButton: {
+      marginTop: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: theme.colors.accent,
+    },
+    retryButtonText: {
+      color: theme.colors.white,
+      fontWeight: theme.typography.semibold,
     },
     categoryGrid: {
       flexDirection: "row",
@@ -917,6 +1524,68 @@ const styles = (theme: any) =>
     },
     colorChipTextActive: {
       color: theme.colors.white,
+    },
+    metadataCard: {
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderRadius: theme.borderRadius.xl,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.sm,
+    },
+    metadataRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    metadataLabel: {
+      fontSize: theme.typography.sm,
+      color: theme.colors.textSecondary,
+    },
+    metadataValue: {
+      fontSize: theme.typography.sm,
+      color: theme.colors.textPrimary,
+      fontWeight: theme.typography.medium,
+    },
+    metadataStyleTags: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.xs,
+    },
+    tagChipsContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.sm,
+    },
+    tagChip: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.xs,
+      borderRadius: theme.borderRadius.full,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    tagChipText: {
+      fontSize: theme.typography.xs,
+      color: theme.colors.textSecondary,
+    },
+    tagChipSelectable: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.borderRadius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.backgroundSecondary,
+    },
+    tagChipSelected: {
+      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.accent,
+    },
+    tagChipTextSelected: {
+      color: theme.colors.white,
+    },
+    emptyTagsText: {
+      fontSize: theme.typography.sm,
+      color: theme.colors.textSecondary,
     },
     notesInput: {
       backgroundColor: theme.colors.backgroundSecondary,

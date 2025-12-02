@@ -62,6 +62,9 @@ router.post('/image', auth, upload.single('image'), async (req, res) => {
     const filename = req.file.filename;
     const imageUrl = `${protocol}://${host}/uploads/images/${filename}`;
 
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    console.log('[Wardrobe] Uploaded image for user', userId, imageUrl);
+
     // Try to get background-removed version (stub for now)
     let cleanImageUrl = null;
     try {
