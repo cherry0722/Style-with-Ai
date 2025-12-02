@@ -246,7 +246,8 @@ export default function OutfitScreen() {
       const result = await analyzeWardrobeImage({
         imageUrl,
         category,
-        colors: color ? [color] : [],
+        // Send a single-color hint only; backend may use this alongside llm_metadata
+        colors: color ? [color] : undefined,
         notes: note || "",
       });
 
@@ -261,6 +262,7 @@ export default function OutfitScreen() {
                   "top",
         type: result.llm_metadata?.type,
         fabric: result.llm_metadata?.fabric,
+        // Seed with LLM color_name, falling back to backend color_hint if needed
         color_name: result.llm_metadata?.color_name || result.color_hint || undefined,
         color_type: result.llm_metadata?.color_type,
         pattern: result.llm_metadata?.pattern,
@@ -316,10 +318,16 @@ export default function OutfitScreen() {
         tags.push(...draftMetadata.style_tags);
       }
 
+      // Derive primary color from metadata.color_name (single source of truth),
+      // falling back to current UI color selection if metadata is missing.
+      const primaryColor =
+        (draftMetadata?.color_name as string | undefined) || (color as string | undefined);
+      const colorsPayload = primaryColor ? [primaryColor] : undefined;
+
       console.log("[OutfitScreen] Saving with metadata:", {
         imageUrl: analysisResult.imageUrl,
         category: draftMetadata?.category ?? category,
-        colors: color ? [color] : [],
+        colors: colorsPayload,
         notes: note,
         metadata: draftMetadata,
         tags,
@@ -329,7 +337,7 @@ export default function OutfitScreen() {
         imageUrl: analysisResult.imageUrl,
         cleanImageUrl: cleanImageUrl,
         category: (draftMetadata?.category ?? category) as string,
-        colors: color ? [color] : [],
+        colors: colorsPayload,
         notes: note || undefined,
         metadata: draftMetadata ?? undefined,
         tags,
@@ -394,7 +402,7 @@ export default function OutfitScreen() {
       console.log("[OutfitScreen] Skipping AI and saving without metadata:", {
         imageUrl: analysisResult.imageUrl,
         category,
-        colors: color ? [color] : [],
+        colors: color ? [color] : undefined,
         notes: note,
       });
 
@@ -402,7 +410,7 @@ export default function OutfitScreen() {
         imageUrl: analysisResult.imageUrl,
         cleanImageUrl: cleanImageUrl,
         category,
-        colors: color ? [color] : [],
+        colors: color ? [color] : undefined,
         notes: note || undefined,
       });
 
@@ -636,21 +644,7 @@ export default function OutfitScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Review Tags</Text>
 
-                {/* Azure Tags - Read-only chips */}
-                {analysisResult.azure_tags && analysisResult.azure_tags.length > 0 && (
-                  <View style={styles.section}>
-                    <Text style={styles.reviewLabel}>Azure Vision Tags</Text>
-                    <View style={styles.tagChipsContainer}>
-                      {analysisResult.azure_tags.map((tag, idx) => (
-                        <View key={idx} style={styles.tagChip}>
-                          <Text style={styles.tagChipText}>{tag}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                )}
-
-                {/* Metadata Fields */}
+                {/* LLM Metadata Fields */}
                 <View style={styles.reviewField}>
                   <Text style={styles.reviewLabel}>Category</Text>
                   <Dropdown

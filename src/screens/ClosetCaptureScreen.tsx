@@ -146,22 +146,6 @@ const normalizeColorToPalette = (value?: string | null): ColorName | null => {
   return match ?? null;
 };
 
-const isDefined = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
-
-const buildTagList = (analysis?: WardrobeAnalyzeResponse | null): string[] => {
-  if (!analysis) {
-    return [];
-  }
-  const azure = Array.isArray(analysis.azure_tags) ? analysis.azure_tags : [];
-  return Array.from(
-    new Set(
-      azure
-        .map((tag) => (typeof tag === "string" ? tag.trim().toLowerCase() : ""))
-        .filter((tag) => tag.length > 0)
-    )
-  ).slice(0, 20);
-};
-
 export default function ClosetCaptureScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -312,9 +296,8 @@ export default function ClosetCaptureScreen() {
         setReviewCategory(llmCategory || hintCategory || "top");
 
         const inferredColor =
-          normalizeColorToPalette(result.color_hint) ||
           normalizeColorToPalette(result.llm_metadata?.color_name) ||
-          normalizeColorToPalette(result.azure_colors?.dominantColors?.[0]) ||
+          normalizeColorToPalette(result.color_hint) ||
           null;
         setReviewColor(inferredColor);
 
@@ -471,12 +454,6 @@ export default function ClosetCaptureScreen() {
     try {
       setIsSaving(true);
 
-      // Prefer user-selected primary color; fall back to Azure dominantColors
-      const fallbackColors = (analysisResult.azure_colors?.dominantColors || [])
-        .map((entry) => normalizeColorToPalette(entry))
-        .filter(isDefined);
-      const inferredColors: ColorName[] = reviewColor ? [reviewColor] : fallbackColors;
-
       // Build editable metadata, starting from LLM base
       const baseMeta = (analysisResult.llm_metadata || {}) as FashionMetadata;
       const finalMetadata: FashionMetadata = {
@@ -484,7 +461,14 @@ export default function ClosetCaptureScreen() {
         type: metaType ?? baseMeta.type ?? "unknown",
         pattern: metaPattern ?? baseMeta.pattern ?? "unknown",
         fit: metaFit ?? baseMeta.fit ?? "unknown",
-        color_name: metaColorName ?? baseMeta.color_name ?? "unknown",
+        // Single source of truth for primary color: prefer explicit metadata override,
+        // then reviewColor chip, then LLM / hint color
+        color_name:
+          metaColorName ??
+          reviewColor ??
+          baseMeta.color_name ??
+          (analysisResult.color_hint as string | undefined) ??
+          "unknown",
         color_type: (metaColorTone ?? baseMeta.color_type ?? "unknown") as FashionMetadata["color_type"],
         fabric: metaFabric ?? baseMeta.fabric ?? "unknown",
         style_tags:
@@ -493,14 +477,40 @@ export default function ClosetCaptureScreen() {
             : baseMeta.style_tags ?? [],
       };
 
+      // Build tags array from finalized LLM metadata
+      const tags: string[] = [];
+      if (finalMetadata.type && finalMetadata.type !== "unknown") {
+        tags.push(finalMetadata.type);
+      }
+      if (finalMetadata.pattern && finalMetadata.pattern !== "unknown") {
+        tags.push(finalMetadata.pattern);
+      }
+      if (finalMetadata.fabric && finalMetadata.fabric !== "unknown") {
+        tags.push(finalMetadata.fabric);
+      }
+      if (Array.isArray(finalMetadata.style_tags) && finalMetadata.style_tags.length > 0) {
+        tags.push(
+          ...finalMetadata.style_tags
+            .filter((t) => typeof t === "string")
+            .map((t) => t as string)
+        );
+      }
+
+      // Build a single-color array from finalized metadata color_name
+      const primaryColor =
+        typeof finalMetadata.color_name === "string" && finalMetadata.color_name !== "unknown"
+          ? finalMetadata.color_name
+          : (analysisResult.color_hint as string | undefined);
+      const colorsPayload = primaryColor ? [primaryColor] : undefined;
+
       const created: WardrobeItemResponse = await createWardrobeItem({
         imageUrl: analysisResult.imageUrl,
         cleanImageUrl: cleanImageUrl,
         category: reviewCategory,
-        colors: inferredColors.length > 0 ? inferredColors : undefined,
+        colors: colorsPayload,
         notes: note || undefined,
         metadata: finalMetadata,
-        tags: analysisResult.azure_tags || [],
+        tags: tags,
         styleVibe: selectedStyleVibes.length > 0 ? selectedStyleVibes : undefined,
       });
 
