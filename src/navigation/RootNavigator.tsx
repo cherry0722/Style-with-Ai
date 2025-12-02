@@ -6,6 +6,7 @@ import SignupScreen from "../screens/SignupScreen";
 import SplashScreen from "../screens/SplashScreen";
 import Tabs from "./Tabs";
 import CalendarScreen from "../screens/CalendarScreen";
+import OnboardingProfileScreen from "../screens/OnboardingProfileScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -14,6 +15,7 @@ export type RootStackParamList = {
   Signup: undefined;
   Main: undefined;
   Calendar: undefined;
+  OnboardingProfile: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -27,6 +29,11 @@ export default function RootNavigator() {
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Main" component={Tabs} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />
+      <Stack.Screen
+        name="OnboardingProfile"
+        component={OnboardingProfileScreen}
+        options={{ headerShown: false }}
+      />
     </Stack.Navigator>
   );
 }

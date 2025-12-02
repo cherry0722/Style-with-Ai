@@ -7,20 +7,17 @@ import {
   Image,
   RefreshControl,
   Alert,
-  Switch,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../store/settings';
 import { useCalendar } from '../store/calendar';
-import { useNotifications } from '../store/notifications';
 import { getWeatherData, convertTemperature, getWeatherIconUrl, clampTemperatureF } from '../services/weather';
 import { WeatherData, LocationData, OutfitPreferences } from '../types';
 import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
-import { dailyGreetings } from '../data/aestheticContent';
 import StyleInspirationVideo from '../components/StyleInspirationVideo';
 import { suggestOutfitForUser, OutfitFromAI, OutfitItemDetail, CurrentOutfit } from '../services/recommender';
 import { PreferencesPanel, Preferences } from '../components/PreferencesPanel';
@@ -32,7 +29,6 @@ export default function HomeScreen() {
   const settings = useSettings();
   const theme = useTheme();
   const { getEventsForDate } = useCalendar();
-  const { unreadCount } = useNotifications();
   
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [location, setLocation] = useState<LocationData | null>(null);
@@ -56,14 +52,13 @@ export default function HomeScreen() {
   });
 
   const firstName = user?.profile?.preferredName || user?.displayName || user?.username || (user?.email ? user.email.split('@')[0] : 'there');
+  const displayName = user?.username || user?.email || "there";
   const today = new Date().toISOString().split('T')[0];
   const todayEvents = getEventsForDate(today);
 
   // Get daily greeting
   const getDailyGreeting = () => {
-    const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-    const greetingIndex = dayOfYear % dailyGreetings.length;
-    return dailyGreetings[greetingIndex].replace('{name}', firstName);
+    return `Welcome back, ${displayName}`;
   };
 
   const loadWeatherData = useCallback(async (forceRefresh = false) => {
@@ -179,7 +174,7 @@ export default function HomeScreen() {
       const locationPayload = {
         latitude: locationData.latitude,
         longitude: locationData.longitude,
-        name: locationData.city || locationData.name || 'Current Location',
+        name: (locationData as LocationData).city,
       };
 
       const cleanedPreferences = removeEmptyPreferences(preferences);
@@ -273,7 +268,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Header with Actions */}
-      <SafeAreaView edges={['top']}>
+      <SafeAreaView>
         <View style={styles.header}>
           <View style={styles.headerActions}>
             <Pressable
@@ -443,10 +438,10 @@ export default function HomeScreen() {
 
       {/* Weather Card */}
       <View style={styles.weatherCard}>
-        <View style={styles.weatherHeader}>
+          <View style={styles.weatherHeader}>
           <View>
             <Text style={styles.weatherLocation}>
-              {location?.city || 'Current Location'}
+              {location ? location.city : 'Current Location'}
             </Text>
             <Text style={styles.weatherCondition}>
               {convertedWeather ? `${getWeatherEmoji(convertedWeather.condition)} ${convertedWeather.description}` : 'Loading...'}
@@ -606,9 +601,7 @@ const createStyles = (theme: any) => ({
   heroContent: {
     marginBottom: theme.spacing.xl,
   },
-  heroMedia: {
-    width: '100%',
-  },
+  heroMedia: {},
           calendarButton: {
             padding: theme.spacing.sm,
             borderRadius: theme.borderRadius.md,
@@ -650,11 +643,6 @@ const createStyles = (theme: any) => ({
     height: 18,
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
-  },
-  badgeText: {
-    color: theme.colors.white,
-    fontSize: theme.typography.xs,
-    fontWeight: theme.typography.bold,
   },
   weatherCard: {
     marginHorizontal: theme.spacing.lg,

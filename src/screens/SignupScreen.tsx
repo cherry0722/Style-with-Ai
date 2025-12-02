@@ -99,12 +99,13 @@ export default function SignupScreen({
     setLoading(true);
     try {
       await signup(email, password, username, phone);
+      console.log("[SignupScreen] Signup successful, navigating to OnboardingProfile");
       setLoading(false);
-      navigation.replace("Main");
+      navigation.replace("OnboardingProfile");
     } catch (err: any) {
       setLoading(false);
       setError(err.message || "Signup failed. Please try again.");
-      console.error("Signup error:", err);
+      console.error("[SignupScreen] Signup error:", err);
     }
   }
 
