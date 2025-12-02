@@ -113,4 +113,56 @@ router.get("/users", auth, async (req, res) => {
   }
 });
 
+// POST /api/users/profile - create or update the authenticated user's profile
+router.post("/users/profile", auth, async (req, res) => {
+  try {
+    const userId =
+      (req.user && req.user.id) ||
+      (req.user && req.user.userId) ||
+      (req.user && (req.user._id?.toString?.() || req.user._id));
+
+    if (!userId) {
+      return res.status(401).json({ message: "Invalid auth payload" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const { age, gender, heightCm, weightLb } = req.body || {};
+
+    // Ensure profile object exists
+    if (!user.profile) {
+      user.profile = {};
+    }
+
+    // Overwrite only the fields that are provided in the body
+    if (typeof age !== "undefined") {
+      user.profile.age = age;
+    }
+    if (typeof gender !== "undefined") {
+      user.profile.gender = gender;
+    }
+    if (typeof heightCm !== "undefined") {
+      user.profile.heightCm = heightCm;
+    }
+    if (typeof weightLb !== "undefined") {
+      user.profile.weightLb = weightLb;
+    }
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      profile: user.profile,
+    });
+  } catch (err) {
+    console.error("Error updating user profile:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while updating user profile" });
+  }
+});
+
 module.exports = router;

@@ -25,7 +25,29 @@ const userSchema = Schema(
     image: {
       type: String,
     },
+    // Optional profile fields used for personalization / onboarding
+    profile: {
+      age: {
+        type: Number,
+        default: null,
+      },
+      gender: {
+        type: String,
+        default: null,
+      },
+      heightCm: {
+        type: Number,
+        default: null,
+      },
+      weightLb: {
+        type: Number,
+        default: null,
+      },
+    },
   },
+  {
+    timestamps: true,
+  }
 );
 
 userSchema.pre('save', async function (next) {

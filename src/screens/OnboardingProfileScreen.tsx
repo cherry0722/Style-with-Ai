@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { saveUserProfile } from "../api/user";
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -53,7 +54,7 @@ export default function OnboardingProfileScreen() {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (submitting) return;
 
     const parsedAge = parseNumber(age);
@@ -85,12 +86,34 @@ export default function OnboardingProfileScreen() {
     setSubmitting(true);
 
     try {
-      console.log("[OnboardingProfile] Saving profile and navigating to Main", {
+      console.log("[Onboarding] Sending profile to backend...", {
         age: parsedAge,
         gender,
         heightCm: parsedHeight,
         weightLb: parsedWeight,
       });
+
+      const response = await saveUserProfile({
+        age: parsedAge,
+        gender,
+        heightCm: parsedHeight,
+        weightLb: parsedWeight,
+      });
+
+      console.log(
+        "[Onboarding] Backend saved profile:",
+        JSON.stringify(response.data)
+      );
+
+      if (response.status !== 200 && !response.data?.success) {
+        console.error(
+          "[Onboarding] Backend did not confirm success:",
+          response.status,
+          response.data
+        );
+        setError("Failed to save your profile. Please try again.");
+        return;
+      }
 
       // Store these fields under the user's profile, consistent with SettingsScreen
       updateProfile?.({
@@ -107,6 +130,12 @@ export default function OnboardingProfileScreen() {
         index: 0,
         routes: [{ name: "Main" }],
       });
+    } catch (err: any) {
+      console.error("[Onboarding] Error saving profile:", err);
+      setError(
+        err?.message ||
+          "Unable to save your profile right now. Please try again."
+      );
     } finally {
       setSubmitting(false);
     }

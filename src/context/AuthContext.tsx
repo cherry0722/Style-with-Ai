@@ -174,8 +174,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  const updateProfile = (patch: Partial<UserAuth>) => {
-    setUser((prev) => (prev ? { ...prev, ...patch } : null));
+  const updateProfile = async (patch: Partial<UserAuth>) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const nextUser = { ...prev, ...patch };
+      // Persist updated user to AsyncStorage (and localStorage for web)
+      AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser)).catch(
+        (err) => {
+          console.error("[Auth] Failed to persist updated user profile:", err);
+        }
+      );
+      if (typeof localStorage !== "undefined") {
+        try {
+          localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+        } catch (err) {
+          console.error(
+            "[Auth] Failed to persist updated user profile to localStorage:",
+            err
+          );
+        }
+      }
+      return nextUser;
+    });
   };
 
   return (
