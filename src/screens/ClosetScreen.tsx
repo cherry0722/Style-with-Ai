@@ -1,9 +1,11 @@
 // NOTE: ClosetScreen requires an authenticated user; logged-out users see a login prompt.
 import React, { useEffect, useState, useCallback } from "react";
-import { View, FlatList, Text, ActivityIndicator, Alert, SafeAreaView, Pressable } from "react-native";
+import { View, FlatList, Text, ActivityIndicator, Alert, SafeAreaView, Pressable, ScrollView } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/RootNavigator";
+import { Ionicons } from "@expo/vector-icons";
 import ClothingCard from "../components/ClothingCard";
 import { useCloset } from "../store/closet";
 import { useAuth } from "../context/AuthContext";
@@ -132,23 +134,23 @@ export default function ClosetScreen() {
   // Show login prompt if user is not authenticated
   if (!user) {
     return (
-      <SafeAreaView style={{ flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ fontSize: 20, fontWeight: '600', marginBottom: 8, color: theme.colors.textPrimary }}>
+      <SafeAreaView style={{ flex: 1, padding: theme.spacing.xl, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <Text style={{ fontSize: theme.typography.xl, fontWeight: theme.typography.semibold, marginBottom: theme.spacing.sm, color: theme.colors.textPrimary }}>
           Sign in to see your wardrobe
         </Text>
-        <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginBottom: 16 }}>
+        <Text style={{ textAlign: 'center', color: theme.colors.textSecondary, marginBottom: theme.spacing.lg, lineHeight: theme.typography.base * theme.typography.lineHeight }}>
           Upload outfits, manage your closet, and let Myra suggest looks just for you.
         </Text>
         <Pressable
           onPress={() => navigation.replace('Login')}
           style={{
             backgroundColor: theme.colors.accent,
-            paddingHorizontal: 24,
-            paddingVertical: 12,
-            borderRadius: theme.borderRadius.md,
+            paddingHorizontal: theme.spacing.xl,
+            paddingVertical: theme.spacing.md,
+            borderRadius: theme.borderRadius.lg,
           }}
         >
-          <Text style={{ color: theme.colors.white, fontWeight: '600' }}>Go to login</Text>
+          <Text style={{ color: theme.colors.white, fontWeight: theme.typography.semibold }}>Go to login</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -156,18 +158,19 @@ export default function ClosetScreen() {
 
   if (loading && items.length === 0) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator />
-        <Text style={{ marginTop: 12, color: theme.colors.textSecondary }}>Loading your wardrobe...</Text>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.background }}>
+        <ActivityIndicator color={theme.colors.accent} />
+        <Text style={{ marginTop: theme.spacing.md, color: theme.colors.textSecondary, fontSize: theme.typography.base }}>Loading your wardrobe...</Text>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, padding: 16 }}>
+    <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
       {items.length === 0 ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 40 }}>
-          <Text style={{ textAlign: "center", fontSize: 16, color: theme.colors.textSecondary }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: theme.spacing['4xl'] }}>
+          <Ionicons name="shirt-outline" size={48} color={theme.colors.textSecondary} />
+          <Text style={{ textAlign: "center", fontSize: theme.typography.base, color: theme.colors.textSecondary, lineHeight: theme.typography.base * theme.typography.lineHeight, marginTop: theme.spacing.md }}>
             Your closet is empty. Use the Scan tab to add garments.
           </Text>
         </View>
@@ -175,14 +178,28 @@ export default function ClosetScreen() {
         <FlatList
           data={items}
           keyExtractor={(it) => it.id}
-          renderItem={({ item }) => (
-            <ClothingCard
-              item={item}
-              onDelete={handleDeleteItem}
-              onToggleFavorite={handleToggleFavorite}
-            />
+          numColumns={2}
+          columnWrapperStyle={{ 
+            gap: theme.spacing.md,
+            paddingHorizontal: theme.spacing.lg,
+            marginBottom: theme.spacing.md,
+          }}
+          contentContainerStyle={{ 
+            paddingTop: theme.spacing.lg,
+            paddingBottom: theme.spacing.xl,
+          }}
+          renderItem={({ item, index }) => (
+            <Animated.View
+              entering={FadeInDown.delay(index * 50).duration(250).springify()}
+              style={{ flex: 1, marginHorizontal: theme.spacing.xs }}
+            >
+              <ClothingCard
+                item={item}
+                onDelete={handleDeleteItem}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            </Animated.View>
           )}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         />
       )}
     </View>
