@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "../screens/HomeScreen";
-import ClosetScreen from "../screens/ClosetScreen";
-import OutfitScreen from "../screens/OutfitScreen";
-import FavoritesScreen from "../screens/FavoritesScreen";
+import ClosetCaptureScreen from "../screens/ClosetCaptureScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import AvatarScreen from "../screens/AvatarScreen";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,10 +14,8 @@ import { useTheme } from "../context/ThemeContext";
 
 export type TabParamList = {
   Home: undefined;
-  Explore: undefined;
-  Outfit: undefined;
+  Closet: undefined;
   Avatar: undefined;
-  Favs: undefined;
   Settings: undefined;
 };
 
@@ -34,19 +30,19 @@ export default function Tabs() {
   function handleLogout() {
     setMenuOpen(false);
     logout();
-    navigation.replace("Login");
+    // Reset navigation to AuthGate, which will route to Login since user is now null
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'AuthGate' }],
+    });
   }
 
   function iconFor(route: keyof TabParamList): keyof typeof Ionicons.glyphMap {
     switch (route) {
       case "Home":
         return "home-outline";
-      case "Explore":
-        return "compass-outline";
-      case "Outfit":
+      case "Closet":
         return "shirt-outline";
-      case "Favs":
-        return "heart-outline";
       case "Avatar":
         return "person-outline";
       case "Settings":
@@ -119,24 +115,17 @@ export default function Tabs() {
           }} 
         />
         <Tab.Screen 
-          name="Explore" 
-          component={ClosetScreen} 
-          options={{ title: "Explore" }} 
-        />
-        <Tab.Screen 
-          name="Outfit" 
-          component={OutfitScreen} 
-          options={{ title: "Outfit" }} 
+          name="Closet" 
+          component={ClosetCaptureScreen} 
+          options={{ 
+            title: "Closet",
+            headerRight: () => null, // Explicitly remove bell/notifications icon
+          }} 
         />
         <Tab.Screen
           name="Avatar"
           component={AvatarScreen}
           options={{ title: "Avatar" }}
-        />
-        <Tab.Screen 
-          name="Favs" 
-          component={FavoritesScreen} 
-          options={{ title: "Favorites" }} 
         />
         <Tab.Screen 
           name="Settings" 
