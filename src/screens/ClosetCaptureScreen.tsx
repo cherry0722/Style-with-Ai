@@ -25,6 +25,9 @@ import { useCloset } from "../store/closet";
 import { useTheme } from "../context/ThemeContext";
 import { hapticFeedback } from "../utils/haptics";
 import ClothingCard from "../components/ClothingCard";
+import OutfitMetadataEditor, {
+  STYLE_TAG_OPTIONS,
+} from "../components/OutfitMetadataEditor";
 import {
   fetchWardrobeItems,
   uploadWardrobeImage,
@@ -36,9 +39,6 @@ import {
   WardrobeAnalyzeResponse,
 } from "../api/wardrobe";
 import { Garment, GarmentCategory, ColorName, FashionMetadata } from "../types";
-
-const CATEGORIES: GarmentCategory[] = ["top", "bottom", "dress", "outerwear", "shoes", "accessory"];
-const COLORS: ColorName[] = ["black", "white", "gray", "blue", "green", "red", "yellow", "beige", "brown", "pink", "purple"];
 
 type ClosetCategoryFilter = "all" | "top" | "bottom" | "outerwear" | "shoes" | "accessory" | "favorites";
 type AddFlowStep = "idle" | "analyzing" | "review" | "error";
@@ -53,74 +53,8 @@ const FILTER_OPTIONS: { key: ClosetCategoryFilter; label: string }[] = [
   { key: "favorites", label: "Favorites" },
 ];
 
-const META_TYPE_OPTIONS = [
-  "t-shirt",
-  "shirt",
-  "polo",
-  "hoodie",
-  "sweater",
-  "jeans",
-  "trousers",
-  "shorts",
-  "skirt",
-  "dress",
-  "jacket",
-  "coat",
-  "shoes",
-  "sneakers",
-  "boots",
-  "heels",
-];
-
-const META_PATTERN_OPTIONS = [
-  "solid",
-  "striped",
-  "plaid",
-  "checkered",
-  "printed",
-  "floral",
-  "graphic",
-  "color-block",
-];
-
-const META_FIT_OPTIONS = [
-  "regular",
-  "slim",
-  "relaxed",
-  "oversized",
-  "tailored",
-];
-
-const META_COLOR_NAME_OPTIONS: ColorName[] = COLORS;
-
-const META_COLOR_TONE_OPTIONS = [
-  "neutral",
-  "warm",
-  "cool",
-  "bold",
-  "pastel",
-] as const;
-
-const META_FABRIC_OPTIONS = [
-  "cotton",
-  "denim",
-  "wool",
-  "linen",
-  "silk",
-  "polyester",
-  "leather",
-  "synthetic",
-  "unknown",
-];
-
-const STYLE_VIBE_OPTIONS = [
-  "casual",
-  "minimal",
-  "streetwear",
-  "sporty",
-  "formal",
-  "party",
-];
+// NOTE: Option lists for category, type, fabric, color family, pattern, fit, and style tags
+// are defined in `OutfitMetadataEditor` and imported where needed.
 
 const normalizeCategory = (value?: string | null, fallback: GarmentCategory = "top"): GarmentCategory => {
   if (!value) return fallback;
@@ -136,14 +70,6 @@ const normalizeCategory = (value?: string | null, fallback: GarmentCategory = "t
     return "shoes";
   if (lower.includes("accessor")) return "accessory";
   return fallback;
-};
-
-const normalizeColorToPalette = (value?: string | null): ColorName | null => {
-  if (!value) return null;
-  const lower = value.toLowerCase();
-  if (lower === "unknown") return null;
-  const match = COLORS.find((color) => lower.includes(color));
-  return match ?? null;
 };
 
 export default function ClosetCaptureScreen() {
@@ -164,12 +90,11 @@ export default function ClosetCaptureScreen() {
   const [addStep, setAddStep] = useState<AddFlowStep>("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [reviewCategory, setReviewCategory] = useState<GarmentCategory>("top");
-  const [reviewColor, setReviewColor] = useState<ColorName | null>(null);
   const [metaType, setMetaType] = useState<string | null>(null);
   const [metaPattern, setMetaPattern] = useState<string | null>(null);
   const [metaFit, setMetaFit] = useState<string | null>(null);
-  const [metaColorName, setMetaColorName] = useState<string | null>(null);
-  const [metaColorTone, setMetaColorTone] = useState<string | null>(null);
+  const [metaColorNameText, setMetaColorNameText] = useState<string>("");
+  const [metaColorFamily, setMetaColorFamily] = useState<string | null>(null);
   const [metaFabric, setMetaFabric] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -295,30 +220,24 @@ export default function ClosetCaptureScreen() {
         const hintCategory = result.category_hint ? normalizeCategory(result.category_hint) : null;
         setReviewCategory(llmCategory || hintCategory || "top");
 
-        const inferredColor =
-          normalizeColorToPalette(result.llm_metadata?.color_name) ||
-          normalizeColorToPalette(result.color_hint) ||
-          null;
-        setReviewColor(inferredColor);
-
         const baseMeta = (result.llm_metadata || {}) as FashionMetadata;
-        const pickFromOptions = (val: string | undefined, opts: readonly string[]) => {
-          if (!val) return null;
-          const lower = val.toLowerCase();
-          return opts.find((opt) => opt.toLowerCase() === lower) || null;
-        };
 
-        setMetaType(pickFromOptions(baseMeta.type, META_TYPE_OPTIONS));
-        setMetaPattern(pickFromOptions(baseMeta.pattern, META_PATTERN_OPTIONS));
-        setMetaFit(pickFromOptions(baseMeta.fit, META_FIT_OPTIONS));
-        setMetaColorName(
-          pickFromOptions(baseMeta.color_name, META_COLOR_NAME_OPTIONS as unknown as string[])
+        // Seed editable metadata fields from LLM metadata and hints
+        setMetaType(baseMeta.type ?? null);
+        setMetaPattern(baseMeta.pattern ?? null);
+        setMetaFit(baseMeta.fit ?? null);
+        setMetaFabric(baseMeta.fabric ?? null);
+        setMetaColorNameText(
+          baseMeta.color_name ||
+            (result.color_hint as string | null) ||
+            ""
         );
-        setMetaColorTone(pickFromOptions(baseMeta.color_type, META_COLOR_TONE_OPTIONS));
-        setMetaFabric(pickFromOptions(baseMeta.fabric, META_FABRIC_OPTIONS));
+        setMetaColorFamily(
+          (baseMeta.color_type as string | null) ?? null
+        );
 
         const baseStyleTags = Array.isArray(baseMeta.style_tags) ? baseMeta.style_tags : [];
-        const initialVibes = STYLE_VIBE_OPTIONS.filter((opt) =>
+        const initialVibes = STYLE_TAG_OPTIONS.filter((opt) =>
           baseStyleTags.some((tag) => typeof tag === "string" && tag.toLowerCase() === opt.toLowerCase())
         );
         setSelectedStyleVibes(initialVibes);
@@ -340,12 +259,11 @@ export default function ClosetCaptureScreen() {
       setShowAddModal(true);
       setAnalysisResult(null);
       setReviewCategory("top");
-      setReviewColor(null);
       setMetaType(null);
       setMetaPattern(null);
       setMetaFit(null);
-      setMetaColorName(null);
-      setMetaColorTone(null);
+      setMetaColorNameText("");
+      setMetaColorFamily(null);
       setMetaFabric(null);
       setSelectedStyleVibes([]);
       setNote("");
@@ -451,6 +369,21 @@ export default function ClosetCaptureScreen() {
       return;
     }
 
+    // Final validation before save
+    if (
+      !reviewCategory ||
+      !metaType ||
+      !metaPattern ||
+      !metaFit ||
+      !metaColorNameText.trim()
+    ) {
+      Alert.alert(
+        "Missing fields",
+        "Please complete all fields before saving."
+      );
+      return;
+    }
+
     try {
       setIsSaving(true);
 
@@ -458,18 +391,14 @@ export default function ClosetCaptureScreen() {
       const baseMeta = (analysisResult.llm_metadata || {}) as FashionMetadata;
       const finalMetadata: FashionMetadata = {
         ...baseMeta,
+        category: reviewCategory as FashionMetadata["category"],
         type: metaType ?? baseMeta.type ?? "unknown",
         pattern: metaPattern ?? baseMeta.pattern ?? "unknown",
         fit: metaFit ?? baseMeta.fit ?? "unknown",
-        // Single source of truth for primary color: prefer explicit metadata override,
-        // then reviewColor chip, then LLM / hint color
-        color_name:
-          metaColorName ??
-          reviewColor ??
-          baseMeta.color_name ??
-          (analysisResult.color_hint as string | undefined) ??
-          "unknown",
-        color_type: (metaColorTone ?? baseMeta.color_type ?? "unknown") as FashionMetadata["color_type"],
+        color_name: metaColorNameText.trim(),
+        color_type: (metaColorFamily ??
+          baseMeta.color_type ??
+          "unknown") as FashionMetadata["color_type"],
         fabric: metaFabric ?? baseMeta.fabric ?? "unknown",
         style_tags:
           selectedStyleVibes.length > 0
@@ -477,31 +406,30 @@ export default function ClosetCaptureScreen() {
             : baseMeta.style_tags ?? [],
       };
 
-      // Build tags array from finalized LLM metadata
-      const tags: string[] = [];
+      // Build tags array from finalized metadata (type, pattern, fabric, style_tags[])
+      const tagsSet = new Set<string>();
       if (finalMetadata.type && finalMetadata.type !== "unknown") {
-        tags.push(finalMetadata.type);
+        tagsSet.add(finalMetadata.type);
       }
       if (finalMetadata.pattern && finalMetadata.pattern !== "unknown") {
-        tags.push(finalMetadata.pattern);
+        tagsSet.add(finalMetadata.pattern);
       }
       if (finalMetadata.fabric && finalMetadata.fabric !== "unknown") {
-        tags.push(finalMetadata.fabric);
+        tagsSet.add(finalMetadata.fabric);
       }
       if (Array.isArray(finalMetadata.style_tags) && finalMetadata.style_tags.length > 0) {
-        tags.push(
-          ...finalMetadata.style_tags
-            .filter((t) => typeof t === "string")
-            .map((t) => t as string)
-        );
+        finalMetadata.style_tags
+          .filter((t) => typeof t === "string")
+          .forEach((t) => tagsSet.add(t as string));
       }
+      const tags = Array.from(tagsSet);
 
-      // Build a single-color array from finalized metadata color_name
-      const primaryColor =
-        typeof finalMetadata.color_name === "string" && finalMetadata.color_name !== "unknown"
-          ? finalMetadata.color_name
-          : (analysisResult.color_hint as string | undefined);
-      const colorsPayload = primaryColor ? [primaryColor] : undefined;
+      // Build colors payload as [finalMetadata.color_name]
+      const colorsPayload =
+        typeof finalMetadata.color_name === "string" &&
+        finalMetadata.color_name.trim().length > 0
+          ? [finalMetadata.color_name.trim()]
+          : [];
 
       const created: WardrobeItemResponse = await createWardrobeItem({
         imageUrl: analysisResult.imageUrl,
@@ -511,7 +439,9 @@ export default function ClosetCaptureScreen() {
         notes: note || undefined,
         metadata: finalMetadata,
         tags: tags,
-        styleVibe: selectedStyleVibes.length > 0 ? selectedStyleVibes : undefined,
+        styleVibe: Array.isArray(finalMetadata.style_tags)
+          ? (finalMetadata.style_tags as string[])
+          : [],
       });
 
       const garment: Garment = {
@@ -541,12 +471,11 @@ export default function ClosetCaptureScreen() {
   const resetForm = () => {
     setSelectedImage(null);
     setReviewCategory("top");
-    setReviewColor(null);
     setMetaType(null);
     setMetaPattern(null);
     setMetaFit(null);
-    setMetaColorName(null);
-    setMetaColorTone(null);
+    setMetaColorNameText("");
+    setMetaColorFamily(null);
     setMetaFabric(null);
     setSelectedStyleVibes([]);
     setNote("");
@@ -791,15 +720,14 @@ export default function ClosetCaptureScreen() {
                         setSelectedImage(null);
                         setAnalysisResult(null);
                         setAddStep("idle");
-                        setReviewColor(null);
                         setReviewCategory("top");
                         setCleanImageUrl(undefined);
                         setAnalysisError(null);
                         setMetaType(null);
                         setMetaPattern(null);
                         setMetaFit(null);
-                        setMetaColorName(null);
-                        setMetaColorTone(null);
+                        setMetaColorNameText("");
+                        setMetaColorFamily(null);
                         setMetaFabric(null);
                         setSelectedStyleVibes([]);
                       }}
@@ -846,286 +774,27 @@ export default function ClosetCaptureScreen() {
             {addStep === "review" && analysisResult && (
               <>
                 <View style={themeStyles.modalSection}>
-                  <Text style={themeStyles.modalSectionTitle}>Category</Text>
-                  <View style={themeStyles.categoryGrid}>
-                    {CATEGORIES.map((cat) => {
-                      const isActive = reviewCategory === cat;
-                      return (
-                        <Pressable
-                          key={cat}
-                          style={[
-                            themeStyles.categoryChip,
-                            isActive && themeStyles.categoryChipActive,
-                          ]}
-                          onPress={() => {
-                            hapticFeedback.light();
-                            setReviewCategory(cat);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              themeStyles.categoryChipText,
-                              isActive && themeStyles.categoryChipTextActive,
-                            ]}
-                          >
-                            {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View style={themeStyles.modalSection}>
-                  <Text style={themeStyles.modalSectionTitle}>Primary Color</Text>
-                  <View style={themeStyles.colorGrid}>
-                    <Pressable
-                      key="auto"
-                      style={[
-                        themeStyles.colorChip,
-                        reviewColor === null && themeStyles.colorChipActive,
-                      ]}
-                      onPress={() => {
-                        hapticFeedback.light();
-                        setReviewColor(null);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          themeStyles.colorChipText,
-                          reviewColor === null && themeStyles.colorChipTextActive,
-                        ]}
-                      >
-                        Auto
-                      </Text>
-                    </Pressable>
-                    {COLORS.map((col) => {
-                      const isActive = reviewColor === col;
-                      return (
-                        <Pressable
-                          key={col}
-                          style={[
-                            themeStyles.colorChip,
-                            isActive && themeStyles.colorChipActive,
-                          ]}
-                          onPress={() => {
-                            hapticFeedback.light();
-                            setReviewColor(col);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              themeStyles.colorChipText,
-                              isActive && themeStyles.colorChipTextActive,
-                            ]}
-                          >
-                            {col.charAt(0).toUpperCase() + col.slice(1)}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                <View style={themeStyles.modalSection}>
-                  <Text style={themeStyles.modalSectionTitle}>AI Metadata</Text>
-                  <View style={themeStyles.metadataCard}>
-                    {/* Type */}
-                    <Text style={themeStyles.metadataLabel}>Type</Text>
-                    <View style={themeStyles.tagChipsContainer}>
-                      {META_TYPE_OPTIONS.map((opt) => {
-                        const isActive =
-                          (metaType ?? analysisResult.llm_metadata?.type) === opt;
-                        return (
-                          <Pressable
-                            key={opt}
-                            style={[
-                              themeStyles.tagChipSelectable,
-                              isActive && themeStyles.tagChipSelected,
-                            ]}
-                            onPress={() => setMetaType(opt)}
-                          >
-                            <Text
-                              style={[
-                                themeStyles.tagChipText,
-                                isActive && themeStyles.tagChipTextSelected,
-                              ]}
-                            >
-                              {opt}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {/* Pattern */}
-                    <Text style={themeStyles.metadataLabel}>Pattern</Text>
-                    <View style={themeStyles.tagChipsContainer}>
-                      {META_PATTERN_OPTIONS.map((opt) => {
-                        const isActive =
-                          (metaPattern ?? analysisResult.llm_metadata?.pattern) === opt;
-                        return (
-                          <Pressable
-                            key={opt}
-                            style={[
-                              themeStyles.tagChipSelectable,
-                              isActive && themeStyles.tagChipSelected,
-                            ]}
-                            onPress={() => setMetaPattern(opt)}
-                          >
-                            <Text
-                              style={[
-                                themeStyles.tagChipText,
-                                isActive && themeStyles.tagChipTextSelected,
-                              ]}
-                            >
-                              {opt}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {/* Fit */}
-                    <Text style={themeStyles.metadataLabel}>Fit</Text>
-                    <View style={themeStyles.tagChipsContainer}>
-                      {META_FIT_OPTIONS.map((opt) => {
-                        const isActive =
-                          (metaFit ?? analysisResult.llm_metadata?.fit) === opt;
-                        return (
-                          <Pressable
-                            key={opt}
-                            style={[
-                              themeStyles.tagChipSelectable,
-                              isActive && themeStyles.tagChipSelected,
-                            ]}
-                            onPress={() => setMetaFit(opt)}
-                          >
-                            <Text
-                              style={[
-                                themeStyles.tagChipText,
-                                isActive && themeStyles.tagChipTextSelected,
-                              ]}
-                            >
-                              {opt}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {/* Detected color name */}
-                    <Text style={themeStyles.metadataLabel}>Detected color</Text>
-                    <View style={themeStyles.tagChipsContainer}>
-                      {COLORS.map((opt) => {
-                        const isActive =
-                          (metaColorName ?? analysisResult.llm_metadata?.color_name) === opt;
-                        return (
-                          <Pressable
-                            key={opt}
-                            style={[
-                              themeStyles.tagChipSelectable,
-                              isActive && themeStyles.tagChipSelected,
-                            ]}
-                            onPress={() => setMetaColorName(opt)}
-                          >
-                            <Text
-                              style={[
-                                themeStyles.tagChipText,
-                                isActive && themeStyles.tagChipTextSelected,
-                              ]}
-                            >
-                              {opt}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {/* Color tone */}
-                    <Text style={themeStyles.metadataLabel}>Color tone</Text>
-                    <View style={themeStyles.tagChipsContainer}>
-                      {META_COLOR_TONE_OPTIONS.map((opt) => {
-                        const isActive =
-                          (metaColorTone ?? analysisResult.llm_metadata?.color_type) === opt;
-                        return (
-                          <Pressable
-                            key={opt}
-                            style={[
-                              themeStyles.tagChipSelectable,
-                              isActive && themeStyles.tagChipSelected,
-                            ]}
-                            onPress={() => setMetaColorTone(opt)}
-                          >
-                            <Text
-                              style={[
-                                themeStyles.tagChipText,
-                                isActive && themeStyles.tagChipTextSelected,
-                              ]}
-                            >
-                              {opt}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-
-                    {/* Fabric */}
-                    <Text style={themeStyles.metadataLabel}>Fabric</Text>
-                    <View style={themeStyles.tagChipsContainer}>
-                      {META_FABRIC_OPTIONS.map((opt) => {
-                        const isActive =
-                          (metaFabric ?? analysisResult.llm_metadata?.fabric) === opt;
-                        return (
-                          <Pressable
-                            key={opt}
-                            style={[
-                              themeStyles.tagChipSelectable,
-                              isActive && themeStyles.tagChipSelected,
-                            ]}
-                            onPress={() => setMetaFabric(opt)}
-                          >
-                            <Text
-                              style={[
-                                themeStyles.tagChipText,
-                                isActive && themeStyles.tagChipTextSelected,
-                              ]}
-                            >
-                              {opt}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </View>
-
-                <View style={themeStyles.modalSection}>
-                  <Text style={themeStyles.modalSectionTitle}>Style vibe</Text>
-                  <View style={themeStyles.tagChipsContainer}>
-                    {STYLE_VIBE_OPTIONS.map((vibe) => {
-                      const isSelected = selectedStyleVibes.includes(vibe);
-                      return (
-                        <Pressable
-                          key={vibe}
-                          onPress={() => toggleStyleVibe(vibe)}
-                          style={[
-                            themeStyles.tagChipSelectable,
-                            isSelected && themeStyles.tagChipSelected,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              themeStyles.tagChipText,
-                              isSelected && themeStyles.tagChipTextSelected,
-                            ]}
-                          >
-                            {vibe}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
+                  <OutfitMetadataEditor
+                    category={reviewCategory}
+                    type={metaType}
+                    fabric={metaFabric}
+                    colorName={metaColorNameText}
+                    colorFamily={metaColorFamily}
+                    pattern={metaPattern}
+                    fit={metaFit}
+                    styleTags={selectedStyleVibes}
+                    onChangeCategory={(value) => {
+                      hapticFeedback.light();
+                      setReviewCategory(value);
+                    }}
+                    onChangeType={setMetaType}
+                    onChangeFabric={setMetaFabric}
+                    onChangeColorName={setMetaColorNameText}
+                    onChangeColorFamily={setMetaColorFamily}
+                    onChangePattern={setMetaPattern}
+                    onChangeFit={setMetaFit}
+                    onToggleStyleTag={toggleStyleVibe}
+                  />
                 </View>
 
                 <View style={themeStyles.modalSection}>

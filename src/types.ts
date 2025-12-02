@@ -20,11 +20,11 @@ export type ColorName =
   | "purple";
 
 export interface FashionMetadata {
-  category?: "top" | "bottom" | "shoes";
+  category?: "top" | "bottom" | "shoes" | "outerwear" | "accessory" | "dress";
   type?: string;
   fabric?: string;
   color_name?: string;
-  color_type?: "neutral" | "warm" | "cool" | "bold" | "pastel";
+  color_type?: "neutral" | "warm" | "cool" | "vibrant" | "pastel" | "earthy" | "bold";
   pattern?: string;
   fit?: string;
   style_tags?: string[];
