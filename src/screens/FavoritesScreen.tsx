@@ -4,8 +4,10 @@ import { useCloset } from '../store/closet';
 import { toggleFavorite } from '../api/wardrobe';
 import ClothingCard from '../components/ClothingCard';
 import { Garment } from '../types';
+import { useTheme } from '../context/ThemeContext';
 
 export default function FavoritesScreen() {
+  const theme = useTheme();
   // Subscribe to items directly (stable reference, no derived arrays in selector)
   const items = useCloset((state) => state.items);
   const updateItem = useCloset((state) => state.updateItem);
@@ -39,6 +41,8 @@ export default function FavoritesScreen() {
     [items, updateItem]
   );
 
+  const styles = createStyles(theme);
+
   if (favorites.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -66,24 +70,26 @@ export default function FavoritesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  emptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  list: {
-    padding: 16,
-    gap: 12,
-  },
-});
+const createStyles = (theme: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    emptyContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.xl,
+    },
+    emptyText: {
+      fontSize: theme.typography.base,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: theme.typography.base * theme.typography.lineHeight,
+    },
+    list: {
+      padding: theme.spacing.lg,
+      gap: theme.spacing.md,
+    },
+  });

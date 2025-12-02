@@ -106,9 +106,10 @@ export default function SplashScreen() {
         ]).start();
       }, 1600);
 
-      // Navigate to main app after animation completes
+      // Navigate to AuthGate after animation completes
+      // AuthGate will then decide whether to route to Login or Main based on auth state
       setTimeout(() => {
-        navigation.replace('Main');
+        navigation.replace('AuthGate');
       }, 4000);
     };
 

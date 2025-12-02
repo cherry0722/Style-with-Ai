@@ -1,6 +1,6 @@
 // NOTE: ClosetScreen requires an authenticated user; logged-out users see a login prompt.
 import React, { useEffect, useState, useCallback } from "react";
-import { View, FlatList, Text, ActivityIndicator, Alert, SafeAreaView, Pressable, ScrollView } from "react-native";
+import { View, FlatList, Text, ActivityIndicator, Alert, SafeAreaView, Pressable } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useIsFocused, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -178,27 +178,12 @@ export default function ClosetScreen() {
         <FlatList
           data={items}
           keyExtractor={(it) => it.id}
-          numColumns={2}
-          columnWrapperStyle={{ 
-            gap: theme.spacing.md,
-            paddingHorizontal: theme.spacing.lg,
-            marginBottom: theme.spacing.md,
-          }}
-          contentContainerStyle={{ 
-            paddingTop: theme.spacing.lg,
-            paddingBottom: theme.spacing.xl,
-          }}
-          renderItem={({ item, index }) => (
-            <Animated.View
-              entering={FadeInDown.delay(index * 50).duration(250).springify()}
-              style={{ flex: 1, marginHorizontal: theme.spacing.xs }}
-            >
-              <ClothingCard
-                item={item}
-                onDelete={handleDeleteItem}
-                onToggleFavorite={handleToggleFavorite}
-              />
-            </Animated.View>
+          renderItem={({ item }) => (
+            <ClothingCard
+              item={item}
+              onDelete={handleDeleteItem}
+              onToggleFavorite={handleToggleFavorite}
+            />
           )}
         />
       )}

@@ -1,20 +1,35 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, Image, TextInput, ActivityIndicator, Alert } from "react-native";
+import { View, Text, Pressable, Image, TextInput, ActivityIndicator, Alert, StyleSheet } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { GarmentCategory } from "../types";
 import { uploadWardrobeImage, createWardrobeItem } from "../api/wardrobe";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
+import { hapticFeedback } from "../utils/haptics";
 
 const CATS: GarmentCategory[] = ["top", "bottom", "dress", "outerwear", "shoes", "accessory"];
 
+function Chip({ label, active, onPress, theme }: { label: string; active?: boolean; onPress?: () => void; theme: any }) {
+  const styles = createStyles(theme);
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export default function ScanScreen() {
   const { user } = useAuth();
+  const theme = useTheme();
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [category, setCategory] = useState<GarmentCategory>("top");
   const [notes, setNotes] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
+  const styles = createStyles(theme);
+
   async function pickImage() {
+    hapticFeedback.light();
     const res = await ImagePicker.launchImageLibraryAsync({ 
       mediaTypes: ImagePicker.MediaTypeOptions.Images, 
       quality: 0.7 
@@ -85,7 +100,7 @@ export default function ScanScreen() {
   };
 
   return (
-    <View style={{ flex: 1, padding: 16, gap: 12 }}>
+    <View style={styles.container}>
       <Pressable onPress={pickImage} style={styles.btnHollow}>
         <Text style={styles.btnHollowText}>
           {imageUri ? "Change photo" : "Pick photo"}
@@ -94,24 +109,29 @@ export default function ScanScreen() {
       {imageUri && (
         <Image 
           source={{ uri: imageUri }} 
-          style={{ width: "100%", height: 280, borderRadius: 12 }} 
+          style={styles.image}
         />
       )}
 
       <Text style={styles.label}>Category</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      <View style={styles.chipContainer}>
         {CATS.map((c) => (
           <Chip 
             key={c} 
             label={c} 
             active={c === category} 
-            onPress={() => setCategory(c)} 
+            onPress={() => {
+              hapticFeedback.light();
+              setCategory(c);
+            }}
+            theme={theme}
           />
         ))}
       </View>
 
       <TextInput 
         placeholder="Notes (brand, fit, etc.)" 
+        placeholderTextColor={theme.colors.textTertiary}
         value={notes} 
         onChangeText={setNotes} 
         style={styles.input} 
@@ -126,8 +146,8 @@ export default function ScanScreen() {
         ]}
       >
         {isSaving ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <ActivityIndicator color="#fff" size="small" />
+          <View style={styles.buttonContent}>
+            <ActivityIndicator color={theme.colors.white} size="small" />
             <Text style={styles.btnText}>Saving...</Text>
           </View>
         ) : (
@@ -135,30 +155,101 @@ export default function ScanScreen() {
         )}
       </Pressable>
 
-      <Text style={{ color: "#777", fontSize: 12 }}>
+      <Text style={styles.helperText}>
         *For MVP we pick an image and annotate category manually. Later you can auto-detect via on-device model.
       </Text>
     </View>
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active?: boolean; onPress?: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const styles = {
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 10, padding: 10 },
-  btn: { backgroundColor: "#111", borderRadius: 12, padding: 14, alignItems: "center" as const },
-  btnText: { color: "#fff", fontWeight: "700" as const },
-  btnHollow: { borderWidth: 1, borderColor: "#111", borderRadius: 12, padding: 12, alignItems: "center" as const },
-  btnHollowText: { fontWeight: "700" as const },
-  label: { fontWeight: "700" as const },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#ddd", borderRadius: 999 },
-  chipActive: { backgroundColor: "#111", borderColor: "#111" },
-  chipText: { fontWeight: "600" as const },
-  chipTextActive: { color: "#fff", fontWeight: "700" as const },
-};
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.md,
+      backgroundColor: theme.colors.background,
+    },
+    btnHollow: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      alignItems: "center",
+      backgroundColor: theme.colors.backgroundSecondary,
+    },
+    btnHollowText: {
+      fontWeight: theme.typography.semibold,
+      color: theme.colors.textPrimary,
+      fontSize: theme.typography.base,
+    },
+    image: {
+      width: "100%",
+      height: 280,
+      borderRadius: theme.borderRadius.lg,
+      backgroundColor: theme.colors.backgroundSecondary,
+    },
+    label: {
+      fontWeight: theme.typography.bold,
+      fontSize: theme.typography.base,
+      color: theme.colors.textPrimary,
+      marginBottom: theme.spacing.xs,
+    },
+    chipContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: theme.spacing.sm,
+    },
+    chip: {
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 999,
+      backgroundColor: theme.colors.backgroundSecondary,
+    },
+    chipActive: {
+      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.accent,
+    },
+    chipText: {
+      fontWeight: theme.typography.medium,
+      color: theme.colors.textSecondary,
+      fontSize: theme.typography.sm,
+    },
+    chipTextActive: {
+      color: theme.colors.white,
+      fontWeight: theme.typography.bold,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      backgroundColor: theme.colors.backgroundSecondary,
+      color: theme.colors.textPrimary,
+      fontSize: theme.typography.base,
+    },
+    btn: {
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.lg,
+      alignItems: "center",
+      minHeight: 52,
+    },
+    buttonContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+    },
+    btnText: {
+      color: theme.colors.white,
+      fontWeight: theme.typography.bold,
+      fontSize: theme.typography.base,
+    },
+    helperText: {
+      color: theme.colors.textSecondary,
+      fontSize: theme.typography.xs,
+      lineHeight: theme.typography.xs * theme.typography.lineHeight,
+    },
+  });

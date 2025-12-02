@@ -6,6 +6,7 @@ interface FavState {
   isFav: (s: OutfitSuggestion) => boolean;
   toggle: (s: OutfitSuggestion) => void;
   clear: () => void;
+  reset: () => void;
 }
 
 export const useFavorites = create<FavState>((set, get) => ({
@@ -19,5 +20,6 @@ export const useFavorites = create<FavState>((set, get) => ({
         : { items: [s, ...state.items] };
     }),
   clear: () => set({ items: [] }),
+  reset: () => set({ items: [] }),
 }));
 

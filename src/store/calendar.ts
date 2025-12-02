@@ -9,6 +9,7 @@ interface CalendarState {
   deleteEvent: (id: string) => void;
   getEventsForDate: (date: string) => CalendarEvent[];
   getEventsForDateRange: (startDate: string, endDate: string) => CalendarEvent[];
+  reset: () => void;
 }
 
 export const useCalendar = create<CalendarState>()(
@@ -57,6 +58,10 @@ export const useCalendar = create<CalendarState>()(
           const eventDate = new Date(event.date);
           return eventDate >= start && eventDate <= end;
         });
+      },
+      
+      reset: () => {
+        set({ events: [] });
       },
     }),
     {

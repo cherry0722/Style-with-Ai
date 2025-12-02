@@ -889,7 +889,7 @@ const createStyles = (theme: any) => ({
     height: 120,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: theme.colors.border || '#ccc',
+    borderColor: theme.colors.border,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginBottom: 4,

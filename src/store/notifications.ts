@@ -11,6 +11,7 @@ interface NotificationsState {
   deleteNotification: (id: string) => void;
   clearAllNotifications: () => void;
   getUnreadCount: () => number;
+  reset: () => void;
 }
 
 export const useNotifications = create<NotificationsState>()(
@@ -79,6 +80,13 @@ export const useNotifications = create<NotificationsState>()(
       
       getUnreadCount: () => {
         return get().unreadCount;
+      },
+      
+      reset: () => {
+        set({
+          notifications: [],
+          unreadCount: 0,
+        });
       },
     }),
     {

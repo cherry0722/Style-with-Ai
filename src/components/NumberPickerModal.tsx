@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { Modal, View, Text, Pressable } from "react-native";
+import { Modal, View, Text, Pressable, StyleSheet } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import { useTheme } from "../context/ThemeContext";
 
 type Props = {
   visible: boolean;
@@ -25,6 +26,7 @@ export default function NumberPickerModal({
   onConfirm,
   onClose,
 }: Props) {
+  const theme = useTheme();
   const options = useMemo(() => {
     const arr: number[] = [];
     for (let v = min; v <= max; v += step) arr.push(v);
@@ -39,39 +41,35 @@ export default function NumberPickerModal({
     onClose();
   }
 
+  const styles = createStyles(theme);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.25)" }} onPress={onClose}>
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "#fff",
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
-            padding: 16,
-          }}
-        >
-          <Text style={{ fontWeight: "800", fontSize: 16, textAlign: "center", marginBottom: 8 }}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <View style={styles.modalContent}>
+          <Text style={styles.title}>
             {title}
           </Text>
 
-          <View style={{ borderWidth: 1, borderColor: "#eee", borderRadius: 12, overflow: "hidden" }}>
+          <View style={styles.pickerContainer}>
             <Picker
               selectedValue={selected}
               onValueChange={(v) => setSelected(Number(v))}
-              style={{ height: 200 }}
+              style={styles.picker}
             >
               {options.map((v) => (
-                <Picker.Item key={v} label={`${v}${unit ? ` ${unit}` : ""}`} value={v} />
+                <Picker.Item 
+                  key={v} 
+                  label={`${v}${unit ? ` ${unit}` : ""}`} 
+                  value={v}
+                  color={theme.colors.textPrimary}
+                />
               ))}
             </Picker>
           </View>
 
-          <Pressable onPress={handleDone} style={{ marginTop: 12, backgroundColor: "#111", borderRadius: 12, padding: 14, alignItems: "center" }}>
-            <Text style={{ color: "#fff", fontWeight: "700" }}>Done</Text>
+          <Pressable onPress={handleDone} style={styles.doneButton}>
+            <Text style={styles.doneButtonText}>Done</Text>
           </Pressable>
         </View>
       </Pressable>
@@ -79,3 +77,48 @@ export default function NumberPickerModal({
   );
 }
 
+const createStyles = (theme: ReturnType<typeof useTheme>) =>
+  StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: theme.colors.overlay,
+      justifyContent: "flex-end",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.backgroundSecondary,
+      borderTopLeftRadius: theme.borderRadius["2xl"],
+      borderTopRightRadius: theme.borderRadius["2xl"],
+      padding: theme.spacing.lg,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    title: {
+      fontWeight: theme.typography.extrabold,
+      fontSize: theme.typography.base,
+      textAlign: "center",
+      marginBottom: theme.spacing.md,
+      color: theme.colors.textPrimary,
+    },
+    pickerContainer: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.lg,
+      overflow: "hidden",
+      backgroundColor: theme.colors.background,
+    },
+    picker: {
+      height: 200,
+    },
+    doneButton: {
+      marginTop: theme.spacing.md,
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.lg,
+      alignItems: "center",
+    },
+    doneButtonText: {
+      color: theme.colors.white,
+      fontWeight: theme.typography.bold,
+      fontSize: theme.typography.base,
+    },
+  });
