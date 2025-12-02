@@ -1,10 +1,16 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode, useEffect } from "react";
 import type { UserAuth } from "../types";
 import client from "../api/client";
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCloset } from "../store/closet";
+import { useCurrentOutfitStore } from "../store/useCurrentOutfitStore";
+import { useCalendar } from "../store/calendar";
+import { useNotifications } from "../store/notifications";
+import { useFavorites } from "../store/favorites";
 
 interface AuthCtx {
   user: UserAuth | null;
+  loading: boolean;
   setUser: (u: UserAuth | null) => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, username?: string, phone?: string) => Promise<void>;
@@ -17,8 +23,42 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+const USER_STORAGE_KEY = 'myra_user';
+const TOKEN_STORAGE_KEY = 'token';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserAuth | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Initialize: Load user and token from AsyncStorage on mount
+  useEffect(() => {
+    async function initializeAuth() {
+      try {
+        // Try to restore user data from AsyncStorage
+        const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
+        const storedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+        
+        if (storedUser && storedToken) {
+          try {
+            const userData = JSON.parse(storedUser);
+            setUser(userData);
+            console.log("Restored user from storage:", userData);
+          } catch (e) {
+            console.error("Failed to parse stored user data:", e);
+            // Clear invalid data
+            await AsyncStorage.removeItem(USER_STORAGE_KEY);
+            await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+          }
+        }
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    initializeAuth();
+  }, []);
 
   // Login with email/password
   async function login(email: string, password: string) {
@@ -28,9 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Store token
       if (token) {
-        await AsyncStorage.setItem('token', token);
+        await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
         if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('token', token);
+          localStorage.setItem(TOKEN_STORAGE_KEY, token);
         }
       }
 
@@ -40,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: user.username,
         phone: user.phone,
       };
+      
+      // Store user data in AsyncStorage for persistence across app restarts
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
       
       setUser(userData);
       console.log("Login successful! User set:", userData);
@@ -52,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Signup with email, password, username, phone
   async function signup(email: string, password: string, username?: string, phone?: string, image?: string) {
     // Debug logging (development only) - sanitize password
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    if (typeof _DEV_ !== 'undefined' && _DEV_) {
       const sanitizedPayload = { email, username, phone, image: image ? '[provided]' : undefined, password: '[REDACTED]' };
       console.log('[Auth] Signup request payload (sanitized):', sanitizedPayload);
       console.log('[Auth] Calling POST /api/users');
@@ -69,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       // Debug logging (development only)
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      if (typeof _DEV_ !== 'undefined' && _DEV_) {
         console.log('[Auth] Signup response:', res.data);
         console.log('[Auth] Signup successful, logging in...');
       }
@@ -81,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Do NOT navigate from signup(), let login() or the caller handle navigation.
     } catch (err: any) {
       // Debug logging (development only)
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      if (typeof _DEV_ !== 'undefined' && _DEV_) {
         console.error('[Auth] Signup error:', {
           message: err?.message,
           status: err?.status || err?.response?.status,
@@ -113,11 +156,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
-    // Remove token from storage
-    await AsyncStorage.removeItem('token');
+    // Remove token and user data from storage
+    await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+    await AsyncStorage.removeItem(USER_STORAGE_KEY);
     if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('token');
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
     }
+    
+    // Reset user-specific Zustand stores
+    useCloset.getState().reset();
+    useCurrentOutfitStore.getState().reset();
+    useCalendar.getState().reset();
+    useNotifications.getState().reset();
+    useFavorites.getState().reset();
+    
     setUser(null);
   }
 
@@ -129,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider
       value={{
         user,
+        loading,
         setUser,
         login,
         signup,
