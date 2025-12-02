@@ -2,6 +2,7 @@ import React from "react";
 import { View, Image, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Garment } from "../types";
+import { useTheme } from "../context/ThemeContext";
 
 export default function ClothingCard({
   item,
@@ -12,7 +13,10 @@ export default function ClothingCard({
   onDelete?: (id: string) => void;
   onToggleFavorite?: (id: string, next: boolean) => void;
 }) {
+  const theme = useTheme();
   const isFavorite = item.isFavorite === true;
+
+  const styles = createStyles(theme);
 
   return (
     <View style={styles.container}>
@@ -20,6 +24,7 @@ export default function ClothingCard({
         <Image
           source={{ uri: item.imageUrl || item.uri }}
           style={styles.image}
+          resizeMode="cover"
         />
         {onToggleFavorite && (
           <Pressable
@@ -28,76 +33,95 @@ export default function ClothingCard({
           >
             <Ionicons
               name={isFavorite ? "heart" : "heart-outline"}
-              size={24}
-              color={isFavorite ? "#f33" : "#666"}
+              size={20}
+              color={isFavorite ? theme.colors.error : theme.colors.textTertiary}
             />
+          </Pressable>
+        )}
+        {onDelete && (
+          <Pressable
+            onPress={() => onDelete(item.id)}
+            style={styles.deleteButtonOverlay}
+          >
+            <Ionicons name="trash-outline" size={16} color={theme.colors.error} />
           </Pressable>
         )}
       </View>
       <View style={styles.content}>
         <Text style={styles.category}>{item.category.toUpperCase()}</Text>
-        <Text style={styles.colors}>Colors: {item.colors.join(", ")}</Text>
-        {onDelete && (
-          <Pressable
-            onPress={() => onDelete(item.id)}
-            style={styles.deleteButton}
-          >
-            <Text style={styles.deleteText}>Delete</Text>
-          </Pressable>
+        {item.colors.length > 0 && (
+          <Text style={styles.colors} numberOfLines={1}>
+            {item.colors.slice(0, 2).join(", ")}
+          </Text>
         )}
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    borderWidth: 1,
-    borderColor: "#eee",
-    borderRadius: 16,
-    overflow: "hidden",
-  },
-  imageContainer: {
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: 160,
-  },
-  favoriteButton: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  content: {
-    padding: 10,
-    gap: 4,
-  },
-  category: {
-    fontWeight: "700",
-  },
-  colors: {
-    color: "#555",
-  },
-  deleteButton: {
-    padding: 8,
-    backgroundColor: "#f33",
-    borderRadius: 10,
-    alignSelf: "flex-start",
-  },
-  deleteText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.lg,
+      overflow: "hidden",
+      backgroundColor: theme.colors.backgroundSecondary,
+    },
+    imageContainer: {
+      position: "relative",
+      width: "100%",
+      aspectRatio: 1,
+    },
+    image: {
+      width: "100%",
+      height: "100%",
+    },
+    favoriteButton: {
+      position: "absolute",
+      top: theme.spacing.xs,
+      right: theme.spacing.xs,
+      backgroundColor: theme.colors.background + "E6",
+      borderRadius: theme.borderRadius.full,
+      width: 32,
+      height: 32,
+      justifyContent: "center",
+      alignItems: "center",
+      shadowColor: theme.colors.black,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    deleteButtonOverlay: {
+      position: "absolute",
+      bottom: theme.spacing.xs,
+      right: theme.spacing.xs,
+      backgroundColor: theme.colors.background + "E6",
+      borderRadius: theme.borderRadius.md,
+      width: 28,
+      height: 28,
+      justifyContent: "center",
+      alignItems: "center",
+      shadowColor: theme.colors.black,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    content: {
+      padding: theme.spacing.sm,
+      paddingTop: theme.spacing.xs,
+      gap: 2,
+    },
+    category: {
+      fontSize: theme.typography.xs,
+      fontWeight: theme.typography.semibold,
+      color: theme.colors.textPrimary,
+    },
+    colors: {
+      fontSize: theme.typography.xs - 1,
+      color: theme.colors.textSecondary,
+    },
+  });
