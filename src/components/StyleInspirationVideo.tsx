@@ -17,7 +17,7 @@ export default function StyleInspirationVideo({
 }: StyleInspirationVideoProps) {
   const theme = useTheme();
   const [isLoading, setIsLoading] = useState(true);
-  const [_hasError, _setHasError] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const videoRef = useRef<Video>(null);
 
   const styles = createStyles(theme);
@@ -25,40 +25,33 @@ export default function StyleInspirationVideo({
   const handleVideoLoad = async (status: AVPlaybackStatus) => {
     if (status.isLoaded) {
       setIsLoading(false);
-      _setHasError(false);
+      setHasError(false);
       // Auto-play the video when it loads
       try {
         await videoRef.current?.playAsync();
       } catch (error) {
         console.error('Error auto-playing video:', error);
-        _setHasError(true);
+        setHasError(true);
+        setIsLoading(false);
       }
+    } else {
+      setHasError(true);
+      setIsLoading(false);
     }
   };
 
   const handleVideoError = (error: any) => {
     console.error('Video error:', error);
-    _setHasError(true);
+    setHasError(true);
     setIsLoading(false);
   };
 
-  if (!videoSource) {
+  if (!videoSource || hasError) {
     return (
       <View style={styles.container}>
         <View style={styles.placeholder}>
           <View style={styles.placeholderContent}>
-            <Ionicons 
-              name="videocam-outline" 
-              size={48} 
-              color={theme.colors.textTertiary} 
-            />
-            <Text style={styles.placeholderTitle}>Style Inspiration Video</Text>
-            <Text style={styles.placeholderSubtext}>
-              Ready to display your fashion video
-            </Text>
-            <Text style={styles.placeholderInstruction}>
-              Add your video file to src/assets/video/ and update HomeScreen.tsx
-            </Text>
+            <Text style={styles.fallbackText}>Today's mood</Text>
           </View>
         </View>
       </View>
@@ -72,7 +65,7 @@ export default function StyleInspirationVideo({
           ref={videoRef}
           source={videoSource}
           style={styles.video}
-          resizeMode={ResizeMode.COVER}
+          resizeMode={ResizeMode.CONTAIN}
           shouldPlay={true}
           isLooping={true}
           isMuted={false}
@@ -95,9 +88,11 @@ export default function StyleInspirationVideo({
         )}
 
         {/* Video Info Overlay */}
-        <View style={styles.videoInfo}>
-          <Text style={styles.videoSubtitle}>Your daily fashion inspiration</Text>
-        </View>
+        {!isLoading && (
+          <View style={styles.videoInfo}>
+            <Text style={styles.videoSubtitle}>Your daily fashion inspiration</Text>
+          </View>
+        )}
       </View>
     </View>
   );
@@ -106,9 +101,10 @@ export default function StyleInspirationVideo({
 const createStyles = (theme: any) => StyleSheet.create({
   container: {
     width: '100%',
-    height: 1200, // Maximum vertical to show full person
-    borderRadius: theme.borderRadius.xl,
+    aspectRatio: 3 / 4, // Portrait ratio that shows more of the model
+    borderRadius: theme.borderRadius['2xl'],
     overflow: 'hidden',
+    backgroundColor: theme.colors.backgroundSecondary,
     ...theme.shadows.md,
   },
   placeholder: {
@@ -121,24 +117,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     padding: theme.spacing.xl,
   },
-  placeholderTitle: {
-    fontSize: theme.typography.lg,
-    fontWeight: theme.typography.medium,
+  fallbackText: {
+    fontSize: theme.typography.xl,
+    fontWeight: theme.typography.bold,
     color: theme.colors.textPrimary,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.xs,
-  },
-  placeholderSubtext: {
-    fontSize: theme.typography.base,
-    color: theme.colors.textSecondary,
     textAlign: 'center',
-    marginBottom: theme.spacing.sm,
-  },
-  placeholderInstruction: {
-    fontSize: theme.typography.sm,
-    color: theme.colors.textTertiary,
-    textAlign: 'center',
-    fontStyle: 'italic',
   },
   videoWrapper: {
     flex: 1,

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   TextInput,
   SafeAreaView,
+  FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -420,24 +421,33 @@ export default function ClosetCaptureScreen() {
                   </Text>
                 </View>
               ) : (
-                <View style={themeStyles.listContainer}>
-                  {filteredItems.map((item, index) => (
-                    <View key={item.id} style={index > 0 ? { marginTop: theme.spacing.md } : undefined}>
-                      <Pressable
-                        onPress={() => {
-                          hapticFeedback.light();
-                          setPreviewItem(item);
-                        }}
-                      >
-                        <ClothingCard
-                          item={item}
-                          onDelete={handleDeleteItem}
-                          onToggleFavorite={handleToggleFavorite}
-                        />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
+                <FlatList
+                  data={filteredItems}
+                  keyExtractor={(item) => item.id}
+                  numColumns={2}
+                  scrollEnabled={false}
+                  columnWrapperStyle={{
+                    columnGap: theme.spacing.md,
+                    paddingHorizontal: theme.spacing.lg,
+                    marginBottom: theme.spacing.md,
+                  }}
+                  contentContainerStyle={themeStyles.listContainer}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      onPress={() => {
+                        hapticFeedback.light();
+                        setPreviewItem(item);
+                      }}
+                      style={{ flex: 1 }}
+                    >
+                      <ClothingCard
+                        item={item}
+                        onDelete={handleDeleteItem}
+                        onToggleFavorite={handleToggleFavorite}
+                      />
+                    </Pressable>
+                  )}
+                />
               )}
             </>
           )}

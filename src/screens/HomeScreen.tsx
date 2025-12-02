@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Alert,
   Switch,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -270,83 +271,83 @@ export default function HomeScreen() {
   const styles = createStyles(theme);
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-      }
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.greeting}>{getDailyGreeting()}</Text>
-          <Text style={styles.subtitle}>
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              month: 'long', 
-              day: 'numeric' 
-            })}
-          </Text>
-        </View>
-                <View style={styles.headerActions}>
-                  <Pressable
-                    style={styles.calendarButton}
-                    onPress={() => {
-                      hapticFeedback.light();
-                      navigation.navigate('Calendar' as never);
-                    }}
-                    accessibilityLabel="Open Calendar"
-                    accessibilityRole="button"
-                  >
-                    <Ionicons
-                      name="calendar-outline"
-                      size={24}
-                      color={theme.colors.textPrimary}
-                    />
-                  </Pressable>
-                  <Pressable
-                    style={styles.darkModeToggle}
-                    onPress={() => {
-                      hapticFeedback.light();
-                      settings.toggleDarkMode();
-                    }}
-                    accessibilityLabel="Toggle Dark Mode"
-                    accessibilityRole="button"
-                  >
-                    <Ionicons
-                      name={settings.darkMode ? "sunny-outline" : "moon-outline"}
-                      size={24}
-                      color={theme.colors.textPrimary}
-                    />
-                  </Pressable>
-          {unreadCount > 0 && (
+    <View style={styles.container}>
+      {/* Header with Actions */}
+      <SafeAreaView edges={['top']}>
+        <View style={styles.header}>
+          <View style={styles.headerActions}>
             <Pressable
-              style={styles.notificationBadge}
-              onPress={() => navigation.navigate('Notifications' as never)}
+              style={styles.calendarButton}
+              onPress={() => {
+                hapticFeedback.light();
+                navigation.navigate('Calendar' as never);
+              }}
+              accessibilityLabel="Open Calendar"
+              accessibilityRole="button"
             >
-              <Ionicons name="notifications" size={24} color={theme.colors.white} />
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{unreadCount}</Text>
-                </View>
-              )}
+              <Ionicons
+                name="calendar-outline"
+                size={24}
+                color={theme.colors.textPrimary}
+              />
             </Pressable>
-          )}
+            <Pressable
+              style={styles.darkModeToggle}
+              onPress={() => {
+                hapticFeedback.light();
+                settings.toggleDarkMode();
+              }}
+              accessibilityLabel="Toggle Dark Mode"
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={settings.darkMode ? "sunny-outline" : "moon-outline"}
+                size={24}
+                color={theme.colors.textPrimary}
+              />
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </SafeAreaView>
 
-      {/* === AI Outfit Section (Phase 2.2) === */}
-      <View
-        style={{
-          marginHorizontal: theme.spacing.lg,
-          marginTop: theme.spacing.lg,
-          padding: theme.spacing.lg,
-          borderRadius: theme.borderRadius.lg,
-          backgroundColor: theme.colors.backgroundSecondary,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-        }}
+      <ScrollView
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
       >
+        {/* Hero Block */}
+        <View style={styles.heroBlock}>
+          <View style={styles.heroContent}>
+            <Text style={styles.greeting}>{getDailyGreeting()}</Text>
+            <Text style={styles.heroDate}>
+              {new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                month: 'long', 
+                day: 'numeric' 
+              })}
+            </Text>
+            <Text style={styles.heroSubtitle}>Your daily style studio</Text>
+          </View>
+          <View style={styles.heroMedia}>
+            <StyleInspirationVideo 
+              videoSource={require('../assets/video/1.mp4')}
+            />
+          </View>
+        </View>
+
+        {/* === AI Outfit Section (Phase 2.2) === */}
+        <View
+          style={{
+            marginHorizontal: theme.spacing.lg,
+            marginBottom: theme.spacing.xl,
+            padding: theme.spacing.lg,
+            borderRadius: theme.borderRadius.lg,
+            backgroundColor: theme.colors.backgroundSecondary,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+          }}
+        >
         <Text
           style={{
             fontSize: theme.typography.base,
@@ -548,14 +549,6 @@ export default function HomeScreen() {
         <View style={styles.stickyHeader}>
           <Text style={styles.myraTitle}>MYRA</Text>
         </View>
-        
-        {/* Video with Description */}
-        <View style={styles.collectionItem}>
-          <StyleInspirationVideo 
-            videoSource={require('../assets/video/1.mp4')}
-          />
-          <Text style={styles.styleDescription}>New York Edition</Text>
-        </View>
 
         {/* Fashion Image with Description */}
         <View style={styles.imageCollectionItem}>
@@ -576,7 +569,8 @@ export default function HomeScreen() {
           </Text>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -587,22 +581,33 @@ const createStyles = (theme: any) => ({
   },
   header: {
     flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'flex-start' as const,
+    justifyContent: 'flex-end' as const,
+    alignItems: 'center' as const,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing['2xl'],
-    paddingBottom: theme.spacing.lg,
-    minHeight: 120,
-  },
-  headerContent: {
-    flex: 1,
-    paddingTop: theme.spacing.sm,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   headerActions: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
+  },
+  heroBlock: {
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
+    padding: theme.spacing.xl,
+    borderRadius: theme.borderRadius['2xl'],
+    backgroundColor: theme.colors.backgroundSecondary,
+    ...theme.shadows.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  heroContent: {
+    marginBottom: theme.spacing.xl,
+  },
+  heroMedia: {
+    width: '100%',
   },
           calendarButton: {
             padding: theme.spacing.sm,
@@ -616,14 +621,20 @@ const createStyles = (theme: any) => ({
             backgroundColor: theme.colors.backgroundSecondary,
           },
   greeting: {
-    fontSize: theme.typography['2xl'],
+    fontSize: theme.typography['3xl'],
     fontWeight: theme.typography.bold,
     color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.xs,
   },
-  subtitle: {
+  heroDate: {
     fontSize: theme.typography.base,
     color: theme.colors.textSecondary,
-    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
+  },
+  heroSubtitle: {
+    fontSize: theme.typography.sm,
+    color: theme.colors.textSecondary,
+    fontWeight: theme.typography.medium,
   },
   notificationBadge: {
     position: 'relative' as const,
@@ -647,7 +658,7 @@ const createStyles = (theme: any) => ({
   },
   weatherCard: {
     marginHorizontal: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
     backgroundColor: theme.colors.backgroundSecondary,
     borderRadius: theme.borderRadius.xl,
     padding: theme.spacing.lg,
