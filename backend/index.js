@@ -70,7 +70,7 @@ app.use((err, req, res, next) => {
   return res.status(status).json({ message: err.message || 'Server error' });
 });
 
-const PORT = process.env.NODE_PORT || 5001;
+const PORT = process.env.PORT || process.env.NODE_PORT || 5001;
 app.listen(PORT, "0.0.0.0", () =>
   console.log(`[API] Node server running on :${PORT}`)
 );
