@@ -63,3 +63,8 @@ backend/ai/graph/__pycache__/
 backend/db/__pycache__/
 
 backend/schemas/__pycache__/
+# Local-only MYRA docs (do not commit)
+docs/API_SPEC.md
+docs/PHASE_LOG.md
+docs/SECURITY_CHECKLIST.md
+docs/SMOKE_TEST.md

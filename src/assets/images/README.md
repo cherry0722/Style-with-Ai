@@ -15,4 +15,4 @@
    - Style: Modern, high contrast
 
 ## Usage
-Place the image files in this directory and update the import paths in SignInScreen.tsx
+Place the image files in this directory and update the import paths in the sign-in flow (e.g. PremiumSignInScreen / auth components).

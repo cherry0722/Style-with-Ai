@@ -102,13 +102,11 @@ export default function HomeScreen() {
     hapticFeedback.light();
     switch (action) {
       case 'plan-outfit':
-        navigation.navigate('Ideas' as never);
+      case 'today-fit':
+        // Ideas screen removed in v1 scope; no-op
         break;
       case 'scan-wardrobe':
-        navigation.navigate('Scan' as never);
-        break;
-      case 'today-fit':
-        navigation.navigate('Ideas' as never);
+        // Scan screen removed in v1 scope; add items via Closet tab
         break;
       case 'calendar':
         // Calendar navigation removed - no longer in bottom tabs
