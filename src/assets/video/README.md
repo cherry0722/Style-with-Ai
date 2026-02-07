@@ -8,9 +8,7 @@
    - Suggested name: `style-inspiration.mp4`
 
 2. **Update HomeScreen.tsx**
-   - Comment out the `TestVideoPlayer` component
-   - Uncomment the `StyleInspirationVideo` component
-   - Update the video source path:
+   - Add or update the `StyleInspirationVideo` component with the video source path:
    ```typescript
    <StyleInspirationVideo 
      videoSource={require('../assets/video/your-video-name.mp4')}
@@ -31,5 +29,4 @@
    - ✅ **Fashion Styling**: Matches app's aesthetic
 
 ## Current Status
-- Using `TestVideoPlayer` for demonstration
-- Ready to switch to real video when provided
+- Use `StyleInspirationVideo` with `require('../assets/video/your-video-name.mp4')`

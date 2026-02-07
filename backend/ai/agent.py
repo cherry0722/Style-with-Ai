@@ -1,26 +1,14 @@
 # ai/agent.py
+# v1: Metadata-only outfit suggestion. No RAG/graph/preference/calendar dependencies.
 from typing import Dict, Any, Optional, List, Tuple
-import os
 import logging
 from urllib.parse import urlparse
 
-# Set up logger for this module
 logger = logging.getLogger(__name__)
 
-from db.mongo import get_db, get_user_profile, get_user_wardrobe, get_items_by_ids
-from calendar_helper import get_events_for_today
-from ai.preference import PreferenceScorer
-from ai.rag_engine import suggest_with_rag
-from schemas.models import RecommendRequest, RecommendResponse, SuggestRequest, WardrobeItem
+from db.mongo import get_db, get_user_wardrobe
+from schemas.models import RecommendResponse, SuggestRequest, WardrobeItem
 
-# LLM opt-in toggle - gracefully fallback if not enabled
-USE_LLM = os.getenv('ENABLE_LLM', 'false').lower() == 'true' or os.getenv('OPENAI_API_KEY') is not None
-try:
-    from .graph.graph import run_graph
-except Exception:
-    run_graph = None
-
-# Module-level DB instance
 db = get_db()
 
 
@@ -182,10 +170,10 @@ def filter_usable_items(raw_items: List[Dict[str, Any]]) -> Tuple[List[Dict[str,
 
 class MyraAgent:
     """
-    Orchestrator for MYRA:
-      - Loads wardrobe and user profile
-      - Applies preference-aware reranking
-      - Calls RAG+LLM to get outfits
+    v1 metadata-only outfit suggestion:
+      - Loads wardrobe from DB
+      - Scores items by weather + optional request preferences
+      - Selects outfit (top + bottom + shoe + optional jacket)
     """
     
     def __init__(self):
@@ -453,39 +441,6 @@ class MyraAgent:
         # Return items in sorted order
         return [item for _, _, item in scored_items]
 
-    def recommend(self, req: RecommendRequest) -> RecommendResponse:
-        user_id = req.user_id
-        event_text = req.event
-        weather = req.weather.dict() if req.weather else None
-
-        # 1) Fetch wardrobe and profile
-        wardrobe = get_user_wardrobe(user_id)
-        profile = get_user_profile(user_id)
-
-        # 2) Preference-aware rerank (using memory)
-        pref = PreferenceScorer(profile)
-        # For now we don't have base scores from RAG before this step,
-        # we let RAG handle weather, so here base_scores=None.
-        ranked = pref.score(wardrobe, base_scores=None)
-
-        # 3) Call RAG engine (GPT-4 selection) with memory-informed candidates
-        try:
-            rag_result = suggest_with_rag(
-                user_id=user_id,
-                event_text=event_text,
-                weather=weather,
-                wardrobe_items=ranked,
-            )
-        except NotImplementedError:
-            # Safety net: if RAG is not implemented, return empty outfits
-            rag_result = {"outfits": [], "note": "RAG not implemented"}
-
-        return RecommendResponse(
-            outfits=[o for o in rag_result.get("outfits", [])],
-            context={"event": event_text, "weather": weather},
-            used_memory=bool(profile),
-        )
-
     def suggest_outfit(self, request: SuggestRequest) -> RecommendResponse:
         """
         Selects an outfit using scoring based on wardrobe items, temperature, and favorites.
@@ -518,7 +473,7 @@ class MyraAgent:
         )
 
         # Fetch wardrobe from DB (returns dicts, convert to WardrobeItem)
-        raw_wardrobe_dicts = self.db.get_user_wardrobe(user_id)
+        raw_wardrobe_dicts = get_user_wardrobe(user_id)
         
         # Filter to usable items only (Phase 4D: wardrobe hygiene)
         usable_dicts, hygiene_stats = filter_usable_items(raw_wardrobe_dicts)
