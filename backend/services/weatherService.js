@@ -1,7 +1,10 @@
 const axios = require('axios');
 
-const API_KEY = process.env.EXPO_PUBLIC_WEATHER_API_KEY;
 const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/weather';
+
+function getApiKey() {
+  return (process.env.WEATHER_API_KEY || '').trim();
+}
 
 /**
  * Clamp temperature to realistic bounds for Fahrenheit
@@ -61,18 +64,14 @@ async function getWeatherSummary(lat, lon) {
     };
   }
 
-  // Check if API key is available
-  if (!API_KEY || API_KEY === 'demo_key') {
-    console.warn('[Weather] No API key configured, using fallback');
-    return {
-      summary: 'Mild',
-      tempF: 72,
-      precipChance: 10,
-    };
+  // Missing or placeholder key: return error object for route to handle (no server crash)
+  const apiKey = getApiKey();
+  if (!apiKey || apiKey === 'demo_key') {
+    return { error: 'Weather not configured' };
   }
 
   try {
-    const url = `${WEATHER_API_URL}?lat=${latNum}&lon=${lonNum}&appid=${API_KEY}&units=imperial`;
+    const url = `${WEATHER_API_URL}?lat=${latNum}&lon=${lonNum}&appid=${apiKey}&units=imperial`;
     
     const response = await axios.get(url, {
       timeout: 10000,

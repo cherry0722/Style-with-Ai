@@ -12,6 +12,9 @@ router.get('/', async (req, res) => {
     }
 
     const weather = await getWeatherSummary(lat, lon);
+    if (weather && weather.error) {
+      return res.status(501).json({ message: 'Weather not configured' });
+    }
     return res.json(weather);
   } catch (err) {
     console.error('[Weather] Unexpected error:', err);

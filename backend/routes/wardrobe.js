@@ -1,7 +1,7 @@
 const express = require('express');
 const auth = require('../middleware/auth');
 const Wardrobe = require('../models/wardrobe');
-const { analyzeImage } = require('../services/azureVisionService');
+const { analyzeImage } = require('../services/imageAnalysisProvider');
 const { generateFashionMetadata } = require('../services/llmFashionTagger');
 
 // NOTE: All wardrobe routes are auth-protected and scoped to the current user.
@@ -21,39 +21,39 @@ router.post('/analyze', auth, async (req, res) => {
       return res.status(401).json({ message: 'Invalid auth payload' });
     }
 
-    let azureTags = [];
-    let azureColors = {};
+    let visionTags = [];
+    let visionColors = {};
 
     try {
-      console.log('[Wardrobe] Analyzing image with Azure Vision', {
+      console.log('[Wardrobe] Analyzing image with image analysis provider', {
         userId,
         imageUrl,
       });
       const aiResult = await analyzeImage(imageUrl);
       if (aiResult) {
-        azureTags = Array.isArray(aiResult.tags) ? aiResult.tags : [];
-        azureColors = aiResult.colors || {};
+        visionTags = Array.isArray(aiResult.tags) ? aiResult.tags : [];
+        visionColors = aiResult.colors || {};
       } else {
         console.log(
-          '[Wardrobe] Azure Vision returned null for analyze endpoint, using empty tags/colors.'
+          '[Wardrobe] Vision analyzer returned null for analyze endpoint, using empty tags/colors.'
         );
       }
     } catch (err) {
       console.warn(
-        '[Wardrobe] Azure Vision analysis failed in /api/wardrobe/analyze:',
+        '[Wardrobe] Image analysis failed in /api/wardrobe/analyze:',
         err.message || err.toString()
       );
-      azureTags = [];
-      azureColors = {};
+      visionTags = [];
+      visionColors = {};
     }
 
     const llmPayload = {
-      tags: azureTags,
-      colors: azureColors,
+      tags: visionTags,
+      colors: visionColors,
       description: null,
     };
 
-    console.log('[Wardrobe] Vision tags:', azureTags.slice(0, 10));
+    console.log('[Wardrobe] Vision tags:', visionTags.slice(0, 10));
     const llmMetadata = await generateFashionMetadata(llmPayload);
     if (llmMetadata) {
       console.log('[Wardrobe] Final fashion metadata:', llmMetadata);
@@ -63,8 +63,8 @@ router.post('/analyze', auth, async (req, res) => {
 
     return res.status(200).json({
       imageUrl,
-      azure_tags: azureTags,
-      azure_colors: azureColors,
+      azure_tags: visionTags,
+      azure_colors: visionColors,
       llm_metadata: llmMetadata || null,
       category_hint: category || null,
       color_hint:
