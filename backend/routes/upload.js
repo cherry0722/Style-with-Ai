@@ -1,66 +1,49 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const crypto = require('crypto');
 const auth = require('../middleware/auth');
-const { uploadBuffer } = require('../services/r2Storage');
+const { upload } = require('../middleware/uploadValidation');
+const {
+  uploadBufferToR2,
+  generateRawKey,
+  getConfig,
+} = require('../services/r2Storage');
 
 const router = express.Router();
 
-// Multer memory storage so we get file.buffer for R2
-const storage = multer.memoryStorage();
-
-// File filter - only accept images
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Only image files are allowed'), false);
-  }
-};
-
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5 MB
-  },
-});
-
-/** Map mimetype to file extension for R2 key. */
-function extFromMimetype(mimetype) {
-  const map = {
-    'image/jpeg': 'jpg',
-    'image/jpg': 'jpg',
-    'image/png': 'png',
-    'image/webp': 'webp',
-    'image/gif': 'gif',
-  };
-  return map[mimetype] || 'jpg';
-}
-
-// POST /api/upload/image - upload an image file to R2, return public URL
+// POST /api/upload/image — v1 pipeline: upload RAW to R2, return rawKey/rawUrl (no cleanUrl)
+// JWT required. Rate-limit: consider adding express-rate-limit for upload endpoints.
 router.post('/image', auth, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No image file provided' });
     }
 
-    const ext = extFromMimetype(req.file.mimetype);
-    const key = `images/${Date.now()}-${crypto.randomBytes(8).toString('hex')}.${ext}`;
+    const userId =
+      req.user?.userId ||
+      req.user?._id?.toString() ||
+      req.user?.id ||
+      req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid auth payload' });
+    }
 
-    const publicUrl = await uploadBuffer({
+    const { key } = generateRawKey(userId, req.file.mimetype);
+    await uploadBufferToR2({
+      key,
       buffer: req.file.buffer,
       contentType: req.file.mimetype,
-      key,
     });
 
-    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
-    console.log('[Upload] R2 upload OK for user', userId, 'key', key);
+    const config = getConfig();
+    const rawUrl = config ? `${config.publicBaseUrl}/${key}` : null;
+
+    console.log('[Upload] v1 RAW uploaded for user', userId, 'key', key);
 
     return res.status(200).json({
-      imageUrl: publicUrl,
-      cleanImageUrl: null,
+      rawKey: key,
+      rawUrl,
+      contentType: req.file.mimetype,
+      size: req.file.size,
     });
   } catch (err) {
     console.error('[Upload] R2 upload failed:', err.message || err);
@@ -76,11 +59,9 @@ router.use((err, req, res, next) => {
     }
     return res.status(400).json({ message: err.message || 'File upload error' });
   }
-
-  if (err.message === 'Only image files are allowed') {
-    return res.status(400).json({ message: 'Only image files are allowed' });
+  if (err.message && err.message.includes('Only jpeg')) {
+    return res.status(400).json({ message: err.message });
   }
-
   next(err);
 });
 

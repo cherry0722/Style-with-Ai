@@ -1,8 +1,19 @@
 const express = require('express');
+const multer = require('multer');
+const axios = require('axios');
 const auth = require('../middleware/auth');
 const Wardrobe = require('../models/wardrobe');
 const { analyzeImage } = require('../services/imageAnalysisProvider');
 const { generateFashionMetadata } = require('../services/llmFashionTagger');
+const { upload } = require('../middleware/uploadValidation');
+const {
+  uploadBufferToR2,
+  generateRawKey,
+  deleteFromR2,
+  getConfig,
+} = require('../services/r2Storage');
+
+const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || 'http://127.0.0.1:5002').replace(/\/$/, '');
 
 // NOTE: All wardrobe routes are auth-protected and scoped to the current user.
 const router = express.Router();
@@ -78,7 +89,119 @@ router.post('/analyze', auth, async (req, res) => {
   }
 });
 
-// POST /api/wardrobe - create a wardrobe item for the logged-in user
+// POST /api/wardrobe/items — v1 pipeline: upload RAW → Python process-item → create wardrobe → delete RAW
+// JWT required. Server-to-server only: Node calls Python; do not expose AI_SERVICE_URL to client.
+// Rate-limit: consider adding express-rate-limit for this endpoint.
+router.post('/items', auth, upload.single('image'), async (req, res) => {
+  let rawKey = null;
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No image file provided' });
+    }
+
+    const userId =
+      req.user?.userId ||
+      req.user?._id?.toString() ||
+      req.user?.id ||
+      req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid auth payload' });
+    }
+
+    // a) Upload RAW to R2
+    const { key } = generateRawKey(userId, req.file.mimetype);
+    rawKey = key;
+    await uploadBufferToR2({
+      key,
+      buffer: req.file.buffer,
+      contentType: req.file.mimetype,
+    });
+
+    const config = getConfig();
+    const rawUrl = config ? `${config.publicBaseUrl}/${key}` : null;
+
+    // b) Call Python /process-item
+    const headers = { 'Content-Type': 'application/json' };
+    if (process.env.INTERNAL_TOKEN) {
+      headers['X-Internal-Token'] = process.env.INTERNAL_TOKEN;
+    }
+
+    let pyResponse;
+    try {
+      pyResponse = await axios.post(
+        `${AI_SERVICE_URL}/process-item`,
+        { userId, rawKey, rawUrl },
+        { headers, timeout: 60000 }
+      );
+    } catch (err) {
+      console.error('[Wardrobe] Python /process-item unreachable:', err.message);
+      await deleteFromR2({ key: rawKey });
+      return res.status(502).json({
+        message: 'AI service unreachable',
+        failReason: err.message || 'Could not reach Python process-item endpoint',
+      });
+    }
+
+    const { status, cleanKey, cleanUrl, profile, failReason } = pyResponse.data || {};
+
+    // f) If failed
+    if (status === 'failed') {
+      await deleteFromR2({ key: rawKey });
+      return res.status(502).json({
+        message: 'Processing failed',
+        failReason: failReason || 'Unknown error',
+      });
+    }
+
+    // e) If ready: create wardrobe item, delete RAW
+    if (status !== 'ready' || !cleanUrl) {
+      await deleteFromR2({ key: rawKey });
+      return res.status(502).json({
+        message: 'Invalid response from AI service',
+        failReason: failReason || 'Missing cleanUrl or status',
+      });
+    }
+
+    // v1: store profile as-is (locked schema); set convenience fields; no legacy fields
+    const p = profile && typeof profile === 'object' ? profile : {};
+    const item = await Wardrobe.create({
+      userId,
+      imageUrl: cleanUrl,
+      cleanImageUrl: cleanUrl,
+      profile: p,
+      category: p.category || p.type || 'top',
+      type: p.type || undefined,
+      primaryColor: p.primaryColor || undefined,
+    });
+
+    // Delete RAW (best-effort)
+    await deleteFromR2({ key: rawKey });
+
+    return res.status(201).json(item);
+  } catch (err) {
+    if (rawKey) {
+      try {
+        await deleteFromR2({ key: rawKey });
+      } catch (_) {}
+    }
+    console.error('[Wardrobe] POST /items error:', err);
+    return res.status(500).json({ message: err.message || 'Failed to process item' });
+  }
+});
+
+// Multer/upload error handler for /items (must be 4-arg to be error middleware)
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ message: 'File size exceeds 5 MB limit' });
+  }
+  if (err.message && (err.message.includes('Only jpeg') || err.message.includes('File size'))) {
+    return res.status(400).json({ message: err.message });
+  }
+  next(err);
+});
+
+// POST /api/wardrobe — DEPRECATED: use POST /api/wardrobe/items for v1 pipeline (upload → process → create)
+// Kept for backward compatibility with clients that POST JSON with imageUrl/cleanImageUrl.
 router.post('/', auth, async (req, res) => {
   try {
     const {
@@ -211,7 +334,12 @@ router.get('/', auth, async (req, res) => {
       .lean()
       .exec();
 
-    return res.json(items);
+    // Backward compat: old items without profile get profile: null
+    const normalized = items.map((item) => ({
+      ...item,
+      profile: item.profile ?? null,
+    }));
+    return res.json(normalized);
   } catch (err) {
     console.error('[Wardrobe] GET /api/wardrobe error:', err);
     return res

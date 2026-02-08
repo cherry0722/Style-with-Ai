@@ -1,37 +1,5 @@
 const mongoose = require('mongoose');
 
-// Sub-schema for normalized LLM metadata
-const FashionMetadataSchema = new mongoose.Schema(
-  {
-    category: {
-      type: String, // "top" | "bottom" | "shoes"
-    },
-    type: {
-      type: String, // "shirt", "jeans", "sneakers", etc.
-    },
-    fabric: {
-      type: String, // "cotton", "denim", "linen", "blend", "unknown", etc.
-    },
-    color_name: {
-      type: String, // "black", "white", "navy", etc.
-    },
-    color_type: {
-      type: String, // "neutral", "warm", "cool", "bold", "pastel", "unknown"
-    },
-    pattern: {
-      type: String, // "solid", "plaid", "checked", etc.
-    },
-    fit: {
-      type: String, // "slim", "regular", "relaxed", "oversized", "tapered", "skinny", "wide", "unknown"
-    },
-    style_tags: {
-      type: [String], // up to a few items like ["casual", "minimal", "streetwear"]
-      default: [],
-    },
-  },
-  { _id: false } // Don't create _id for subdocuments
-);
-
 const WardrobeSchema = new mongoose.Schema(
   {
     userId: {
@@ -47,71 +15,38 @@ const WardrobeSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    category: {
-      type: String,
-      required: true,
-    },
-    colors: {
-      type: [String],
-      default: [],
-    },
-    notes: {
-      type: String,
+
+    // v1 source of truth: locked ItemProfile from Python
+    profile: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
 
-    // Rich style metadata
-    type: {
-      type: String,
-    },
-    formality: {
-      type: String, // e.g. "casual", "smart-casual", "business", "formal", "party"
-    },
-    occasionTags: {
-      type: [String], // e.g. ["college", "interview", "wedding"]
-      default: [],
-    },
-    seasonTags: {
-      type: [String], // e.g. ["summer", "winter", "monsoon"]
-      default: [],
-    },
-    styleVibe: {
-      type: [String], // e.g. ["streetwear", "minimal", "classic", "sporty", "ethnic"]
-      default: [],
-    },
-    color_name: {
-      type: String,
-    },
-    color_type: {
-      type: String,
-    },
-    fit: {
-      type: String, // e.g. "slim", "regular", "oversized", "relaxed"
-    },
-    pattern: {
-      type: String, // e.g. "solid", "striped", "checked", "floral"
-    },
-    fabric: {
-      type: String, // e.g. "cotton", "denim", "linen", "polyester", "wool"
-    },
-    style_tags: [
-      {
-        type: String,
-      },
-    ],
+    // Top-level convenience fields for indexing/UI (derived from profile)
+    category: { type: String, default: null },
+    type: { type: String, default: null },
+    primaryColor: { type: String, default: null },
+
+    notes: { type: String },
+
+    // Legacy fields: kept for backward compat on reads; do not write for v1 items
+    colors: { type: [String], default: [] },
+    formality: { type: mongoose.Schema.Types.Mixed },
+    occasionTags: { type: [String], default: [] },
+    seasonTags: { type: [String], default: [] },
+    styleVibe: { type: [String], default: [] },
+    color_name: { type: String },
+    color_type: { type: String },
+    fit: { type: String },
+    pattern: { type: String },
+    fabric: { type: String },
+    style_tags: [String],
+    tags: { type: [String], default: [] },
+    metadata: { type: mongoose.Schema.Types.Mixed },
 
     isFavorite: {
       type: Boolean,
       default: false,
-    },
-    tags: {
-      type: [String], // free-form labels
-      default: [],
-    },
-
-    // NEW: Normalized LLM metadata (optional, backward compatible)
-    metadata: {
-      type: FashionMetadataSchema,
-      required: false,
     },
   },
   { timestamps: true }

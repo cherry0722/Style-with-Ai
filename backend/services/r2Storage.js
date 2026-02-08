@@ -2,9 +2,13 @@
  * Cloudflare R2 storage via S3-compatible API.
  * All credentials from process.env: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_BASE_URL.
  */
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const crypto = require('crypto');
 
 const REQUIRED_ENV = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'R2_PUBLIC_BASE_URL'];
+
+const RAW_PREFIX = (process.env.RAW_R2_PREFIX || 'raw/').replace(/\/?$/, '/');
+const CLEAN_PREFIX = (process.env.CLEAN_R2_PREFIX || 'clean/').replace(/\/?$/, '/');
 
 function getConfig() {
   const accountId = process.env.R2_ACCOUNT_ID;
@@ -83,7 +87,78 @@ async function uploadBuffer({ buffer, contentType, key }) {
   return publicUrl;
 }
 
+/**
+ * Upload a buffer to R2. Alias for uploadBuffer with consistent naming.
+ * @param {Object} opts
+ * @param {string} opts.key - object key
+ * @param {Buffer} opts.buffer
+ * @param {string} opts.contentType
+ * @returns {Promise<string>} public URL
+ */
+async function uploadBufferToR2({ key, buffer, contentType }) {
+  return uploadBuffer({ buffer, contentType, key });
+}
+
+/**
+ * Delete an object from R2.
+ * @param {Object} opts
+ * @param {string} opts.key - object key to delete
+ * @returns {Promise<void>}
+ * @throws if config missing; logs warning on delete failure (best-effort)
+ */
+async function deleteFromR2({ key }) {
+  const config = getConfig();
+  if (!config) {
+    const missing = REQUIRED_ENV.filter((k) => !process.env[k] || !String(process.env[k]).trim());
+    const err = new Error(`R2 config missing: set ${missing.length ? missing.join(', ') : REQUIRED_ENV.join(', ')}`);
+    err.code = 'R2_CONFIG_MISSING';
+    throw err;
+  }
+  const client = getClient();
+  if (!client) throw new Error('R2 client unavailable');
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+    console.log('[R2] Deleted object:', key);
+  } catch (err) {
+    console.warn('[R2] Delete failed (best-effort):', key, err.message);
+  }
+}
+
+/**
+ * Infer file extension from MIME type. v1: jpeg, jpg, png, webp only.
+ * @param {string} mimetype
+ * @returns {string}
+ */
+function extFromMimetype(mimetype) {
+  const map = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+  };
+  return map[mimetype] || 'jpg';
+}
+
+/**
+ * Generate a raw object key: raw/<userId>/<timestamp>_<random>.<ext>
+ * @param {string} userId
+ * @param {string} mimetype
+ * @returns {{ key: string, ext: string }}
+ */
+function generateRawKey(userId, mimetype) {
+  const ext = extFromMimetype(mimetype);
+  const safeUserId = String(userId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64) || 'anon';
+  const key = `${RAW_PREFIX}${safeUserId}/${Date.now()}_${crypto.randomBytes(8).toString('hex')}.${ext}`;
+  return { key, ext };
+}
+
 module.exports = {
   uploadBuffer,
+  uploadBufferToR2,
+  deleteFromR2,
+  extFromMimetype,
+  generateRawKey,
   getConfig,
+  RAW_PREFIX,
+  CLEAN_PREFIX,
 };

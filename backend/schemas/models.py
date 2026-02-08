@@ -1,6 +1,6 @@
 # schemas/models.py
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class WardrobeItem(BaseModel):
@@ -85,3 +85,133 @@ class FeedbackIn(BaseModel):
     user_id: str
     outfit_items: List[str]
     label: str  # "like" or "dislike"
+
+
+# --- Process-item (Phase 2B) ---
+
+
+class ProcessItemRequest(BaseModel):
+    userId: str
+    rawKey: str
+    rawUrl: str
+
+
+# LOCKED v1 ItemProfile schema (strict JSON from Vision)
+VALID_CATEGORIES = {"top", "bottom", "shoes", "outerwear", "accessory", "dress", "traditional_set"}
+VALID_SEASONS = {"spring", "summer", "fall", "winter", "all"}
+
+
+class ItemProfile(BaseModel):
+    """Structured output from OpenAI Vision. LOCKED v1 schema."""
+    type: Optional[str] = None
+    category: Optional[str] = None
+    primaryColor: Optional[str] = None
+    secondaryColor: Optional[str] = None
+    colorUndertone: Optional[str] = None
+    pattern: Optional[str] = None
+    material: Optional[str] = None
+    fit: Optional[str] = None
+    formality: Optional[int] = Field(None, ge=0, le=10)
+    season: Optional[str] = None
+    styleTags: Optional[List[str]] = Field(default_factory=list)
+    keyDetails: Optional[List[str]] = Field(default_factory=list)
+    pairingHints: Optional[List[str]] = Field(default_factory=list)
+    confidence: Optional[int] = Field(None, ge=0, le=100)
+
+    @field_validator("formality", mode="before")
+    @classmethod
+    def coerce_formality(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        try:
+            n = int(float(str(v).strip()))
+            return max(0, min(10, n))
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def coerce_confidence(cls, v: Any) -> Optional[int]:
+        if v is None:
+            return None
+        try:
+            n = int(float(str(v).strip()))
+            return max(0, min(100, n))
+        except (ValueError, TypeError):
+            return None
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v: Any) -> Optional[str]:
+        if v is None or not isinstance(v, str):
+            return None
+        s = v.strip().lower()
+        if s in VALID_CATEGORIES:
+            return s
+        m = {"tops": "top", "bottoms": "bottom", "accessories": "accessory"}
+        return m.get(s, "top")
+
+    @field_validator("season", mode="before")
+    @classmethod
+    def normalize_season(cls, v: Any) -> Optional[str]:
+        if v is None or not isinstance(v, str):
+            return None
+        s = v.strip().lower()
+        if s in VALID_SEASONS:
+            return s
+        if "all" in s or "season" in s:
+            return "all"
+        for seas in ("spring", "summer", "fall", "winter"):
+            if seas in s:
+                return seas
+        return "all"
+
+    @field_validator("styleTags", "keyDetails", "pairingHints", mode="before")
+    @classmethod
+    def coerce_list(cls, v: Any) -> List[str]:
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if x is not None and str(x).strip()]
+        return []
+
+    def to_node_profile(self) -> Dict[str, Any]:
+        """Convert to Node Wardrobe-compatible profile dict."""
+        d = {}
+        if self.type:
+            d["type"] = self.type
+        if self.category:
+            d["category"] = self.category
+        colors = []
+        if self.primaryColor:
+            colors.append(self.primaryColor)
+        if self.secondaryColor:
+            colors.append(self.secondaryColor)
+        if colors:
+            d["colors"] = colors
+            d["color_name"] = self.primaryColor
+        if self.colorUndertone:
+            d["color_type"] = self.colorUndertone
+        if self.pattern:
+            d["pattern"] = self.pattern
+        if self.material:
+            d["fabric"] = self.material
+        if self.fit:
+            d["fit"] = self.fit
+        if self.formality is not None:
+            d["formality"] = str(self.formality)  # Node may expect string
+        if self.season:
+            d["seasonTags"] = [self.season]
+        if self.styleTags:
+            d["style_tags"] = self.styleTags
+            d["styleVibe"] = self.styleTags
+        d["occasionTags"] = d.get("occasionTags", [])
+        return d
+
+
+class ProcessItemResponse(BaseModel):
+    status: str  # "ready" | "failed"
+    cleanKey: Optional[str] = None
+    cleanUrl: Optional[str] = None
+    profile: Optional[Dict[str, Any]] = None
+    failReason: Optional[str] = None
