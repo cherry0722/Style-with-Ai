@@ -111,11 +111,14 @@ router.post('/reasoned_outfits', auth, async (req, res) => {
       });
     }
 
-    // Phase 3C: Python-first when >= 3 usable items (with profile); else Node scoreOutfit fallback
+    // Phase 4C: Python-first when >= 1 usable item (with profile); else Node scoreOutfit fallback
     const usableItems = items.filter((i) => i && (i.profile != null && typeof i.profile === 'object'));
     const idToItem = new Map(items.map((i) => [String(i._id), i]));
 
-    if (usableItems.length >= 3) {
+    if (usableItems.length >= 1) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[REASONED_OUTFITS] attempting python with usableItems=' + usableItems.length);
+      }
       const payload = {
         occasion: hasOccasion ? normalizedOccasion : undefined,
         location: Object.keys(loc).length ? loc : null,
@@ -196,7 +199,7 @@ router.post('/reasoned_outfits', auth, async (req, res) => {
     const top3 = unique.slice(0, 3);
 
     if (process.env.NODE_ENV !== 'production') {
-      const usedPythonAttempt = usableItems.length >= 3;
+      const usedPythonAttempt = usableItems.length >= 1;
       console.log('[REASONED_OUTFITS] engine=fallback pythonUsed=' + (usedPythonAttempt ? 'false (attempted)' : 'false'));
     }
 

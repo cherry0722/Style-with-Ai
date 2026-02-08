@@ -1,10 +1,14 @@
 // Frontend configuration
+// All network calls must use API_BASE_URL (or BASE_URL alias).
 
 // Node / main app backend
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL && process.env.EXPO_PUBLIC_API_URL.trim() !== ''
     ? process.env.EXPO_PUBLIC_API_URL.trim()
-    : 'http://localhost:5001';
+    : 'https://style-with-ai-node.onrender.com';
+
+/** Alias for API_BASE_URL (used by api layer). */
+export const BASE_URL = API_BASE_URL;
 
 // New: point AI base to the Node backend by default
 export const AI_BASE_URL =

@@ -17,17 +17,14 @@ import type { RootStackParamList } from "../navigation/RootNavigator";
  * This screen should only be accessible during startup/logout flows, not from within the tabs.
  */
 export default function AuthGate({ navigation }: NativeStackScreenProps<RootStackParamList, "AuthGate">) {
-  const { user, loading } = useAuth();
+  const { user, loading, isRestoring } = useAuth();
   const theme = useTheme();
   const styles = createStyles(theme);
+  const ready = !loading && !isRestoring;
 
   useEffect(() => {
-    // Wait for auth initialization to complete
-    if (loading) {
-      return;
-    }
+    if (!ready) return;
 
-    // Once loading finishes, route based on auth state
     if (user) {
       // User is authenticated (restored from storage or logged in)
       // Use reset to prevent going back to Splash/AuthGate
@@ -36,13 +33,13 @@ export default function AuthGate({ navigation }: NativeStackScreenProps<RootStac
         routes: [{ name: 'Main' }],
       });
     } else {
-      // No user found, redirect to login
+      // No user found, redirect to Auth (Login + Signup)
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Login' }],
+        routes: [{ name: 'Auth' }],
       });
     }
-  }, [user, loading, navigation]);
+  }, [user, ready, navigation]);
 
   // Show loading spinner while checking auth state
   return (

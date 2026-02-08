@@ -1,6 +1,7 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AuthGate from "../screens/AuthGate";
+import AuthScreen from "../screens/AuthScreen";
 import LoginScreen from "../screens/LoginScreen";
 import SignupScreen from "../screens/SignupScreen";
 import SplashScreen from "../screens/SplashScreen";
@@ -11,6 +12,7 @@ import OnboardingProfileScreen from "../screens/OnboardingProfileScreen";
 export type RootStackParamList = {
   Splash: undefined;
   AuthGate: undefined;
+  Auth: undefined;
   Login: undefined;
   Signup: undefined;
   Main: undefined;
@@ -25,6 +27,7 @@ export default function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="AuthGate" component={AuthGate} />
+      <Stack.Screen name="Auth" component={AuthScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Main" component={Tabs} />

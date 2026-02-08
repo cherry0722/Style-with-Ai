@@ -1,28 +1,25 @@
 import axios, { AxiosError } from 'axios';
 import { API_BASE_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTokenFromAuthSync } from './tokenGetter';
+import { callOn401 } from './on401';
 
-async function getToken() {
+async function getToken(): Promise<string | undefined> {
   try {
-    // React Native: use AsyncStorage
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (token) return token;
-    } catch {
-      // Fallback to localStorage for web
-    }
-    
-    // Web: use localStorage
+    const fromAuth = getTokenFromAuthSync();
+    if (fromAuth) return fromAuth;
+    const token = await AsyncStorage.getItem('token');
+    if (token) return token;
     if (typeof localStorage !== 'undefined') {
       return localStorage?.getItem?.('token') ?? undefined;
     }
-    return undefined;
-  } catch {
-    return undefined;
-  }
+  } catch (_) {}
+  return undefined;
 }
 
-console.log('[API Client] Using baseURL =', API_BASE_URL);
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  console.log('[API Client] baseURL =', API_BASE_URL);
+}
 
 const client = axios.create({
   baseURL: API_BASE_URL,
@@ -35,51 +32,35 @@ client.interceptors.request.use(async (config) => {
     config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
-  
-  // Debug logging (development only)
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    const fullUrl = `${config.baseURL}${config.url}`;
-    console.log(`[API Client] ${config.method?.toUpperCase()} ${fullUrl}`);
-  }
-  
   return config;
 });
 
 client.interceptors.response.use(
-  (res) => {
-    // Debug logging (development only)
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      const fullUrl = `${res.config.baseURL}${res.config.url}`;
-      console.log(`[API Client] ${res.config.method?.toUpperCase()} ${fullUrl} - Success (${res.status})`);
-    }
-    return res;
-  },
+  (res) => res,
   async (err: AxiosError) => {
     const status = err?.response?.status;
-    const data = err?.response?.data;
-    const fullUrl = err?.config ? `${err.config.baseURL}${err.config.url}` : 'unknown';
-    
-    // Debug logging (development only)
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.error(`[API Client] Request failed: ${err.config?.method?.toUpperCase()} ${fullUrl}`);
-      console.error(`[API Client] Error status: ${status || 'N/A'}, message: ${err?.message || 'N/A'}`);
-      if (data) {
-        console.error(`[API Client] Error data:`, data);
+    const data = err?.response?.data as Record<string, unknown> | undefined;
+    const url = err?.config?.url ?? '';
+
+    if (status === 401) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[API Client] Auth failure (401)', { url, status });
       }
+      callOn401();
+      const cleanMessage = (data && typeof data === 'object' && data.message) ? String(data.message) : 'Session expired. Please log in again.';
+      return Promise.reject({ status: 401, data, message: cleanMessage });
     }
-    
-    // Return clean error message
-    const cleanMessage = (data && typeof data === 'object' && 'message' in data ? (data as any).message : null) || 
-                        err?.message || 
-                        (status ? `Request failed with status ${status}` : 'Request failed');
-    
-    return Promise.reject({ 
-      status: status || undefined, 
-      data: data || undefined, 
-      message: cleanMessage 
-    });
+
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && (status === 400 || status === 401 || status === 403)) {
+      console.log('[API Client] Auth/validation failure', { url, status, body: data });
+    }
+
+    const cleanMessage = (data && typeof data === 'object' && 'message' in data ? (data as { message: string }).message : null) ||
+      err?.message ||
+      (status ? `Request failed with status ${status}` : 'Request failed');
+
+    return Promise.reject({ status: status || undefined, data: data || undefined, message: cleanMessage });
   }
 );
 
 export default client;
-

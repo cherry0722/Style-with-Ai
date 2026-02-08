@@ -14,16 +14,19 @@ export interface WardrobeItemPayload {
 
 export interface WardrobeItemResponse {
   _id: string;
-  userId: string;
+  userId?: string;
   imageUrl: string;
   cleanImageUrl?: string;
   category: string;
-  colors: string[];
+  colors?: string[];
   notes?: string;
   isFavorite?: boolean;
   tags?: string[];
   metadata?: FashionMetadata;
   styleVibe?: string[];
+  profile?: { category?: string; type?: string; confidence?: number; [key: string]: unknown } | null;
+  type?: string | null;
+  primaryColor?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -60,6 +63,41 @@ const inferFileNameFromUri = (uri: string): string => {
     return 'photo.jpg';
   }
 };
+
+/** v1 pipeline: POST /api/wardrobe/items (multipart image) — upload → process-item → create. Returns created item with profile. */
+export interface WardrobeItemV1Response {
+  _id: string;
+  userId: string;
+  imageUrl: string;
+  cleanImageUrl?: string | null;
+  profile?: {
+    category?: string;
+    type?: string;
+    primaryColor?: string;
+    confidence?: number;
+    [key: string]: unknown;
+  } | null;
+  category?: string | null;
+  type?: string | null;
+  primaryColor?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function uploadWardrobeItem(uri: string): Promise<WardrobeItemV1Response> {
+  const formData = new FormData();
+  const fileName = inferFileNameFromUri(uri);
+  const mimeType = inferMimeTypeFromUri(uri);
+  formData.append('image', {
+    uri,
+    name: fileName,
+    type: mimeType,
+  } as any);
+  const res = await client.post<WardrobeItemV1Response>('/api/wardrobe/items', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}
 
 export const uploadWardrobeImage = async (
   uri: string
@@ -175,6 +213,9 @@ export const fetchWardrobeItems = async (): Promise<WardrobeItemResponse[]> => {
   const res = await client.get<WardrobeItemResponse[]>('/api/wardrobe');
   return res.data;
 };
+
+/** Alias for fetchWardrobeItems (GET /api/wardrobe). */
+export const listWardrobe = fetchWardrobeItems;
 
 export const toggleFavorite = async (
   id: string,

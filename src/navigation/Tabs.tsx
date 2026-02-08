@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import HomeScreen from "../screens/HomeScreen";
-import ClosetCaptureScreen from "../screens/ClosetCaptureScreen";
+import ClosetScreen from "../screens/ClosetScreen";
+import OutfitScreen from "../screens/OutfitScreen";
 import SettingsScreen from "../screens/SettingsScreen";
 import AvatarScreen from "../screens/AvatarScreen";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +16,7 @@ import { useTheme } from "../context/ThemeContext";
 export type TabParamList = {
   Home: undefined;
   Closet: undefined;
+  Outfits: undefined;
   Avatar: undefined;
   Settings: undefined;
 };
@@ -29,11 +31,8 @@ export default function Tabs() {
 
   function handleLogout() {
     setMenuOpen(false);
-    logout();
-    // Reset navigation to AuthGate, which will route to Login since user is now null
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'AuthGate' }],
+    logout().then(() => {
+      navigation.reset({ index: 0, routes: [{ name: 'AuthGate' }] });
     });
   }
 
@@ -43,6 +42,8 @@ export default function Tabs() {
         return "home-outline";
       case "Closet":
         return "shirt-outline";
+      case "Outfits":
+        return "grid-outline";
       case "Avatar":
         return "person-outline";
       case "Settings":
@@ -55,7 +56,7 @@ export default function Tabs() {
   return (
     <>
         <Tab.Navigator
-          initialRouteName="Home"
+          initialRouteName="Closet"
           screenOptions={({ route }) => ({
             headerTitle: () => (
               <Text style={{ fontWeight: "800", fontSize: 16 }}>
@@ -116,11 +117,13 @@ export default function Tabs() {
         />
         <Tab.Screen 
           name="Closet" 
-          component={ClosetCaptureScreen} 
-          options={{ 
-            title: "Closet",
-            headerRight: () => null, // Explicitly remove bell/notifications icon
-          }} 
+          component={ClosetScreen} 
+          options={{ title: "Closet", headerRight: () => null }} 
+        />
+        <Tab.Screen 
+          name="Outfits" 
+          component={OutfitScreen} 
+          options={{ title: "Outfits" }} 
         />
         <Tab.Screen
           name="Avatar"

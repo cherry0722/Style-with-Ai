@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CalendarEvent } from '../types';
+import { persistStorage } from './persistStorage';
 
 interface CalendarState {
   events: CalendarEvent[];
@@ -67,6 +68,7 @@ export const useCalendar = create<CalendarState>()(
     {
       name: 'myra-calendar',
       version: 1,
+      storage: persistStorage,
     }
   )
 );

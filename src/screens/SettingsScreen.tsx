@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useSettings } from "../store/settings";
@@ -21,11 +22,19 @@ const BODY_TYPES: BodyType[] = ["skinny", "fit", "muscular", "bulk", "pear", "ho
 
 export default function SettingsScreen() {
   const auth = useAuth();
-  const { user } = auth;
+  const { user, logout } = auth;
   const updateProfile = auth.updateProfile;
   const settings = useSettings();
   const theme = useTheme();
+  const tabNav = useNavigation();
   const p = (user?.profile ?? {}) as { preferredName?: string; pronouns?: Pronouns; heightCm?: number; weightLb?: number; bodyType?: BodyType };
+
+  const handleLogout = () => {
+    const root = tabNav.getParent() as undefined | { reset: (arg: { index: number; routes: { name: string }[] }) => void };
+    logout().then(() => {
+      if (root?.reset) root.reset({ index: 0, routes: [{ name: "AuthGate" }] });
+    });
+  };
 
   // View/edit mode
   const [editing, setEditing] = useState(false);
@@ -382,6 +391,33 @@ export default function SettingsScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {/* Account (v1): current user + Logout */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="person-outline" size={20} color={theme.colors.accent} />
+              </View>
+              <View style={styles.settingContent}>
+                <Text style={styles.settingLabel}>Logged in as</Text>
+                <Text style={styles.settingValue}>{user?.email || user?.username || user?.phone || "—"}</Text>
+              </View>
+            </View>
+          </View>
+          <Pressable style={[styles.settingItem, { borderLeftWidth: 3, borderLeftColor: theme.colors.error }]} onPress={handleLogout}>
+            <View style={styles.settingLeft}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="log-out-outline" size={20} color={theme.colors.error} />
+              </View>
+              <View style={styles.settingContent}>
+                <Text style={[styles.settingLabel, { color: theme.colors.error }]}>Log out</Text>
+                <Text style={styles.settingValue}>Clear token and sign out</Text>
+              </View>
+            </View>
+          </Pressable>
+        </View>
+
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Settings</Text>
