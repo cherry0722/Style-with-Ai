@@ -6,8 +6,20 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./db');
+const aiService = require('./services/aiServiceClient');
 
 const app = express();
+
+// Warm Python Render service: call /health on startup and every 10 minutes
+function warmPythonService() {
+  aiService.healthCheck()
+    .then((data) => {
+      if (data?.ok) console.log('[API] Python service warm');
+    })
+    .catch(() => { /* already logged by aiService */ });
+}
+warmPythonService();
+setInterval(warmPythonService, 10 * 60 * 1000); // 10 minutes
 
 // Trust the first proxy (e.g., ngrok) so express-rate-limit can use X-Forwarded-For safely
 app.set('trust proxy', 1);

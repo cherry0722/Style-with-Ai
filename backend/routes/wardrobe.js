@@ -1,6 +1,5 @@
 const express = require('express');
 const multer = require('multer');
-const axios = require('axios');
 const auth = require('../middleware/auth');
 const Wardrobe = require('../models/wardrobe');
 const { analyzeImage } = require('../services/imageAnalysisProvider');
@@ -12,8 +11,7 @@ const {
   deleteFromR2,
   getConfig,
 } = require('../services/r2Storage');
-
-const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || 'http://127.0.0.1:5002').replace(/\/$/, '');
+const aiService = require('../services/aiServiceClient');
 
 // NOTE: All wardrobe routes are auth-protected and scoped to the current user.
 const router = express.Router();
@@ -36,10 +34,7 @@ router.post('/analyze', auth, async (req, res) => {
     let visionColors = {};
 
     try {
-      console.log('[Wardrobe] Analyzing image with image analysis provider', {
-        userId,
-        imageUrl,
-      });
+      aiService.safeLog('Wardrobe', 'Analyzing image', { userId, hasImageUrl: !!imageUrl });
       const aiResult = await analyzeImage(imageUrl);
       if (aiResult) {
         visionTags = Array.isArray(aiResult.tags) ? aiResult.tags : [];
@@ -82,7 +77,9 @@ router.post('/analyze', auth, async (req, res) => {
         Array.isArray(colors) && colors.length > 0 ? colors[0] : null,
     });
   } catch (err) {
-    console.error('[Wardrobe] POST /api/wardrobe/analyze error:', err);
+    aiService.safeLog('Wardrobe', 'POST /analyze error', {
+      message: (err?.message || '').slice(0, 150),
+    });
     return res
       .status(500)
       .json({ message: 'Failed to analyze wardrobe image' });
@@ -120,25 +117,19 @@ router.post('/items', auth, upload.single('image'), async (req, res) => {
     const config = getConfig();
     const rawUrl = config ? `${config.publicBaseUrl}/${key}` : null;
 
-    // b) Call Python /process-item
-    const headers = { 'Content-Type': 'application/json' };
-    if (process.env.INTERNAL_TOKEN) {
-      headers['X-Internal-Token'] = process.env.INTERNAL_TOKEN;
-    }
-
+    // b) Call Python /process-item (with retries via shared client)
     let pyResponse;
     try {
-      pyResponse = await axios.post(
-        `${AI_SERVICE_URL}/process-item`,
-        { userId, rawKey, rawUrl },
-        { headers, timeout: 60000 }
-      );
+      pyResponse = await aiService.post('/process-item', { userId, rawKey, rawUrl });
     } catch (err) {
-      console.error('[Wardrobe] Python /process-item unreachable:', err.message);
+      aiService.safeLog('Wardrobe', 'Python /process-item unreachable after retries', {
+        code: err.code,
+        status: err.response?.status,
+      });
       await deleteFromR2({ key: rawKey });
       return res.status(502).json({
-        message: 'AI service unreachable',
-        failReason: err.message || 'Could not reach Python process-item endpoint',
+        message: 'The AI service is temporarily unavailable. Please try again in a moment.',
+        failReason: 'Could not reach the image processing service after multiple attempts.',
       });
     }
 
@@ -184,7 +175,9 @@ router.post('/items', auth, upload.single('image'), async (req, res) => {
         await deleteFromR2({ key: rawKey });
       } catch (_) {}
     }
-    console.error('[Wardrobe] POST /items error:', err);
+    aiService.safeLog('Wardrobe', 'POST /items error', {
+      message: (err?.message || '').slice(0, 150),
+    });
     return res.status(500).json({ message: err.message || 'Failed to process item' });
   }
 });

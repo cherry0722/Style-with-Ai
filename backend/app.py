@@ -48,7 +48,7 @@ def root():
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
+    """Health check endpoint. Returns { ok: true } for Node warmup and health checks."""
     db = get_db()
     
     # Check database type
@@ -57,12 +57,12 @@ async def health():
         if db_type == "mongo":
             try:
                 db.client.admin.command('ping')
-                return {"status": "healthy", "database": "mongo"}
+                return {"ok": True, "status": "healthy", "database": "mongo"}
             except Exception as e:
                 raise HTTPException(status_code=503, detail=f"DB down: {e}")
     
     # Default to mock
-    return {"status": "healthy", "database": "mock"}
+    return {"ok": True, "status": "healthy", "database": "mock"}
 
 
 @app.post("/suggest_outfit", response_model=RecommendResponse)
