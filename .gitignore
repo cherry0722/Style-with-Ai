@@ -68,3 +68,6 @@ docs/API_SPEC.md
 docs/PHASE_LOG.md
 docs/SECURITY_CHECKLIST.md
 docs/SMOKE_TEST.md
+
+__pycache__/
+*.pyc

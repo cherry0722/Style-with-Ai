@@ -12,10 +12,19 @@ if ROOT_ENV.exists():
 else:
     load_dotenv()
 
-from schemas.models import SuggestRequest, RecommendResponse, ProcessItemRequest, ProcessItemResponse
+from schemas.models import (
+    SuggestRequest,
+    RecommendResponse,
+    ProcessItemRequest,
+    ProcessItemResponse,
+    GenerateOutfitsRequest,
+    GenerateOutfitsResponse,
+    GenerateOutfitsOutfit,
+)
 from ai.agent import MyraAgent
 from db.mongo import get_db
 from services.process_item import process_item, VisionFailedError
+from services.generate_outfits import generate_outfits
 
 app = FastAPI(title="MYRA AI Backend", version="0.1.0")
 
@@ -77,6 +86,27 @@ def _require_internal_token(x_internal_token: str | None = Header(None, alias="X
     """If INTERNAL_TOKEN is set, require X-Internal-Token header."""
     if INTERNAL_TOKEN and x_internal_token != INTERNAL_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid or missing X-Internal-Token")
+
+
+# --- Phase 3C: Text-only outfit generation (no images) ---
+@app.post("/generate-outfits", response_model=GenerateOutfitsResponse)
+def generate_outfits_endpoint(req: GenerateOutfitsRequest):
+    """
+    Generate up to 3 outfits from wardrobe items (id + profile only).
+    No images, no Vision. Uses OpenAI TEXT when key present; else deterministic fallback.
+    """
+    items = [{"id": it.id, "profile": it.profile} for it in req.items]
+    location = req.location.model_dump() if req.location else None
+    weather = req.weather.model_dump() if req.weather else None
+    outfits = generate_outfits(
+        items=items,
+        occasion=req.occasion,
+        location=location,
+        weather=weather,
+    )
+    return GenerateOutfitsResponse(
+        outfits=[GenerateOutfitsOutfit(**o) for o in outfits],
+    )
 
 
 @app.post("/process-item", response_model=ProcessItemResponse, dependencies=[Depends(_require_internal_token)])

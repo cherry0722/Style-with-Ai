@@ -215,3 +215,47 @@ class ProcessItemResponse(BaseModel):
     cleanUrl: Optional[str] = None
     profile: Optional[Dict[str, Any]] = None
     failReason: Optional[str] = None
+
+
+# --- Generate-outfits (Phase 3C): text-only outfit generation ---
+
+
+class GenerateOutfitsLocation(BaseModel):
+    """Optional location for outfit context. No geocoding."""
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    city: Optional[str] = None
+    region: Optional[str] = None
+    country: Optional[str] = None
+
+
+class GenerateOutfitsWeather(BaseModel):
+    """Optional weather for outfit context."""
+    tempF: Optional[float] = None
+    condition: Optional[str] = None
+
+
+class GenerateOutfitsItem(BaseModel):
+    """Single item payload: id + profile (LOCKED ItemProfile schema)."""
+    id: str
+    profile: Optional[Dict[str, Any]] = None  # ItemProfile from Vision
+
+
+class GenerateOutfitsRequest(BaseModel):
+    """Request for text-only outfit generation. No images."""
+    occasion: Optional[str] = None
+    location: Optional[GenerateOutfitsLocation] = None
+    weather: Optional[GenerateOutfitsWeather] = None
+    items: List[GenerateOutfitsItem] = Field(default_factory=list)
+
+
+class GenerateOutfitsOutfit(BaseModel):
+    """One outfit in the response."""
+    itemIds: List[str] = Field(default_factory=list)
+    why: str = ""
+    notes: List[str] = Field(default_factory=list)
+
+
+class GenerateOutfitsResponse(BaseModel):
+    """Response: exactly 3 outfits when possible, each with why + notes."""
+    outfits: List[GenerateOutfitsOutfit] = Field(default_factory=list)
