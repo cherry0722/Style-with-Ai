@@ -8,6 +8,7 @@ import type { RootStackParamList } from "../navigation/RootNavigator";
 /**
  * AuthGate: Decides initial routing after app launch.
  * Does not redirect until isRestoring === false. Navigates exactly once (ref guard).
+ * Token exists -> Main; else Auth. No flicker, no double navigation, no loop.
  */
 export default function AuthGate({ navigation }: NativeStackScreenProps<RootStackParamList, "AuthGate">) {
   const { user, loading, isRestoring } = useAuth();
@@ -20,7 +21,6 @@ export default function AuthGate({ navigation }: NativeStackScreenProps<RootStac
     if (!ready) return;
     if (hasNavigatedRef.current) return;
     hasNavigatedRef.current = true;
-
     if (user) {
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } else {

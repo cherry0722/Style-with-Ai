@@ -101,7 +101,7 @@ export default function OutfitScreen() {
               <Text style={styles.engineText}>engine: {result.engine}</Text>
               <Text style={styles.engineText}>pythonUsed: {result.pythonUsed ? 'true' : 'false'}</Text>
               {result.pythonError ? <Text style={styles.engineError}>pythonError: {result.pythonError}</Text> : null}
-              {result.contextUsed?.tempF != null && (
+              {result.contextUsed?.weatherUsed && result.contextUsed?.tempF != null && (
                 <Text style={styles.engineText}>contextUsed.tempF: {result.contextUsed.tempF}</Text>
               )}
             </View>
@@ -111,9 +111,14 @@ export default function OutfitScreen() {
                 <Text style={styles.emptyText}>Add at least 1 item to see suggestions.</Text>
               </View>
             ) : (
-              result.outfits.slice(0, 3).map((outfit, idx) => (
-                <OutfitCard key={idx} outfit={outfit} theme={theme} />
-              ))
+              <>
+                {(result.outfits.some((o) => (o.missing?.length ?? 0) > 0) || result.outfits.length < 3) && result.outfits.length > 0 && (
+                  <Text style={styles.partialHint}>Add 1–2 more items for full outfits.</Text>
+                )}
+                {result.outfits.slice(0, 3).map((outfit, idx) => (
+                  <OutfitCard key={idx} outfit={outfit} theme={theme} />
+                ))}
+              </>
             )}
           </>
         )}
@@ -150,7 +155,7 @@ function OutfitCard({ outfit, theme }: { outfit: ReasonedOutfitEntry; theme: Ret
         </View>
       )}
       {missing.length > 0 && (
-        <Text style={styles.missing}>To complete: {missing.join(', ')}</Text>
+        <Text style={styles.missing}>Missing: {missing.join(', ')}</Text>
       )}
     </View>
   );
@@ -176,6 +181,7 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     engineTitle: { fontSize: theme.typography.sm, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: theme.spacing.sm },
     engineText: { fontSize: theme.typography.xs, color: theme.colors.textSecondary },
     engineError: { fontSize: theme.typography.xs, color: theme.colors.error, marginTop: theme.spacing.xs },
+    partialHint: { fontSize: theme.typography.sm, color: theme.colors.textSecondary, marginBottom: theme.spacing.md, fontStyle: 'italic' },
     empty: { paddingVertical: theme.spacing.xl },
     emptyText: { fontSize: theme.typography.base, color: theme.colors.textSecondary, textAlign: 'center' },
   });

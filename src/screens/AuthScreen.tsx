@@ -98,10 +98,16 @@ export default function AuthScreen() {
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err: any) {
       setLoading(false);
-      const msg = err?.message || 'Invalid credentials. Please try again.';
+      const status = err?.status ?? err?.response?.status;
+      const msg =
+        status === 401
+          ? 'Invalid email or password. Please try again.'
+          : status === 400
+            ? (err?.message && typeof err.message === 'string' ? err.message : 'Invalid request. Please check your input.')
+            : (err?.message && typeof err.message === 'string' ? err.message : 'Invalid credentials. Please try again.');
       setError(msg);
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[Auth] Login failed', { status: err?.status, message: msg });
+        console.log('[Auth] Login failed', { status, message: msg });
       }
     }
   };
@@ -125,18 +131,20 @@ export default function AuthScreen() {
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err: any) {
       setLoading(false);
-      let msg = err?.message || 'Signup failed. Please try again.';
-      const data = err?.data;
-      if (data && typeof data === 'object') {
-        if (data.message) msg = data.message;
-        if (Array.isArray(data.details) && data.details.length > 0) {
+      const status = err?.status ?? err?.response?.status;
+      let msg: string;
+      if (status === 401) msg = 'Invalid email or password. Please try again.';
+      else if (status === 400) {
+        const data = err?.data;
+        if (data && typeof data === 'object' && data.message && typeof data.message === 'string') msg = data.message;
+        else if (data && typeof data === 'object' && Array.isArray(data.details) && data.details.length > 0) {
           const parts = data.details.map((d: { msg?: string }) => d.msg || '').filter(Boolean);
-          if (parts.length) msg = parts.join('. ');
-        }
-      }
+          msg = parts.length ? parts.join('. ') : 'Invalid request. Please check your input.';
+        } else msg = err?.message && typeof err.message === 'string' ? err.message : 'Invalid request. Please check your input.';
+      } else msg = err?.message && typeof err.message === 'string' ? err.message : 'Signup failed. Please try again.';
       setError(msg);
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log('[Auth] Signup failed', { status: err?.status, message: msg });
+        console.log('[Auth] Signup failed', { status, message: msg });
       }
     }
   };

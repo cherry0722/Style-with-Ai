@@ -1,10 +1,9 @@
 import React, { useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import HomeScreen from "../screens/HomeScreen";
+import ComingSoonScreen from "../screens/ComingSoonScreen";
 import ClosetScreen from "../screens/ClosetScreen";
 import OutfitScreen from "../screens/OutfitScreen";
 import SettingsScreen from "../screens/SettingsScreen";
-import AvatarScreen from "../screens/AvatarScreen";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Pressable, Modal } from "react-native";
 import { useAuth } from "../context/AuthContext";
@@ -110,11 +109,8 @@ export default function Tabs() {
       >
         <Tab.Screen 
           name="Home" 
-          component={HomeScreen} 
-          options={{ 
-            title: "Home",
-            headerShown: false,
-          }} 
+          component={ComingSoonScreen} 
+          options={{ title: "Home", headerShown: false }} 
         />
         <Tab.Screen 
           name="Closet" 
@@ -133,7 +129,7 @@ export default function Tabs() {
         />
         <Tab.Screen
           name="Avatar"
-          component={AvatarScreen}
+          component={ComingSoonScreen}
           options={{ title: "Avatar" }}
         />
       </Tab.Navigator>

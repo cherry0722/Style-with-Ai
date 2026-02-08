@@ -30,6 +30,7 @@ export default function ClosetScreen() {
   const [items, setItems] = useState<WardrobeItemResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadStep, setUploadStep] = useState<'idle' | 'uploading' | 'removing' | 'saving'>('idle');
   const [lastUploaded, setLastUploaded] = useState<WardrobeItemV1Response | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loadingRef = useRef(false);
@@ -108,19 +109,25 @@ export default function ClosetScreen() {
     try {
       setUploading(true);
       setError(null);
+      setUploadStep('uploading');
       const item = await uploadWardrobeItem(uri);
+      setUploadStep('saving');
       setLastUploaded(item);
       await loadWardrobe();
     } catch (err: any) {
-      const status = err?.status;
+      const status = err?.status ?? err?.response?.status;
       const msg = err?.message || 'Upload failed. Please try again.';
-      const friendly = status === 502 || status === 500
-        ? 'Service temporarily unavailable. Please try again later.'
-        : msg;
+      const friendly =
+        status === 502 || status === 500
+          ? 'Service temporarily unavailable. Please try again later.'
+          : status === 401
+            ? 'Session expired. Please log in again.'
+            : msg;
       setError(friendly);
       Alert.alert('Upload failed', friendly);
     } finally {
       setUploading(false);
+      setUploadStep('idle');
     }
   };
 
@@ -141,7 +148,12 @@ export default function ClosetScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Pressable style={styles.addButton} onPress={pickAndUpload} disabled={uploading}>
           {uploading ? (
-            <ActivityIndicator size="small" color={theme.colors.accent} />
+            <>
+              <ActivityIndicator size="small" color={theme.colors.accent} />
+              <Text style={styles.addButtonText}>
+                {uploadStep === 'uploading' ? 'Uploading…' : 'Saving…'}
+              </Text>
+            </>
           ) : (
             <>
               <Ionicons name="add-circle-outline" size={24} color={theme.colors.accent} />
@@ -155,11 +167,11 @@ export default function ClosetScreen() {
         {lastUploaded && (
           <View style={styles.resultCard}>
             <Text style={styles.resultTitle}>Last added</Text>
-            <View style={styles.previewContainer}>
+            <View style={styles.heroImageWrap}>
               <Image
                 source={{ uri: lastUploaded.cleanImageUrl || lastUploaded.imageUrl }}
-                style={styles.previewImage}
-                resizeMode="contain"
+                style={styles.heroImage}
+                resizeMode="cover"
               />
             </View>
             <Text style={styles.resultMeta}>
@@ -180,6 +192,10 @@ export default function ClosetScreen() {
           <View style={styles.empty}>
             <Ionicons name="shirt-outline" size={48} color={theme.colors.textTertiary} />
             <Text style={styles.emptyText}>Add your first item</Text>
+            <Pressable style={styles.emptyButton} onPress={pickAndUpload} disabled={uploading}>
+              <Ionicons name="add-circle-outline" size={22} color={theme.colors.accent} />
+              <Text style={styles.emptyButtonText}>Add your first item</Text>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.listWrap}>
@@ -192,11 +208,11 @@ export default function ClosetScreen() {
               columnWrapperStyle={styles.row}
               renderItem={({ item }) => (
                 <View style={styles.itemCard}>
-                  <View style={styles.itemImageContainer}>
+                  <View style={styles.itemImageWrap}>
                     <Image
                       source={{ uri: item.cleanImageUrl || item.imageUrl }}
                       style={styles.itemImage}
-                      resizeMode="contain"
+                      resizeMode="cover"
                     />
                   </View>
                   <Text style={styles.itemMeta} numberOfLines={1}>
@@ -243,32 +259,43 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
       alignItems: 'center',
     },
     resultTitle: { fontSize: theme.typography.sm, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
-    previewContainer: {
+    heroImageWrap: {
       width: '100%',
-      height: 240,
+      height: 280,
       borderRadius: theme.borderRadius.lg,
       backgroundColor: theme.colors.backgroundTertiary ?? theme.colors.background,
       marginBottom: theme.spacing.sm,
       overflow: 'hidden',
     },
-    previewImage: {
-      width: '100%',
-      height: '100%',
-    },
+    heroImage: { width: '100%', height: '100%' },
     resultMeta: { fontSize: theme.typography.sm, color: theme.colors.textPrimary },
     confidence: { fontSize: theme.typography.xs, color: theme.colors.textTertiary, marginTop: theme.spacing.xs },
     loading: { alignItems: 'center', paddingVertical: theme.spacing['2xl'] },
     loadingText: { marginTop: theme.spacing.md, fontSize: theme.typography.sm, color: theme.colors.textSecondary },
     empty: { alignItems: 'center', paddingVertical: theme.spacing['2xl'] },
     emptyText: { marginTop: theme.spacing.md, fontSize: theme.typography.base, color: theme.colors.textSecondary },
+    emptyButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.xl,
+      backgroundColor: theme.colors.accent,
+      borderRadius: theme.borderRadius.lg,
+    },
+    emptyButtonText: { fontSize: theme.typography.base, fontWeight: '600', color: theme.colors.white },
     listWrap: { marginTop: theme.spacing.sm },
     sectionTitle: { fontSize: theme.typography.base, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: theme.spacing.md },
     row: { gap: theme.spacing.md, marginBottom: theme.spacing.md },
     itemCard: { flex: 1, backgroundColor: theme.colors.backgroundSecondary, borderRadius: theme.borderRadius.lg, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border },
-    itemImageContainer: {
+    itemImageWrap: {
       width: '100%',
-      height: 120,
+      height: 220,
       backgroundColor: theme.colors.backgroundTertiary ?? theme.colors.background,
+      overflow: 'hidden',
+      borderTopLeftRadius: theme.borderRadius.lg - 1,
+      borderTopRightRadius: theme.borderRadius.lg - 1,
     },
     itemImage: { width: '100%', height: '100%' },
     itemMeta: { fontSize: theme.typography.xs, color: theme.colors.textSecondary, padding: theme.spacing.sm },

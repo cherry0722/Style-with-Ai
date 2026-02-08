@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,30 @@ import type { RootStackParamList } from "../navigation/RootNavigator";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
+
+const USERNAME_MIN = 3;
+const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+const PASSWORD_MIN = 8;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function validateUsername(value: string): string | null {
+  const t = value.trim();
+  if (!t) return "Username is required.";
+  if (t.length < USERNAME_MIN) return `Username must be at least ${USERNAME_MIN} characters.`;
+  if (!USERNAME_REGEX.test(t)) return "Username can only contain letters, numbers, and underscore.";
+  return null;
+}
+function validateEmail(value: string): string | null {
+  const t = value.trim();
+  if (!t) return "Email is required.";
+  if (!EMAIL_REGEX.test(t)) return "Please enter a valid email.";
+  return null;
+}
+function validatePassword(value: string): string | null {
+  if (!value) return "Password is required.";
+  if (value.length < PASSWORD_MIN) return `Password must be at least ${PASSWORD_MIN} characters.`;
+  return null;
+}
 
 // Password input component with visibility toggle
 function PasswordInput({
@@ -75,37 +99,47 @@ export default function SignupScreen({
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [touched, setTouched] = useState({ username: false, email: false, password: false });
+
+  const usernameError = useMemo(() => (touched.username ? validateUsername(username) : null), [username, touched.username]);
+  const emailError = useMemo(() => (touched.email ? validateEmail(email) : null), [email, touched.email]);
+  const passwordError = useMemo(() => (touched.password ? validatePassword(password) : null), [password, touched.password]);
+  const signupValid =
+    !validateUsername(username) && !validateEmail(email.trim()) && !validatePassword(password);
+  const signupDisabled = !signupValid || loading;
 
   async function onSignup() {
-    // Validation
-    if (!username.trim()) {
-      setError("Username is required");
+    const uErr = validateUsername(username);
+    const eErr = validateEmail(email);
+    const pErr = validatePassword(password);
+    if (uErr || eErr || pErr) {
+      setTouched({ username: true, email: true, password: true });
+      setError(uErr || eErr || pErr || "Please fix the errors above.");
       return;
     }
-    if (!email.trim()) {
-      setError("Email is required");
-      return;
-    }
-    if (!password.trim()) {
-      setError("Password is required");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
     setError("");
     setLoading(true);
     try {
-      await signup(email, password, username, phone);
-      console.log("[SignupScreen] Signup successful, navigating to OnboardingProfile");
+      await signup(email.trim(), password, username.trim(), phone.trim() || undefined);
       setLoading(false);
       navigation.replace("OnboardingProfile");
     } catch (err: any) {
       setLoading(false);
-      setError(err.message || "Signup failed. Please try again.");
-      console.error("[SignupScreen] Signup error:", err);
+      const status = err?.status ?? err?.response?.status;
+      let msg: string;
+      if (status === 401) msg = "Invalid email or password. Please try again.";
+      else if (status === 400) {
+        const data = err?.data;
+        if (data && typeof data === "object" && typeof data.message === "string") msg = data.message;
+        else if (data && typeof data === "object" && Array.isArray(data.details) && data.details.length > 0) {
+          const parts = data.details.map((d: { msg?: string }) => d.msg || "").filter(Boolean);
+          msg = parts.length ? parts.join(". ") : "Invalid request. Please check your input.";
+        } else msg = err?.message && typeof err.message === "string" ? err.message : "Invalid request. Please check your input.";
+      } else msg = err?.message && typeof err.message === "string" ? err.message : "Signup failed. Please try again.";
+      setError(msg);
+      if (typeof __DEV__ !== "undefined" && __DEV__) {
+        console.log("[SignupScreen] Signup failed", { status, message: msg });
+      }
     }
   }
 
@@ -135,18 +169,21 @@ export default function SignupScreen({
           </View>
           {/* Username Input */}
           <View style={themeStyles.inputGroup}>
-            <Text style={themeStyles.label}>Preferred name / Username</Text>
+            <Text style={themeStyles.label}>Username (min {USERNAME_MIN}, letters/numbers/underscore)</Text>
             <TextInput
-              placeholder="Enter your username"
+              placeholder="Enter username"
               placeholderTextColor={theme.colors.textTertiary}
               value={username}
               onChangeText={(text) => {
                 setUsername(text);
                 if (error) setError("");
               }}
-              style={themeStyles.input}
-              autoCapitalize="words"
+              onBlur={() => setTouched((p) => ({ ...p, username: true }))}
+              style={[themeStyles.input, usernameError ? themeStyles.inputError : null]}
+              autoCapitalize="none"
+              editable={!loading}
             />
+            {usernameError ? <Text style={themeStyles.inlineError}>{usernameError}</Text> : null}
           </View>
 
           {/* Email Input */}
@@ -160,25 +197,29 @@ export default function SignupScreen({
                 setEmail(text);
                 if (error) setError("");
               }}
+              onBlur={() => setTouched((p) => ({ ...p, email: true }))}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              style={themeStyles.input}
+              style={[themeStyles.input, emailError ? themeStyles.inputError : null]}
+              editable={!loading}
             />
+            {emailError ? <Text style={themeStyles.inlineError}>{emailError}</Text> : null}
           </View>
 
           {/* Password Input */}
           <View style={themeStyles.inputGroup}>
-            <Text style={themeStyles.label}>Password</Text>
+            <Text style={themeStyles.label}>Password (min {PASSWORD_MIN})</Text>
             <PasswordInput
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
                 if (error) setError("");
               }}
-              placeholder="Enter your password"
               onClearError={() => setError("")}
+              placeholder="Enter your password"
             />
+            {passwordError ? <Text style={themeStyles.inlineError}>{passwordError}</Text> : null}
           </View>
 
           {/* Phone Input */}
@@ -208,14 +249,14 @@ export default function SignupScreen({
           {/* Sign Up Button */}
           <Pressable
             onPress={onSignup}
-            disabled={loading}
+            disabled={signupDisabled}
             style={({ pressed }) => [
               themeStyles.signupButton,
-              (pressed || loading) && themeStyles.signupButtonDisabled,
+              (pressed || signupDisabled) && themeStyles.signupButtonDisabled,
             ]}
             accessibilityRole="button"
             accessibilityLabel="Sign up"
-            accessibilityState={{ disabled: loading }}
+            accessibilityState={{ disabled: signupDisabled }}
           >
             {loading ? (
               <View style={themeStyles.buttonContent}>
@@ -333,6 +374,16 @@ const styles = (theme: any) =>
       color: theme.colors.textPrimary,
       paddingVertical: theme.spacing.md,
       minHeight: 52,
+    },
+    inputError: {
+      borderColor: theme.colors.error,
+      borderWidth: 1,
+    },
+    inlineError: {
+      fontSize: theme.typography.xs,
+      color: theme.colors.error,
+      marginTop: theme.spacing.xs,
+      marginBottom: theme.spacing.xs,
     },
     passwordToggle: {
       padding: theme.spacing.xs,
