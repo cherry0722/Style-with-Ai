@@ -155,7 +155,13 @@ export default function ClosetScreen() {
         {lastUploaded && (
           <View style={styles.resultCard}>
             <Text style={styles.resultTitle}>Last added</Text>
-            <Image source={{ uri: lastUploaded.cleanImageUrl || lastUploaded.imageUrl }} style={styles.thumb} />
+            <View style={styles.previewContainer}>
+              <Image
+                source={{ uri: lastUploaded.cleanImageUrl || lastUploaded.imageUrl }}
+                style={styles.previewImage}
+                resizeMode="contain"
+              />
+            </View>
             <Text style={styles.resultMeta}>
               {lastUploaded.profile?.category || lastUploaded.category || '—'} / {lastUploaded.profile?.type || lastUploaded.type || '—'}
             </Text>
@@ -186,7 +192,13 @@ export default function ClosetScreen() {
               columnWrapperStyle={styles.row}
               renderItem={({ item }) => (
                 <View style={styles.itemCard}>
-                  <Image source={{ uri: item.cleanImageUrl || item.imageUrl }} style={styles.itemImage} />
+                  <View style={styles.itemImageContainer}>
+                    <Image
+                      source={{ uri: item.cleanImageUrl || item.imageUrl }}
+                      style={styles.itemImage}
+                      resizeMode="contain"
+                    />
+                  </View>
                   <Text style={styles.itemMeta} numberOfLines={1}>
                     {item.profile?.category ?? item.category ?? '—'}
                     {(item.profile?.type ?? item.type) ? ` · ${item.profile?.type ?? item.type}` : ''}
@@ -231,7 +243,18 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
       alignItems: 'center',
     },
     resultTitle: { fontSize: theme.typography.sm, color: theme.colors.textSecondary, marginBottom: theme.spacing.sm },
-    thumb: { width: 80, height: 80, borderRadius: theme.borderRadius.md, marginBottom: theme.spacing.sm },
+    previewContainer: {
+      width: '100%',
+      height: 240,
+      borderRadius: theme.borderRadius.lg,
+      backgroundColor: theme.colors.backgroundTertiary ?? theme.colors.background,
+      marginBottom: theme.spacing.sm,
+      overflow: 'hidden',
+    },
+    previewImage: {
+      width: '100%',
+      height: '100%',
+    },
     resultMeta: { fontSize: theme.typography.sm, color: theme.colors.textPrimary },
     confidence: { fontSize: theme.typography.xs, color: theme.colors.textTertiary, marginTop: theme.spacing.xs },
     loading: { alignItems: 'center', paddingVertical: theme.spacing['2xl'] },
@@ -242,7 +265,12 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     sectionTitle: { fontSize: theme.typography.base, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: theme.spacing.md },
     row: { gap: theme.spacing.md, marginBottom: theme.spacing.md },
     itemCard: { flex: 1, backgroundColor: theme.colors.backgroundSecondary, borderRadius: theme.borderRadius.lg, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border },
-    itemImage: { width: '100%', aspectRatio: 1 },
+    itemImageContainer: {
+      width: '100%',
+      height: 120,
+      backgroundColor: theme.colors.backgroundTertiary ?? theme.colors.background,
+    },
+    itemImage: { width: '100%', height: '100%' },
     itemMeta: { fontSize: theme.typography.xs, color: theme.colors.textSecondary, padding: theme.spacing.sm },
   });
 }

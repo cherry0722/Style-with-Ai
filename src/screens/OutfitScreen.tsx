@@ -108,7 +108,7 @@ export default function OutfitScreen() {
 
             {result.outfits.length === 0 ? (
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>Add more items for better outfits</Text>
+                <Text style={styles.emptyText}>Add at least 1 item to see suggestions.</Text>
               </View>
             ) : (
               result.outfits.slice(0, 3).map((outfit, idx) => (
@@ -132,11 +132,13 @@ function OutfitCard({ outfit, theme }: { outfit: ReasonedOutfitEntry; theme: Ret
     <View style={styles.card}>
       <View style={styles.imagesRow}>
         {items.map((item) => (
-          <Image
-            key={item._id}
-            source={{ uri: item.cleanImageUrl || item.imageUrl }}
-            style={styles.thumb}
-          />
+          <View key={item._id} style={styles.thumbWrap}>
+            <Image
+              source={{ uri: item.cleanImageUrl || item.imageUrl }}
+              style={styles.thumb}
+              resizeMode="contain"
+            />
+          </View>
         ))}
       </View>
       {reasons.length > 0 && (
@@ -148,7 +150,7 @@ function OutfitCard({ outfit, theme }: { outfit: ReasonedOutfitEntry; theme: Ret
         </View>
       )}
       {missing.length > 0 && (
-        <Text style={styles.missing}>Missing: {missing.join(', ')}</Text>
+        <Text style={styles.missing}>To complete: {missing.join(', ')}</Text>
       )}
     </View>
   );
@@ -183,7 +185,8 @@ function cardStyles(theme: ReturnType<typeof useTheme>) {
   return StyleSheet.create({
     card: { backgroundColor: theme.colors.backgroundSecondary, borderRadius: theme.borderRadius.lg, padding: theme.spacing.lg, marginBottom: theme.spacing.lg, borderWidth: 1, borderColor: theme.colors.border },
     imagesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.md },
-    thumb: { width: 64, height: 64, borderRadius: theme.borderRadius.md },
+    thumbWrap: { width: 72, height: 72, borderRadius: theme.borderRadius.md, backgroundColor: theme.colors.backgroundTertiary ?? theme.colors.background, overflow: 'hidden' },
+    thumb: { width: '100%', height: '100%' },
     reasons: { marginTop: theme.spacing.xs },
     reasonsTitle: { fontSize: theme.typography.sm, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: theme.spacing.xs },
     bullet: { fontSize: theme.typography.xs, color: theme.colors.textSecondary, marginLeft: theme.spacing.sm },

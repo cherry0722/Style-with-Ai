@@ -1,34 +1,61 @@
 /**
- * AsyncStorage-backed persist storage for Zustand (Expo Go safe).
- * Catches errors so persistence failures do not crash; no repeated warnings.
+ * AsyncStorage-backed Zustand persist adapter (Expo Go safe).
+ * - setItem ALWAYS writes a string (JSON.stringify).
+ * - getItem returns string or null; invalid/corrupt data is removed and returns null.
+ * - Never throws; single dev warning if storage fails.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 let warned = false;
 
+function isValidJsonString(str: string): boolean {
+  if (str === '' || str === '[object Object]') return false;
+  try {
+    JSON.parse(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function safeGetItem(name: string): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(name);
-  } catch (_) {
-    if (!warned) {
-      warned = true;
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[persistStorage] AsyncStorage unavailable, using in-memory only');
+    const raw = await AsyncStorage.getItem(name);
+    if (raw == null) return null;
+    if (typeof raw !== 'string') {
+      await AsyncStorage.removeItem(name);
+      if (!warned && typeof __DEV__ !== 'undefined' && __DEV__) {
+        warned = true;
+        console.warn('[persistStorage] Non-string value removed for key:', name);
       }
+      return null;
+    }
+    if (!isValidJsonString(raw)) {
+      await AsyncStorage.removeItem(name);
+      if (!warned && typeof __DEV__ !== 'undefined' && __DEV__) {
+        warned = true;
+        console.warn('[persistStorage] Invalid JSON value removed for key:', name);
+      }
+      return null;
+    }
+    return raw;
+  } catch (_) {
+    if (!warned && typeof __DEV__ !== 'undefined' && __DEV__) {
+      warned = true;
+      console.warn('[persistStorage] AsyncStorage unavailable, using in-memory only');
     }
     return null;
   }
 }
 
-async function safeSetItem(name: string, value: string): Promise<void> {
+async function safeSetItem(name: string, value: unknown): Promise<void> {
   try {
-    await AsyncStorage.setItem(name, value);
+    const str = typeof value === 'string' ? value : JSON.stringify(value);
+    await AsyncStorage.setItem(name, str);
   } catch (_) {
-    if (!warned) {
+    if (!warned && typeof __DEV__ !== 'undefined' && __DEV__) {
       warned = true;
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[persistStorage] AsyncStorage unavailable, using in-memory only');
-      }
+      console.warn('[persistStorage] AsyncStorage unavailable, using in-memory only');
     }
   }
 }

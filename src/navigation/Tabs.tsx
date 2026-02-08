@@ -58,6 +58,7 @@ export default function Tabs() {
         <Tab.Navigator
           initialRouteName="Closet"
           screenOptions={({ route }) => ({
+            // No auto-navigation to Outfits; user must tap Outfits tab
             headerTitle: () => (
               <Text style={{ fontWeight: "800", fontSize: 16 }}>
                 {route.name}
@@ -125,15 +126,15 @@ export default function Tabs() {
           component={OutfitScreen} 
           options={{ title: "Outfits" }} 
         />
-        <Tab.Screen
-          name="Avatar"
-          component={AvatarScreen}
-          options={{ title: "Avatar" }}
-        />
         <Tab.Screen 
           name="Settings" 
           component={SettingsScreen} 
           options={{ title: "Settings" }} 
+        />
+        <Tab.Screen
+          name="Avatar"
+          component={AvatarScreen}
+          options={{ title: "Avatar" }}
         />
       </Tab.Navigator>
 

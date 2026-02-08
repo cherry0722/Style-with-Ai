@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -6,38 +6,25 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/RootNavigator";
 
 /**
- * AuthGate: Decides initial routing after app launch
- * 
- * Flow:
- * 1. Show loading spinner while AuthContext is loading user/token from AsyncStorage
- * 2. Once loading completes:
- *    - If user exists (restored from storage or already logged in) → navigate to Main (Tabs)
- *    - If no user (no token/user data) → navigate to Login
- * 
- * This screen should only be accessible during startup/logout flows, not from within the tabs.
+ * AuthGate: Decides initial routing after app launch.
+ * Does not redirect until isRestoring === false. Navigates exactly once (ref guard).
  */
 export default function AuthGate({ navigation }: NativeStackScreenProps<RootStackParamList, "AuthGate">) {
   const { user, loading, isRestoring } = useAuth();
   const theme = useTheme();
   const styles = createStyles(theme);
   const ready = !loading && !isRestoring;
+  const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
     if (!ready) return;
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
 
     if (user) {
-      // User is authenticated (restored from storage or logged in)
-      // Use reset to prevent going back to Splash/AuthGate
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Main' }],
-      });
+      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } else {
-      // No user found, redirect to Auth (Login + Signup)
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'Auth' }],
-      });
+      navigation.reset({ index: 0, routes: [{ name: 'Auth' }] });
     }
   }, [user, ready, navigation]);
 

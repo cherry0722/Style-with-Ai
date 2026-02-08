@@ -41,6 +41,8 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
   const logoutRef = useRef<() => Promise<void>>(() => Promise.resolve());
   logoutRef.current = async () => {
+    setToken(null);
+    setUser(null);
     await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
     await AsyncStorage.removeItem(USER_STORAGE_KEY);
     if (typeof localStorage !== 'undefined') {
@@ -54,8 +56,6 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
     useCalendar.getState().reset();
     useNotifications.getState().reset();
     useFavorites.getState().reset();
-    setToken(null);
-    setUser(null);
   };
 
   useEffect(() => {
