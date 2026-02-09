@@ -42,12 +42,17 @@ client.interceptors.response.use(
     const data = err?.response?.data as Record<string, unknown> | undefined;
     const url = err?.config?.url ?? '';
 
+    const errBody = data && typeof data === 'object' && data.error && typeof (data as { error?: { message?: string } }).error === 'object'
+      ? (data as { error: { message?: string } }).error
+      : null;
+    const msgFromBody = errBody?.message ?? (data && typeof data === 'object' && 'message' in data ? (data as { message: string }).message : null);
+
     if (status === 401) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log('[API Client] Auth failure (401)', { url, status });
       }
       callOn401();
-      const cleanMessage = (data && typeof data === 'object' && data.message) ? String(data.message) : 'Session expired. Please log in again.';
+      const cleanMessage = msgFromBody ? String(msgFromBody) : 'Session expired. Please log in again.';
       return Promise.reject({ status: 401, data, message: cleanMessage });
     }
 
@@ -55,9 +60,7 @@ client.interceptors.response.use(
       console.log('[API Client] Auth/validation failure', { url, status, body: data });
     }
 
-    const cleanMessage = (data && typeof data === 'object' && 'message' in data ? (data as { message: string }).message : null) ||
-      err?.message ||
-      (status ? `Request failed with status ${status}` : 'Request failed');
+    const cleanMessage = msgFromBody ? String(msgFromBody) : err?.message || (status ? `Request failed with status ${status}` : 'Request failed');
 
     return Promise.reject({ status: status || undefined, data: data || undefined, message: cleanMessage });
   }

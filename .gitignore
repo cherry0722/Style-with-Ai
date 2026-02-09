@@ -71,3 +71,7 @@ docs/SMOKE_TEST.md
 
 __pycache__/
 *.pyc
+process_item.cpython-314.pyc
+# Ignore specific python cache files
+backend/services/__pycache__/__init__.cpython-314.pyc
+backend/services/__pycache__/process_item.cpython-314.pyc

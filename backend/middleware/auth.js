@@ -12,14 +12,18 @@ module.exports = (req, res, next) => {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
 
   if (!token) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    const err = new Error('Unauthorized');
+    err.status = 401;
+    return next(err);
   }
 
   try {
     req.user = jwt.verify(token, JWT_SECRET);
     return next();
   } catch (e) {
-    return res.status(401).json({ message: 'Invalid token' });
+    const err = new Error('Invalid token');
+    err.status = 401;
+    return next(err);
   }
 };
 

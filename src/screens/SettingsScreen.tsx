@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -16,6 +17,7 @@ import { useTheme } from "../context/ThemeContext";
 import { hapticFeedback } from "../utils/haptics";
 import { Picker } from '@react-native-picker/picker';
 import type { BodyType, Pronouns } from "../types";
+import { ENABLE_AI } from "../config";
 
 const PRONOUNS: Pronouns[] = ["she/her", "he/him", "they/them", "prefer-not-to-say"];
 const BODY_TYPES: BodyType[] = ["skinny", "fit", "muscular", "bulk", "pear", "hourglass", "rectangle"];
@@ -389,7 +391,7 @@ export default function SettingsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={["top"]} style={[styles.container, { flex: 1 }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Account (v1): current user + Logout */}
         <View style={styles.section}>
@@ -417,6 +419,25 @@ export default function SettingsScreen() {
             </View>
           </Pressable>
         </View>
+
+        {/* Client env probe — dev only */}
+        {__DEV__ && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Client env (dev)</Text>
+            <View style={styles.settingItem}>
+              <View style={styles.settingContent}>
+                <Text style={styles.settingLabel}>EXPO_PUBLIC_ENABLE_AI (raw)</Text>
+                <Text style={styles.settingValue}>{process.env.EXPO_PUBLIC_ENABLE_AI === undefined ? '(undefined)' : String(process.env.EXPO_PUBLIC_ENABLE_AI)}</Text>
+              </View>
+            </View>
+            <View style={styles.settingItem}>
+              <View style={styles.settingContent}>
+                <Text style={styles.settingLabel}>ENABLE_AI (boolean)</Text>
+                <Text style={styles.settingValue}>{ENABLE_AI ? 'true' : 'false'}</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Header */}
         <View style={styles.header}>
@@ -612,6 +633,6 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }

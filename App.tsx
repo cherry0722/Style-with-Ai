@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, ActivityIndicator } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer, createNavigationContainerRef } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import RootNavigator from "./src/navigation/RootNavigator";
@@ -26,13 +27,15 @@ export default function App() {
   }
 
   return (
-    <AuthProvider navRef={navigationRef}>
-      <ThemeProvider>
-        <NavigationContainer ref={navigationRef}>
-          <StatusBar style="auto" />
-          <RootNavigator />
-        </NavigationContainer>
-      </ThemeProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider navRef={navigationRef}>
+        <ThemeProvider>
+          <NavigationContainer ref={navigationRef}>
+            <StatusBar style="auto" />
+            <RootNavigator />
+          </NavigationContainer>
+        </ThemeProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }

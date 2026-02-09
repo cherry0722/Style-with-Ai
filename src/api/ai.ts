@@ -6,12 +6,16 @@ import client from './client';
 
 export interface ReasonedOutfitsRequest {
   occasion?: string;
-  location?: { latitude?: number; longitude?: number; lat?: number; lon?: number; lng?: number; city?: string; region?: string };
-  weather?: { tempF?: number; condition?: string };
+  context?: {
+    location?: { latitude?: number; longitude?: number; lat?: number; lon?: number; lng?: number; city?: string; region?: string };
+    weather?: { tempF?: number; condition?: string };
+  };
+  lockedItemIds?: string[];
 }
 
 export interface WardrobeItemInOutfit {
-  _id: string;
+  id?: string;
+  _id?: string;
   userId?: string;
   imageUrl: string;
   cleanImageUrl?: string | null;
@@ -22,6 +26,7 @@ export interface WardrobeItemInOutfit {
 }
 
 export interface ReasonedOutfitEntry {
+  outfitId?: string;
   items: WardrobeItemInOutfit[];
   reasons?: string[];
   score?: number;
@@ -37,15 +42,18 @@ export interface ReasonedOutfitsResponse {
     tempF?: number | null;
     locationUsed?: boolean;
   };
-  engine: 'python' | 'fallback';
+  engine: 'python' | 'node_fallback' | 'fallback';
   pythonUsed: boolean;
   pythonError: string | null;
 }
 
-/** POST /api/ai/reasoned_outfits — JWT required. */
+const REASONED_OUTFITS_PATH = '/api/ai/reasoned_outfits';
+
+/** POST /api/ai/reasoned_outfits — JWT required. Uses API_BASE_URL (Node); Node fallback when Python down. */
 export async function getReasonedOutfits(
   body: ReasonedOutfitsRequest
 ): Promise<ReasonedOutfitsResponse> {
-  const res = await client.post<ReasonedOutfitsResponse>('/api/ai/reasoned_outfits', body);
+  if (__DEV__) console.log('[AI API] POST', REASONED_OUTFITS_PATH);
+  const res = await client.post<ReasonedOutfitsResponse>(REASONED_OUTFITS_PATH, body);
   return res.data;
 }

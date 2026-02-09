@@ -51,16 +51,13 @@ router.post('/image', auth, upload.single('image'), async (req, res) => {
   }
 });
 
-// Error handler for multer errors
 router.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ message: 'File size exceeds 5 MB limit' });
-    }
-    return res.status(400).json({ message: err.message || 'File upload error' });
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    err.status = 413;
+    err.message = 'File size exceeds limit';
   }
   if (err.message && err.message.includes('Only jpeg')) {
-    return res.status(400).json({ message: err.message });
+    err.status = 415;
   }
   next(err);
 });

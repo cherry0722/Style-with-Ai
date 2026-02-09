@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import type { UserAuth } from "../types";
-import client from "../api/client";
+import * as authApi from "../api/auth";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setOn401 } from "../api/on401";
 import { setTokenGetter } from "../api/tokenGetter";
@@ -107,25 +107,39 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
   }, [navRef]);
 
   async function login(email: string, password: string) {
-    const res = await client.post("/api/login", { email, password });
-    const { user: u, token: t } = res.data;
-    if (!t) throw new Error('No token in response');
+    const { user: u, accessToken: t } = await authApi.login(email, password);
+    if (!t) throw new Error('No accessToken in response');
     await AsyncStorage.setItem(TOKEN_STORAGE_KEY, t);
     if (typeof localStorage !== 'undefined') {
       try { localStorage.setItem(TOKEN_STORAGE_KEY, t); } catch (_) {}
     }
     setToken(t);
-    const userData = { id: u._id, email: u.email, username: u.username, phone: u.phone };
+    const userData: UserAuth = { id: u.id, email: u.email, username: u.username ?? '', phone: '' };
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
     setUser(userData);
   }
 
-  async function signup(email: string, password: string, username?: string, phone?: string, image?: string) {
-    await client.post("/api/users", { email, password, username: username || undefined, phone: phone || undefined, image });
-    await login(email, password);
+  async function signup(email: string, password: string, username?: string, phone?: string) {
+    const { user: u, accessToken: t } = await authApi.signup({
+      username: username ?? email.split('@')[0],
+      email,
+      password,
+    });
+    if (!t) throw new Error('No accessToken in response');
+    await AsyncStorage.setItem(TOKEN_STORAGE_KEY, t);
+    if (typeof localStorage !== 'undefined') {
+      try { localStorage.setItem(TOKEN_STORAGE_KEY, t); } catch (_) {}
+    }
+    setToken(t);
+    const userData: UserAuth = { id: u.id, email: u.email, username: u.username ?? '', phone: phone ?? '' };
+    await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+    setUser(userData);
   }
 
   async function logout() {
+    try {
+      await authApi.logout();
+    } catch (_) {}
     await logoutRef.current();
   }
 

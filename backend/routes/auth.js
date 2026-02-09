@@ -1,9 +1,10 @@
-const router = require("express").Router();
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
-const rateLimit = require("express-rate-limit");
+const router = require('express').Router();
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
-const User = require("../models/user");
+const User = require('../models/user');
+const auth = require('../middleware/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -12,69 +13,115 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-// Rate limiting for auth endpoints
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: { message: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// ❌ Signup is handled in routes/user.js via /api/users
-// This file only handles login via /api/login
-
-router.post("/login", authLimiter, [
+// POST /api/auth/signup
+router.post('/auth/signup', authLimiter, [
+  body('username').trim().notEmpty().withMessage('Username is required'),
   body('email').isEmail().withMessage('Invalid email format'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
-], async (req, res) => {
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+], async (req, res, next) => {
   try {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[AUTH] /login requested');
-    }
-
-    // Validate input
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: 'Validation failed', 
-        details: errors.array() 
-      });
+      const err = new Error('Validation failed');
+      err.status = 400;
+      err.details = errors.array();
+      return next(err);
+    }
+    const { username, email, password } = req.body;
+
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    if (existingUser) {
+      const err = new Error('Email or username already exists');
+      err.status = 400;
+      return next(err);
     }
 
+    const newUser = new User({ username, email, password });
+    const savedUser = await newUser.save();
+    const token = jwt.sign(
+      { email: savedUser.email, userId: savedUser._id.toString() },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      user: {
+        id: savedUser._id.toString(),
+        username: savedUser.username,
+        email: savedUser.email,
+      },
+      accessToken: token,
+    });
+  } catch (err) {
+    if (err.name === 'ValidationError') {
+      err.status = 400;
+      err.message = Object.values(err.errors).map((e) => e.message).join(', ');
+    }
+    if (err.code === 11000) {
+      err.status = 400;
+      err.message = 'Email or username already exists';
+    }
+    next(err);
+  }
+});
+
+// POST /api/auth/login
+router.post('/auth/login', authLimiter, [
+  body('email').isEmail().withMessage('Invalid email format'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+], async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const err = new Error('Validation failed');
+      err.status = 400;
+      return next(err);
+    }
     const { email, password } = req.body;
 
-    // 1️⃣ Find user by email
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      const err = new Error('Invalid credentials');
+      err.status = 401;
+      return next(err);
     }
-
-    // 2️⃣ Compare password using bcrypt
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      const err = new Error('Invalid credentials');
+      err.status = 401;
+      return next(err);
     }
 
-    // 3️⃣ Generate JWT token
-    const token = jwt.sign({ email: user.email, userId: user._id }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign(
+      { email: user.email, userId: user._id.toString() },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
-    // 4️⃣ Return user data and token
     res.status(200).json({
-      message: "Login successful",
-      token,
       user: {
-        _id: user._id,
-        email: user.email,
+        id: user._id.toString(),
         username: user.username,
-        phone: user.phone,
-        image: user.image,
+        email: user.email,
       },
+      accessToken: token,
     });
-  } catch (e) {
-    console.error("Login error:", e);
-    res.status(500).json({ message: "Login error" });
+  } catch (err) {
+    next(err);
   }
+});
+
+// POST /api/auth/logout — auth required; revoke/session logic can be added later
+router.post('/auth/logout', auth, (req, res) => {
+  res.status(200).json({ ok: true });
 });
 
 module.exports = router;

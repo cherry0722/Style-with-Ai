@@ -48,6 +48,17 @@ const WardrobeSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // v2 overlay: user-editable; never overwrite profile
+    v2: {
+      userTags: { type: [String], default: [] },
+      overrides: { type: mongoose.Schema.Types.Mixed, default: null },
+      availability: {
+        status: { type: String, enum: ['available', 'unavailable'], default: 'available' },
+        reason: { type: String, enum: ['laundry', 'packed'], default: null },
+        untilDate: { type: String, default: null }, // YYYY-MM-DD
+      },
+    },
   },
   { timestamps: true }
 );

@@ -12,8 +12,15 @@ export interface WardrobeItemPayload {
   styleVibe?: string[];
 }
 
+export interface WardrobeV2Availability {
+  status: 'available' | 'unavailable';
+  reason: 'laundry' | 'packed' | null;
+  untilDate: string | null;
+}
+
 export interface WardrobeItemResponse {
-  _id: string;
+  _id?: string;
+  id?: string;
   userId?: string;
   imageUrl: string;
   cleanImageUrl?: string;
@@ -29,6 +36,11 @@ export interface WardrobeItemResponse {
   primaryColor?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  v2?: {
+    userTags?: string[];
+    overrides?: Record<string, unknown> | null;
+    availability?: WardrobeV2Availability;
+  };
 }
 
 export interface WardrobeAnalyzeResponse {
@@ -209,13 +221,20 @@ export const createWardrobeItem = async (
   }
 };
 
-export const fetchWardrobeItems = async (): Promise<WardrobeItemResponse[]> => {
-  const res = await client.get<WardrobeItemResponse[]>('/api/wardrobe');
-  return res.data;
+/** GET /api/wardrobe — v2 returns { items }. Default excludes unavailable. */
+export const fetchWardrobeItems = async (includeUnavailable = false): Promise<WardrobeItemResponse[]> => {
+  const url = includeUnavailable ? '/api/wardrobe?includeUnavailable=true' : '/api/wardrobe';
+  const res = await client.get<{ items?: WardrobeItemResponse[] } | WardrobeItemResponse[]>(url);
+  const data = res.data;
+  if (data && typeof data === 'object' && Array.isArray((data as { items?: WardrobeItemResponse[] }).items)) {
+    return (data as { items: WardrobeItemResponse[] }).items;
+  }
+  if (Array.isArray(data)) return data;
+  return [];
 };
 
 /** Alias for fetchWardrobeItems (GET /api/wardrobe). */
-export const listWardrobe = fetchWardrobeItems;
+export const listWardrobe = (includeUnavailable?: boolean) => fetchWardrobeItems(includeUnavailable);
 
 export const toggleFavorite = async (
   id: string,
@@ -248,19 +267,14 @@ export const toggleFavorite = async (
 };
 
 export async function deleteWardrobeItem(id: string): Promise<void> {
-  console.log("[Wardrobe API] deleteWardrobeItem called with id:", id);
+  await client.delete(`/api/wardrobe/${id}`);
+}
 
-  try {
-    console.log("[Wardrobe API] Calling DELETE /api/wardrobe/:id");
-    await client.delete(`/api/wardrobe/${id}`);
-    console.log("[Wardrobe API] Delete successful for id:", id);
-  } catch (err: any) {
-    console.error("[Wardrobe API] deleteWardrobeItem error:", {
-      message: err?.message,
-      status: err?.status ?? err?.response?.status,
-      data: err?.response?.data,
-      fullError: err,
-    });
-    throw err;
-  }
+/** PATCH /api/wardrobe/:id/v2 — update only v2 overlay (e.g. availability). */
+export async function patchWardrobeV2(
+  id: string,
+  payload: { userTags?: string[]; overrides?: Record<string, unknown>; availability?: WardrobeV2Availability }
+): Promise<WardrobeItemResponse> {
+  const res = await client.patch<{ item: WardrobeItemResponse }>(`/api/wardrobe/${id}/v2`, payload);
+  return res.data.item;
 }

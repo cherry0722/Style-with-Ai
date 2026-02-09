@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import ComingSoonScreen from "../screens/ComingSoonScreen";
+import HomeScreen from "../screens/HomeScreen";
 import ClosetScreen from "../screens/ClosetScreen";
 import OutfitScreen from "../screens/OutfitScreen";
 import SettingsScreen from "../screens/SettingsScreen";
@@ -109,7 +110,7 @@ export default function Tabs() {
       >
         <Tab.Screen 
           name="Home" 
-          component={ComingSoonScreen} 
+          component={HomeScreen} 
           options={{ title: "Home", headerShown: false }} 
         />
         <Tab.Screen 

@@ -1,248 +1,223 @@
-// backend/routes/agent.js
 const express = require('express');
 const auth = require('../middleware/auth');
 const Wardrobe = require('../models/wardrobe');
-const { scoreOutfit } = require('../services/reasoning/scoreOutfit');
 const { normalizeOccasion } = require('../services/reasoning/occasionRules');
 const { getWeatherSummary } = require('../services/weatherService');
 const aiService = require('../services/aiServiceClient');
+const { healthProxy } = require('../services/pythonProxy');
+const {
+  filterAvailable,
+  generateThreeOutfits,
+  regenerateOutfit,
+  swapCategory,
+} = require('../services/fallbackOutfitGenerator');
+const { sanitizeWardrobeItem } = require('../utils/sanitizeWardrobeItem');
 
 const router = express.Router();
 
-// GET /api/ai/health-proxy - debug: calls Python /health via aiService, returns status + latency
-router.get('/health-proxy', async (req, res) => {
-  const start = Date.now();
+function getUserId(req) {
+  return req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+}
+
+// GET /api/ai/health-proxy — 2s timeout, never leak Python URL/host; safe JSON only
+router.get('/health-proxy', async (req, res, next) => {
   try {
-    const data = await aiService.healthCheck();
-    const latencyMs = Date.now() - start;
-    return res.status(200).json({ ok: true, status: data, latencyMs });
+    const result = await healthProxy();
+    const status = result.pythonOk ? 200 : 200;
+    res.status(status).json({
+      ok: true,
+      pythonOk: result.pythonOk,
+      latencyMs: result.latencyMs,
+      ...(result.message && { message: result.message }),
+    });
   } catch (err) {
-    const latencyMs = Date.now() - start;
-    aiService.safeLog('AgentRoute', 'health-proxy failed', {
-      code: err.code,
-      status: err.response?.status,
-      latencyMs,
-    });
-    return res.status(503).json({
-      ok: false,
-      message: 'AI service temporarily unavailable. Please try again.',
-      failReason: err.code || err.response?.status || (err.message || '').slice(0, 100),
-      latencyMs,
-    });
+    next(err);
   }
 });
 
-// --- Phase 3A: Reasoned outfits (metadata-only, no image processing) ---
-// Phase 3B: occasion normalization, optional weather enrichment, contextUsed, diversity filter
-router.post('/reasoned_outfits', auth, async (req, res) => {
+// POST /api/ai/reasoned_outfits — v2: exclude unavailable, lockedItemIds, 3 outfits, same shape for python/node_fallback
+router.post('/reasoned_outfits', auth, async (req, res, next) => {
   try {
-    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    const userId = getUserId(req);
     if (!userId) {
-      return res.status(401).json({ message: 'Invalid auth payload' });
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
     }
-
-    let { occasion, location, weather } = req.body || {};
-    const loc = location && typeof location === 'object' ? location : {};
+    const { occasion, context, lockedItemIds } = req.body || {};
+    const loc = (context && context.location) || {};
+    let weather = (context && context.weather) || {};
     let weatherUsed = false;
     let tempFUsed = null;
-
-    // Phase 3B.1: Normalize location - accept { latitude, longitude } OR { lat, lon } or { lat, lng }
     const lat = loc.latitude != null ? Number(loc.latitude) : (loc.lat != null ? Number(loc.lat) : NaN);
     const lon = loc.longitude != null ? Number(loc.longitude) : (loc.lon != null ? Number(loc.lon) : (loc.lng != null ? Number(loc.lng) : NaN));
     const hasLatLon = Number.isFinite(lat) && Number.isFinite(lon);
-    const locationUsed = Boolean(loc && (hasLatLon || loc.city != null || loc.region != null));
-
-    // Phase 3B: Optional weather enrichment (only if lat/lon provided and WEATHER_API_KEY set)
-    if (!weather || typeof weather !== 'object') {
-      weather = {};
-    }
     const hasWeatherKey = Boolean((process.env.WEATHER_API_KEY || '').trim() && process.env.WEATHER_API_KEY !== 'demo_key');
-    const requestWeatherPresent = weather.tempF != null || (weather.condition != null && String(weather.condition).trim() !== '');
-    const requestWeatherMissing = !requestWeatherPresent;
-
-    // Phase 3B.2: Dev-only logs for weather enrichment debugging (never log the key)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[WEATHER] keyPresent=' + hasWeatherKey);
-      console.log('[WEATHER] lat=' + lat + ' lon=' + lon);
-      console.log('[WEATHER] requestWeatherPresent=' + requestWeatherPresent);
-    }
-
-    if (requestWeatherMissing && hasLatLon && hasWeatherKey) {
+    if ((!weather || !weather.tempF) && hasLatLon && hasWeatherKey) {
       try {
         const w = await getWeatherSummary(lat, lon);
         if (w && !w.error) {
           weather = { ...weather, tempF: w.tempF, condition: w.summary };
           weatherUsed = true;
           tempFUsed = w.tempF;
-          if (process.env.NODE_ENV !== 'production') {
-            console.log('[WEATHER] fetched tempF=' + tempFUsed + ' condition=' + (w.summary || ''));
-          }
-        } else if (w && w.error && process.env.NODE_ENV !== 'production') {
-          console.log('[WEATHER] skip: ' + w.error);
         }
-      } catch (e) {
-        const errMsg = (e && e.message) || String(e);
-        console.log('[WEATHER] failed: ' + errMsg);
-        // Do not crash; continue without weather
-      }
-    } else if (requestWeatherPresent && weather.tempF != null) {
+      } catch (_) {}
+    } else if (weather && weather.tempF != null) {
       weatherUsed = true;
       tempFUsed = Number(weather.tempF);
-    } else if (process.env.NODE_ENV !== 'production' && requestWeatherMissing) {
-      if (!hasWeatherKey || !hasLatLon) {
-        console.log('[WEATHER] skip: missing key/latlon');
-      }
     }
 
     const normalizedOccasion = normalizeOccasion(occasion);
-    const hasOccasion = occasion != null && String(occasion).trim();
-    const context = {
-      occasion: hasOccasion ? normalizedOccasion : undefined,
-      location: loc,
-      weather,
-    };
+    const allItems = await Wardrobe.find({ userId }).lean().exec();
+    const availableItems = filterAvailable(allItems);
+    const idToItem = new Map(allItems.map((i) => [String(i._id), i]));
 
-    let pythonErrorForFallback = null;
+    let engine = 'node_fallback';
+    let pythonUsed = false;
+    let pythonError = null;
+    let outfits = [];
 
-    const items = await Wardrobe.find({ userId }).lean().exec();
-
-    // Phase 3D: response metadata: engine ("python" | "fallback"), pythonUsed, pythonError (short string or null)
-    const contextUsed = {
-      occasion: normalizedOccasion,
-      weatherUsed,
-      tempF: tempFUsed,
-      locationUsed,
-    };
-
-    // Guardrail: empty wardrobe
-    if (!items || items.length === 0) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[REASONED_OUTFITS] engine=fallback (empty wardrobe)');
-      }
+    if (availableItems.length === 0) {
       return res.status(200).json({
-        message: 'Your wardrobe is empty. Add some items to get outfit recommendations.',
-        outfits: [],
-        contextUsed,
-        engine: 'fallback',
+        engine: 'node_fallback',
         pythonUsed: false,
         pythonError: null,
+        outfits: [],
       });
     }
 
-    // Phase 4C: Python-first when >= 1 usable item (with profile); else Node scoreOutfit fallback
-    const usableItems = items.filter((i) => i && (i.profile != null && typeof i.profile === 'object'));
-    const idToItem = new Map(items.map((i) => [String(i._id), i]));
+    const locked = Array.isArray(lockedItemIds) ? lockedItemIds.map(String) : [];
+    const usableItems = availableItems.filter((i) => i.profile != null && typeof i.profile === 'object');
 
     if (usableItems.length >= 1) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[REASONED_OUTFITS] attempting python with usableItems=' + usableItems.length);
-      }
       const payload = {
-        occasion: hasOccasion ? normalizedOccasion : undefined,
+        occasion: normalizedOccasion,
         location: Object.keys(loc).length ? loc : null,
-        weather: (weather.tempF != null || (weather.condition && String(weather.condition).trim())) ? weather : null,
-        items: usableItems.map((i) => ({
-          id: String(i._id),
-          profile: i.profile,
-        })),
+        weather: (weather && (weather.tempF != null || (weather.condition && String(weather.condition).trim()))) ? weather : null,
+        items: usableItems.map((i) => ({ id: String(i._id), profile: i.profile })),
+        lockedItemIds: locked.length ? locked : undefined,
       };
       try {
         const pyRes = await aiService.post('/generate-outfits', payload);
         const data = pyRes.data || {};
         const pyOutfits = Array.isArray(data.outfits) ? data.outfits : [];
         if (pyRes.status >= 200 && pyRes.status < 300 && pyOutfits.length > 0) {
-          const outfitsPayload = pyOutfits.slice(0, 3).map((o) => {
+          const built = pyOutfits.slice(0, 3).map((o) => {
             const itemIds = Array.isArray(o.itemIds) ? o.itemIds : [];
             const fullItems = itemIds.map((id) => idToItem.get(String(id))).filter(Boolean);
             const why = typeof o.why === 'string' ? o.why : '';
             const notes = Array.isArray(o.notes) ? o.notes : [];
             const reasons = [why, ...notes].filter(Boolean);
-            const entry = { items: fullItems, reasons };
-            if (fullItems.length === 0) return null;
-            return entry;
-          }).filter(Boolean);
-          if (outfitsPayload.length > 0) {
-            if (process.env.NODE_ENV !== 'production') {
-              console.log('[REASONED_OUTFITS] engine=python pythonUsed=true');
-            }
-            return res.status(200).json({
-              outfits: outfitsPayload,
-              contextUsed,
-              engine: 'python',
-              pythonUsed: true,
-              pythonError: null,
-            });
+            const items = fullItems.map(sanitizeWardrobeItem);
+            return { outfitId: o.outfitId || require('crypto').randomUUID(), items, lockedItemIds: locked, reasons };
+          }).filter((o) => o.items.length > 0);
+          if (built.length > 0) {
+            engine = 'python';
+            pythonUsed = true;
+            outfits = built;
           }
         }
-        // Non-2xx or empty/bad schema: treat as failure, use fallback
-        const errMsg = pyRes.status >= 200 && pyRes.status < 300
-          ? 'Invalid or empty outfits in response'
-          : 'Python returned ' + (pyRes.status || 'non-2xx');
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('[REASONED_OUTFITS] engine=fallback pythonError=' + errMsg);
+        if (outfits.length === 0) {
+          pythonError = 'Invalid or empty outfits in response';
         }
-        throw new Error(errMsg);
       } catch (pyErr) {
-        const shortError = (pyErr.code && String(pyErr.code).length < 50)
-          ? pyErr.code
-          : (pyErr.response && pyErr.response.status)
-            ? 'HTTP ' + pyErr.response.status
-            : (pyErr.message && String(pyErr.message).length <= 120)
-              ? String(pyErr.message)
-              : (pyErr.message ? String(pyErr.message).slice(0, 120) : 'Python request failed');
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('[REASONED_OUTFITS] engine=fallback pythonError=' + shortError);
-        }
-        pythonErrorForFallback = shortError;
+        pythonError = pyErr.response?.status ? 'HTTP ' + pyErr.response.status : (pyErr.message || 'Python request failed').slice(0, 120);
       }
     }
 
-    // Fallback: Node scoreOutfit (Phase 3A/3B)
-    const { outfits } = scoreOutfit({ items, context });
-
-    // Phase 3B: Diversity filter - dedupe by outfit signature (sorted item IDs joined by "-")
-    const seen = new Set();
-    const unique = outfits.filter((o) => {
-      const sig = o.items.map((i) => String(i._id || i.id || '')).sort().join('-');
-      if (seen.has(sig)) return false;
-      seen.add(sig);
-      return true;
-    });
-    const top3 = unique.slice(0, 3);
-
-    if (process.env.NODE_ENV !== 'production') {
-      const usedPythonAttempt = usableItems.length >= 1;
-      console.log('[REASONED_OUTFITS] engine=fallback pythonUsed=' + (usedPythonAttempt ? 'false (attempted)' : 'false'));
+    if (outfits.length === 0) {
+      const fallback = generateThreeOutfits(availableItems, locked);
+      outfits = fallback.map((o) => ({
+        outfitId: o.outfitId,
+        items: (o.items || []).map(sanitizeWardrobeItem),
+        lockedItemIds: o.lockedItemIds,
+        reasons: o.reasons,
+      }));
     }
 
-    const fallbackPayload = {
-      outfits: top3.map((o) => {
-        const entry = { items: o.items, score: o.score, reasons: o.reasons };
-        if (o.missing && o.missing.length > 0) entry.missing = o.missing;
-        return entry;
-      }),
-      contextUsed,
-      engine: 'fallback',
-      pythonUsed: false,
-      pythonError: pythonErrorForFallback,
-    };
-    return res.status(200).json(fallbackPayload);
+    const sanitizedOutfits = outfits.map((o) => ({
+      outfitId: o.outfitId,
+      items: (o.items || []).map(sanitizeWardrobeItem),
+      lockedItemIds: o.lockedItemIds || [],
+      reasons: o.reasons || [],
+    }));
+
+    res.status(200).json({
+      engine,
+      pythonUsed,
+      pythonError,
+      outfits: sanitizedOutfits,
+    });
   } catch (err) {
-    aiService.safeLog('AgentRoute', 'reasoned_outfits error', {
-      message: (err?.message || '').slice(0, 150),
-      code: err?.code,
-    });
-    return res.status(500).json({
-      message: 'Failed to compute reasoned outfits',
-      detail: err.message,
-    });
+    next(err);
   }
 });
 
-router.post('/suggest_outfit', async (req, res) => {
+// POST /api/ai/reasoned_outfits/lock
+router.post('/reasoned_outfits/lock', auth, (req, res, next) => {
+  try {
+    const { outfitId, lockItemIds } = req.body || {};
+    const locked = Array.isArray(lockItemIds) ? lockItemIds : [];
+    res.status(200).json({ ok: true, outfitId: outfitId || null, lockedItemIds: locked });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/ai/reasoned_outfits/regenerate — body: outfitId, lockedItemIds, items (current outfit)
+router.post('/reasoned_outfits/regenerate', auth, async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
+    }
+    const { outfitId, lockedItemIds, items: currentItems } = req.body || {};
+    const allItems = await Wardrobe.find({ userId }).lean().exec();
+    const availableItems = filterAvailable(allItems);
+    const locked = Array.isArray(lockedItemIds) ? lockedItemIds.map(String) : [];
+    const current = Array.isArray(currentItems) ? currentItems : [];
+    const result = regenerateOutfit(availableItems, locked, current);
+    res.status(200).json({
+      outfitId: outfitId || null,
+      items: (result.items || []).map(sanitizeWardrobeItem),
+      lockedItemIds: result.lockedItemIds,
+      changedItemIds: result.changedItemIds || [],
+      engine: 'node_fallback',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/ai/reasoned_outfits/swap — deterministic swap by category
+router.post('/reasoned_outfits/swap', auth, async (req, res, next) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) {
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
+    }
+    const { outfitId, category, items: currentItems } = req.body || {};
+    const allItems = await Wardrobe.find({ userId }).lean().exec();
+    const availableItems = filterAvailable(allItems);
+    const current = Array.isArray(currentItems) ? currentItems : [];
+    const result = swapCategory(availableItems, current, category);
+    res.status(200).json({
+      outfitId: outfitId || null,
+      items: (result.items || []).map(sanitizeWardrobeItem),
+      engine: 'node_fallback',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/suggest_outfit', async (req, res, next) => {
   const hasPreferences = req.body && req.body.preferences;
   aiService.safeLog('AgentRoute', 'Forwarding suggest_outfit', { preferencesPresent: !!hasPreferences });
-
   try {
     const response = await aiService.post('/suggest_outfit', req.body);
     res.status(response.status).json(response.data);
@@ -252,12 +227,10 @@ router.post('/suggest_outfit', async (req, res) => {
       code: err.code,
       message: (err.message || '').slice(0, 100),
     });
-    res.status(503).json({
-      message: 'AI service temporarily unavailable. Please try again.',
-      failReason: err.response?.data?.detail || err.message?.slice(0, 200),
-    });
+    const e = new Error('AI service temporarily unavailable');
+    e.status = 503;
+    next(e);
   }
 });
 
 module.exports = router;
-

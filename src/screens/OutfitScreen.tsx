@@ -11,7 +11,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
@@ -38,10 +37,10 @@ export default function OutfitScreen() {
       setLoading(true);
       setError(null);
       setResult(null);
-      const body: { occasion: string; location?: { latitude: number; longitude: number } } = {
+      const body = {
         occasion,
+        context: includeDallas ? { location: DALLAS_LOCATION } : undefined,
       };
-      if (includeDallas) body.location = DALLAS_LOCATION;
       const data = await getReasonedOutfits(body);
       setResult(data);
     } catch (err: any) {
@@ -96,19 +95,23 @@ export default function OutfitScreen() {
 
         {result && (
           <>
-            <View style={styles.engineCard}>
-              <Text style={styles.engineTitle}>Engine</Text>
-              <Text style={styles.engineText}>engine: {result.engine}</Text>
-              <Text style={styles.engineText}>pythonUsed: {result.pythonUsed ? 'true' : 'false'}</Text>
-              {result.pythonError ? <Text style={styles.engineError}>pythonError: {result.pythonError}</Text> : null}
-              {result.contextUsed?.weatherUsed && result.contextUsed?.tempF != null && (
-                <Text style={styles.engineText}>contextUsed.tempF: {result.contextUsed.tempF}</Text>
-              )}
-            </View>
+            {__DEV__ && (
+              <View style={styles.engineCard}>
+                <Text style={styles.engineTitle}>Engine</Text>
+                <Text style={styles.engineText}>engine: {result.engine}</Text>
+                <Text style={styles.engineText}>pythonUsed: {result.pythonUsed ? 'true' : 'false'}</Text>
+                {result.pythonError ? <Text style={styles.engineError}>pythonError: {result.pythonError}</Text> : null}
+                {result.contextUsed?.weatherUsed && result.contextUsed?.tempF != null && (
+                  <Text style={styles.engineText}>contextUsed.tempF: {result.contextUsed.tempF}</Text>
+                )}
+              </View>
+            )}
 
             {result.outfits.length === 0 ? (
               <View style={styles.empty}>
-                <Text style={styles.emptyText}>Add at least 1 item to see suggestions.</Text>
+                <Text style={styles.emptyText}>
+                  No outfits available — add available wardrobe items or mark items as available.
+                </Text>
               </View>
             ) : (
               <>
@@ -116,7 +119,7 @@ export default function OutfitScreen() {
                   <Text style={styles.partialHint}>Add 1–2 more items for full outfits.</Text>
                 )}
                 {result.outfits.slice(0, 3).map((outfit, idx) => (
-                  <OutfitCard key={idx} outfit={outfit} theme={theme} />
+                  <OutfitCard key={outfit.outfitId ?? `outfit-${idx}`} outfit={outfit} theme={theme} cardIdx={idx} />
                 ))}
               </>
             )}
@@ -127,7 +130,7 @@ export default function OutfitScreen() {
   );
 }
 
-function OutfitCard({ outfit, theme }: { outfit: ReasonedOutfitEntry; theme: ReturnType<typeof useTheme> }) {
+function OutfitCard({ outfit, theme, cardIdx }: { outfit: ReasonedOutfitEntry; theme: ReturnType<typeof useTheme>; cardIdx: number }) {
   const styles = cardStyles(theme);
   const items = outfit.items || [];
   const reasons = outfit.reasons || [];
@@ -136,8 +139,8 @@ function OutfitCard({ outfit, theme }: { outfit: ReasonedOutfitEntry; theme: Ret
   return (
     <View style={styles.card}>
       <View style={styles.imagesRow}>
-        {items.map((item) => (
-          <View key={item._id} style={styles.thumbWrap}>
+        {items.map((item, idx) => (
+          <View key={item.id ?? item._id ?? `item-${cardIdx}-${idx}`} style={styles.thumbWrap}>
             <Image
               source={{ uri: item.cleanImageUrl || item.imageUrl }}
               style={styles.thumb}
@@ -150,7 +153,7 @@ function OutfitCard({ outfit, theme }: { outfit: ReasonedOutfitEntry; theme: Ret
         <View style={styles.reasons}>
           <Text style={styles.reasonsTitle}>Reasons</Text>
           {reasons.map((r, i) => (
-            <Text key={i} style={styles.bullet}>• {r}</Text>
+            <Text key={`reason-${cardIdx}-${i}`} style={styles.bullet}>• {r}</Text>
           ))}
         </View>
       )}

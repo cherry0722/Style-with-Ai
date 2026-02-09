@@ -21,7 +21,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { listWardrobe, uploadWardrobeItem, WardrobeItemV1Response, WardrobeItemResponse } from '../api/wardrobe';
+import { listWardrobe, uploadWardrobeItem, patchWardrobeV2, WardrobeItemV1Response, WardrobeItemResponse } from '../api/wardrobe';
 
 export default function ClosetScreen() {
   const theme = useTheme();
@@ -33,6 +33,8 @@ export default function ClosetScreen() {
   const [uploadStep, setUploadStep] = useState<'idle' | 'uploading' | 'removing' | 'saving'>('idle');
   const [lastUploaded, setLastUploaded] = useState<WardrobeItemV1Response | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showUnavailable, setShowUnavailable] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const loadingRef = useRef(false);
 
   const loadWardrobe = useCallback(async () => {
@@ -45,7 +47,7 @@ export default function ClosetScreen() {
     try {
       setLoading(true);
       setError(null);
-      const data = await listWardrobe();
+      const data = await listWardrobe(showUnavailable);
       setItems(data);
     } catch (err: any) {
       setError(err?.message || 'Failed to load wardrobe.');
@@ -53,7 +55,23 @@ export default function ClosetScreen() {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, [user, token]);
+  }, [user, token, showUnavailable]);
+
+  const setAvailability = useCallback(async (itemId: string, unavailable: boolean) => {
+    try {
+      if (unavailable) {
+        await patchWardrobeV2(itemId, { availability: { status: 'unavailable', reason: 'laundry', untilDate: null } });
+        setToast('Marked as laundry; hidden from list.');
+      } else {
+        await patchWardrobeV2(itemId, { availability: { status: 'available', reason: null, untilDate: null } });
+        setToast('Marked as available.');
+      }
+      await loadWardrobe();
+      setTimeout(() => setToast(null), 2500);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update.');
+    }
+  }, [loadWardrobe]);
 
   useEffect(() => {
     if (!user || !token) {
@@ -163,6 +181,16 @@ export default function ClosetScreen() {
         </Pressable>
 
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        {toast ? <Text style={styles.toastText}>{toast}</Text> : null}
+
+        <Pressable
+          style={[styles.toggleUnavailable, showUnavailable && styles.toggleUnavailableActive]}
+          onPress={() => setShowUnavailable((v) => !v)}
+        >
+          <Text style={styles.toggleUnavailableText}>
+            {showUnavailable ? 'Hide unavailable items' : 'Show unavailable (laundry/packed)'}
+          </Text>
+        </Pressable>
 
         {lastUploaded && (
           <View style={styles.resultCard}>
@@ -202,25 +230,37 @@ export default function ClosetScreen() {
             <Text style={styles.sectionTitle}>Your wardrobe</Text>
             <FlatList
               data={items}
-              keyExtractor={(i) => i._id}
+              keyExtractor={(i, idx) => i.id ?? i._id ?? `item-${idx}`}
               numColumns={2}
               scrollEnabled={false}
               columnWrapperStyle={styles.row}
-              renderItem={({ item }) => (
-                <View style={styles.itemCard}>
-                  <View style={styles.itemImageWrap}>
-                    <Image
-                      source={{ uri: item.cleanImageUrl || item.imageUrl }}
-                      style={styles.itemImage}
-                      resizeMode="cover"
-                    />
+              renderItem={({ item }) => {
+                const itemId = item.id ?? item._id ?? '';
+                const isUnavailable = item.v2?.availability?.status === 'unavailable';
+                return (
+                  <View style={styles.itemCard}>
+                    <View style={styles.itemImageWrap}>
+                      <Image
+                        source={{ uri: item.cleanImageUrl || item.imageUrl }}
+                        style={styles.itemImage}
+                        resizeMode="cover"
+                      />
+                      <Pressable
+                        style={styles.laundryButton}
+                        onPress={() => setAvailability(itemId, !isUnavailable)}
+                      >
+                        <Text style={styles.laundryButtonText}>
+                          {isUnavailable ? 'Mark as Available' : 'Mark as Laundry'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                    <Text style={styles.itemMeta} numberOfLines={1}>
+                      {item.profile?.category ?? item.category ?? '—'}
+                      {(item.profile?.type ?? item.type) ? ` · ${item.profile?.type ?? item.type}` : ''}
+                    </Text>
                   </View>
-                  <Text style={styles.itemMeta} numberOfLines={1}>
-                    {item.profile?.category ?? item.category ?? '—'}
-                    {(item.profile?.type ?? item.type) ? ` · ${item.profile?.type ?? item.type}` : ''}
-                  </Text>
-                </View>
-              )}
+                );
+              }}
             />
           </View>
         )}
@@ -249,6 +289,10 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     },
     addButtonText: { fontSize: theme.typography.base, fontWeight: '600', color: theme.colors.accent },
     errorText: { fontSize: theme.typography.sm, color: theme.colors.error, marginBottom: theme.spacing.md },
+    toastText: { fontSize: theme.typography.sm, color: theme.colors.accent, marginBottom: theme.spacing.sm },
+    toggleUnavailable: { paddingVertical: theme.spacing.sm, paddingHorizontal: theme.spacing.md, marginBottom: theme.spacing.md, backgroundColor: theme.colors.backgroundSecondary, borderRadius: theme.borderRadius.md, borderWidth: 1, borderColor: theme.colors.border },
+    toggleUnavailableActive: { borderColor: theme.colors.accent },
+    toggleUnavailableText: { fontSize: theme.typography.xs, color: theme.colors.textSecondary },
     resultCard: {
       backgroundColor: theme.colors.backgroundSecondary,
       borderRadius: theme.borderRadius.lg,
@@ -296,8 +340,21 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
       overflow: 'hidden',
       borderTopLeftRadius: theme.borderRadius.lg - 1,
       borderTopRightRadius: theme.borderRadius.lg - 1,
+      position: 'relative',
     },
     itemImage: { width: '100%', height: '100%' },
+    laundryButton: {
+      position: 'absolute',
+      bottom: theme.spacing.xs,
+      left: theme.spacing.xs,
+      right: theme.spacing.xs,
+      backgroundColor: theme.colors.background + 'E6',
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.sm,
+      borderRadius: theme.borderRadius.sm,
+      alignItems: 'center',
+    },
+    laundryButtonText: { fontSize: theme.typography.xs - 1, fontWeight: '600', color: theme.colors.accent },
     itemMeta: { fontSize: theme.typography.xs, color: theme.colors.textSecondary, padding: theme.spacing.sm },
   });
 }

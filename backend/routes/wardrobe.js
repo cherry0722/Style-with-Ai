@@ -86,6 +86,92 @@ router.post('/analyze', auth, async (req, res) => {
   }
 });
 
+// POST /api/wardrobe/upload — v2: multipart upload; file size + mime allowlist; persist ONLY cleaned image URL; never store raw permanently
+router.post('/upload', auth, upload.single('image'), async (req, res, next) => {
+  let rawKey = null;
+  try {
+    if (!req.file) {
+      const err = new Error('No image file provided');
+      err.status = 400;
+      return next(err);
+    }
+    const userId =
+      req.user?.userId ||
+      req.user?._id?.toString() ||
+      req.user?.id ||
+      req.user?._id;
+    if (!userId) {
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
+    }
+    const { key } = generateRawKey(userId, req.file.mimetype);
+    rawKey = key;
+    await uploadBufferToR2({ key, buffer: req.file.buffer, contentType: req.file.mimetype });
+    const config = getConfig();
+    const rawUrl = config ? `${config.publicBaseUrl}/${key}` : null;
+
+    let pyResponse;
+    try {
+      pyResponse = await aiService.post('/process-item', { userId, rawKey, rawUrl });
+    } catch (err) {
+      aiService.safeLog('Wardrobe', 'Python /process-item unreachable', { code: err.code });
+      await deleteFromR2({ key: rawKey });
+      const e = new Error('AI service temporarily unavailable');
+      e.status = 503;
+      return next(e);
+    }
+
+    const { status, cleanKey, cleanUrl, profile, failReason } = pyResponse.data || {};
+    if (status === 'failed') {
+      await deleteFromR2({ key: rawKey });
+      const e = new Error(failReason || 'Processing failed');
+      e.status = 502;
+      return next(e);
+    }
+    if (status !== 'ready' || !cleanUrl) {
+      await deleteFromR2({ key: rawKey });
+      const e = new Error('Invalid response from AI service');
+      e.status = 502;
+      return next(e);
+    }
+
+    const p = profile && typeof profile === 'object' ? profile : {};
+    const item = await Wardrobe.create({
+      userId,
+      imageUrl: cleanUrl,
+      cleanImageUrl: cleanUrl,
+      profile: p,
+      category: p.category || p.type || 'top',
+      type: p.type || undefined,
+      primaryColor: p.primaryColor || undefined,
+    });
+    await deleteFromR2({ key: rawKey });
+
+    const doc = item.toObject();
+    const out = {
+      item: {
+        id: doc._id.toString(),
+        cleanImageUrl: doc.cleanImageUrl ?? doc.imageUrl,
+        profile: doc.profile ?? null,
+        category: doc.category,
+        type: doc.type,
+        primaryColor: doc.primaryColor,
+        isFavorite: Boolean(doc.isFavorite),
+        v2: doc.v2 || { userTags: [], overrides: null, availability: { status: 'available', reason: null, untilDate: null } },
+      },
+    };
+    return res.status(201).json(out);
+  } catch (err) {
+    if (rawKey) {
+      try {
+        await deleteFromR2({ key: rawKey });
+      } catch (_) {}
+    }
+    next(err);
+  }
+});
+
 // POST /api/wardrobe/items — v1 pipeline: upload RAW → Python process-item → create wardrobe → delete RAW
 // JWT required. Server-to-server only: Node calls Python; do not expose AI_SERVICE_URL to client.
 // Rate-limit: consider adding express-rate-limit for this endpoint.
@@ -182,13 +268,14 @@ router.post('/items', auth, upload.single('image'), async (req, res) => {
   }
 });
 
-// Multer/upload error handler for /items (must be 4-arg to be error middleware)
+// Multer/upload error handler — pass to central error handler with status
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ message: 'File size exceeds 5 MB limit' });
+    err.status = 413;
+    err.message = 'File size exceeds limit';
   }
   if (err.message && (err.message.includes('Only jpeg') || err.message.includes('File size'))) {
-    return res.status(400).json({ message: err.message });
+    err.status = err.status || 415;
   }
   next(err);
 });
@@ -314,30 +401,99 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
-// GET /api/wardrobe - get wardrobe items for the logged-in user
-router.get('/', auth, async (req, res) => {
+// GET /api/wardrobe — default excludes v2.availability.status="unavailable"; ?includeUnavailable=true includes them
+router.get('/', auth, async (req, res, next) => {
   try {
     const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
     if (!userId) {
-      return res.status(401).json({ message: 'Invalid auth payload' });
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
     }
-
-    const items = await Wardrobe.find({ userId })
-      .sort({ createdAt: -1 })
-      .lean()
-      .exec();
-
-    // Backward compat: old items without profile get profile: null
+    const includeUnavailable = req.query.includeUnavailable === 'true';
+    const query = { userId };
+    if (!includeUnavailable) {
+      query.$or = [
+        { 'v2.availability.status': 'available' },
+        { 'v2.availability.status': { $exists: false } },
+        { 'v2.availability': { $exists: false } },
+        { v2: { $exists: false } },
+      ];
+    }
+    const items = await Wardrobe.find(query).sort({ createdAt: -1 }).lean().exec();
     const normalized = items.map((item) => ({
-      ...item,
+      id: item._id.toString(),
+      cleanImageUrl: item.cleanImageUrl ?? item.imageUrl ?? null,
       profile: item.profile ?? null,
+      category: item.category ?? null,
+      type: item.type ?? null,
+      primaryColor: item.primaryColor ?? null,
+      isFavorite: Boolean(item.isFavorite),
+      v2: item.v2
+        ? {
+            userTags: item.v2.userTags || [],
+            overrides: item.v2.overrides ?? null,
+            availability: item.v2.availability
+              ? {
+                  status: item.v2.availability.status || 'available',
+                  reason: item.v2.availability.reason ?? null,
+                  untilDate: item.v2.availability.untilDate ?? null,
+                }
+              : { status: 'available', reason: null, untilDate: null },
+          }
+        : { userTags: [], overrides: null, availability: { status: 'available', reason: null, untilDate: null } },
     }));
-    return res.json(normalized);
+    return res.json({ items: normalized });
   } catch (err) {
-    console.error('[Wardrobe] GET /api/wardrobe error:', err);
-    return res
-      .status(500)
-      .json({ message: 'Failed to fetch wardrobe items' });
+    next(err);
+  }
+});
+
+// PATCH /api/wardrobe/:id/v2 — update ONLY v2 overlay (userTags, overrides, availability)
+router.patch('/:id/v2', auth, async (req, res, next) => {
+  try {
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    if (!userId) {
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
+    }
+    const { id } = req.params;
+    const { userTags, overrides, availability } = req.body || {};
+    const item = await Wardrobe.findOne({ _id: id, userId });
+    if (!item) {
+      const err = new Error('Wardrobe item not found');
+      err.status = 404;
+      return next(err);
+    }
+    if (!item.v2) item.v2 = { userTags: [], overrides: null, availability: { status: 'available', reason: null, untilDate: null } };
+    if (Array.isArray(userTags)) item.v2.userTags = userTags;
+    if (overrides !== undefined && overrides !== null && typeof overrides === 'object') item.v2.overrides = overrides;
+    if (availability && typeof availability === 'object') {
+      if (availability.status === 'available' || availability.status === 'unavailable') item.v2.availability.status = availability.status;
+      if (availability.reason === 'laundry' || availability.reason === 'packed' || availability.reason === null) item.v2.availability.reason = availability.reason;
+      if (availability.untilDate === null || (typeof availability.untilDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(availability.untilDate))) item.v2.availability.untilDate = availability.untilDate;
+    }
+    await item.save();
+    const doc = item.toObject();
+    res.status(200).json({
+      item: {
+        id: doc._id.toString(),
+        cleanImageUrl: doc.cleanImageUrl ?? doc.imageUrl,
+        profile: doc.profile ?? null,
+        category: doc.category,
+        type: doc.type,
+        primaryColor: doc.primaryColor,
+        isFavorite: Boolean(doc.isFavorite),
+        v2: doc.v2 || { userTags: [], overrides: null, availability: { status: 'available', reason: null, untilDate: null } },
+      },
+    });
+  } catch (err) {
+    if (err.name === 'CastError') {
+      err.status = 400;
+      err.message = 'Invalid wardrobe item ID';
+    }
+    next(err);
   }
 });
 
