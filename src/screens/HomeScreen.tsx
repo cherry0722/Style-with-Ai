@@ -172,7 +172,7 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>Today's plans</Text>
         {plans.length > 0 ? (
           plans.map((plan, idx) => (
-            <View key={idx} style={styles.planRow}>
+            <View key={`${plan.slotLabel}-${idx}`} style={styles.planRow}>
               <Text style={styles.planSlot}>{plan.slotLabel}</Text>
               <Text style={styles.planOccasion} numberOfLines={1}>{plan.occasion || '—'}</Text>
               <Text style={styles.planStatus}>{plan.status}</Text>
@@ -181,11 +181,12 @@ export default function HomeScreen() {
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyText}>No plans for today</Text>
-            <Pressable style={styles.ctaButton} onPress={goToCalendar}>
-              <Text style={styles.ctaButtonText}>Plan an outfit</Text>
-            </Pressable>
           </View>
         )}
+        <Pressable style={styles.calendarCard} onPress={goToCalendar}>
+          <Text style={styles.calendarCardTitle}>Calendar / Plans</Text>
+          <Text style={styles.calendarCardSubtitle}>View and plan outfits by day</Text>
+        </Pressable>
       </View>
     </ScrollView>
     </SafeAreaView>
@@ -253,14 +254,18 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
       alignItems: 'center',
       borderWidth: 1,
       borderColor: theme.colors.border,
+      marginBottom: theme.spacing.md,
     },
-    emptyText: { fontSize: theme.typography.base, color: theme.colors.textSecondary, marginBottom: theme.spacing.lg },
-    ctaButton: {
-      paddingVertical: theme.spacing.md,
-      paddingHorizontal: theme.spacing.xl,
-      backgroundColor: theme.colors.accent,
+    emptyText: { fontSize: theme.typography.base, color: theme.colors.textSecondary },
+    calendarCard: {
+      backgroundColor: theme.colors.backgroundSecondary,
       borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginTop: theme.spacing.sm,
     },
-    ctaButtonText: { fontSize: theme.typography.base, fontWeight: '600', color: theme.colors.white },
+    calendarCardTitle: { fontSize: theme.typography.base, fontWeight: '600', color: theme.colors.textPrimary, marginBottom: theme.spacing.xs },
+    calendarCardSubtitle: { fontSize: theme.typography.sm, color: theme.colors.textSecondary },
   });
 }

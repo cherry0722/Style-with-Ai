@@ -7,6 +7,8 @@ import SignupScreen from "../screens/SignupScreen";
 import SplashScreen from "../screens/SplashScreen";
 import Tabs from "./Tabs";
 import CalendarScreen from "../screens/CalendarScreen";
+import HistoryScreen from "../screens/HistoryScreen";
+import PlanOutfitSuggestionsScreen from "../screens/PlanOutfitSuggestionsScreen";
 import OnboardingProfileScreen from "../screens/OnboardingProfileScreen";
 
 export type RootStackParamList = {
@@ -17,6 +19,8 @@ export type RootStackParamList = {
   Signup: undefined;
   Main: undefined;
   Calendar: undefined;
+  History: undefined;
+  PlanOutfitSuggestions: { date: string; slotLabel: string; occasion: string };
   OnboardingProfile: undefined;
 };
 
@@ -32,6 +36,8 @@ export default function RootNavigator() {
       <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Main" component={Tabs} />
       <Stack.Screen name="Calendar" component={CalendarScreen} />
+      <Stack.Screen name="History" component={HistoryScreen} />
+      <Stack.Screen name="PlanOutfitSuggestions" component={PlanOutfitSuggestionsScreen} />
       <Stack.Screen
         name="OnboardingProfile"
         component={OnboardingProfileScreen}

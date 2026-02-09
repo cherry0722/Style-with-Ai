@@ -17,8 +17,8 @@ export type TabParamList = {
   Home: undefined;
   Closet: undefined;
   Outfits: undefined;
-  Avatar: undefined;
   Settings: undefined;
+  Avatar: undefined;
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
