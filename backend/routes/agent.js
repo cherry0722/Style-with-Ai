@@ -9,6 +9,29 @@ const aiService = require('../services/aiServiceClient');
 
 const router = express.Router();
 
+// GET /api/ai/health-proxy - debug: calls Python /health via aiService, returns status + latency
+router.get('/health-proxy', async (req, res) => {
+  const start = Date.now();
+  try {
+    const data = await aiService.healthCheck();
+    const latencyMs = Date.now() - start;
+    return res.status(200).json({ ok: true, status: data, latencyMs });
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    aiService.safeLog('AgentRoute', 'health-proxy failed', {
+      code: err.code,
+      status: err.response?.status,
+      latencyMs,
+    });
+    return res.status(503).json({
+      ok: false,
+      message: 'AI service temporarily unavailable. Please try again.',
+      failReason: err.code || err.response?.status || (err.message || '').slice(0, 100),
+      latencyMs,
+    });
+  }
+});
+
 // --- Phase 3A: Reasoned outfits (metadata-only, no image processing) ---
 // Phase 3B: occasion normalization, optional weather enrichment, contextUsed, diversity filter
 router.post('/reasoned_outfits', auth, async (req, res) => {
@@ -229,9 +252,9 @@ router.post('/suggest_outfit', async (req, res) => {
       code: err.code,
       message: (err.message || '').slice(0, 100),
     });
-    res.status(502).json({
-      message: 'Failed to reach AI outfit service',
-      detail: err.response?.data?.detail || err.message?.slice(0, 200),
+    res.status(503).json({
+      message: 'AI service temporarily unavailable. Please try again.',
+      failReason: err.response?.data?.detail || err.message?.slice(0, 200),
     });
   }
 });

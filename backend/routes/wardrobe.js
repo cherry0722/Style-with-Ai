@@ -127,8 +127,8 @@ router.post('/items', auth, upload.single('image'), async (req, res) => {
         status: err.response?.status,
       });
       await deleteFromR2({ key: rawKey });
-      return res.status(502).json({
-        message: 'The AI service is temporarily unavailable. Please try again in a moment.',
+      return res.status(503).json({
+        message: 'AI service temporarily unavailable. Please try again.',
         failReason: 'Could not reach the image processing service after multiple attempts.',
       });
     }

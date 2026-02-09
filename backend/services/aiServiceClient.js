@@ -1,8 +1,8 @@
 /**
  * Shared axios client for the Python AI service (process.env.AI_SERVICE_URL).
- * - Timeout: 180s (3 min) for long-running Vision/LLM ops
+ * - Timeout: AI_TIMEOUT_MS env (default 180s) for long-running Vision/LLM ops
  * - HTTP/HTTPS keepAlive agents
- * - Retry: max 2 retries with backoff 2s, 5s for network errors, 502/503/504, timeouts
+ * - Retry: max 2 retries with backoff 2s, 5s for 502/503/504, ECONNRESET, ETIMEDOUT, ECONNREFUSED, ENOTFOUND, ENETUNREACH, timeouts
  * - Logs never print secrets (URLs with tokens, INTERNAL_TOKEN, etc.)
  */
 const http = require('http');
@@ -10,8 +10,7 @@ const https = require('https');
 const axios = require('axios');
 
 const AI_SERVICE_URL = (process.env.AI_SERVICE_URL || 'http://127.0.0.1:5002').replace(/\/$/, '');
-
-const TIMEOUT_MS = 180000; // 3 minutes
+const TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS, 10) || 180000;
 const RETRY_DELAYS = [2000, 5000]; // 2s, 5s
 
 // KeepAlive agents for connection reuse
@@ -88,7 +87,7 @@ async function requestWithRetry(config) {
  */
 async function healthCheck() {
   try {
-    const res = await requestWithRetry({ method: 'get', url: '/health' });
+    const res = await requestWithRetry({ method: 'get', url: normalizePath('/health') });
     return res.data;
   } catch (err) {
     safeLog('AIService', 'Health check failed', {
@@ -101,6 +100,14 @@ async function healthCheck() {
 }
 
 /**
+ * Normalize path to avoid double slashes with baseURL.
+ */
+function normalizePath(path) {
+  const p = typeof path === 'string' ? path : '';
+  return p.startsWith('/') ? p : '/' + p;
+}
+
+/**
  * POST to a path on the AI service with retries.
  * Merges headers (e.g. X-Internal-Token) into config.
  */
@@ -110,7 +117,7 @@ async function post(path, data, extraConfig = {}) {
 
   return requestWithRetry({
     method: 'post',
-    url: path,
+    url: normalizePath(path),
     data,
     headers,
     ...extraConfig,
