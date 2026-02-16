@@ -11,7 +11,7 @@ export const colors = {
   
   // Fashion palette colors
   dustyRose: '#D4A5A5', // Soft dusty rose
-  champagne: '#F7E7CE', // Champagne gold
+  champagne: '#F7E7CE', // Champagne gold color
   sageGreen: '#A8B5A0', // Sage green
   softLavender: '#C8B8D8', // Soft lavender
   nudeBeige: '#E8D5C4', // Nude beige
@@ -20,12 +20,12 @@ export const colors = {
   white: '#FFFFFF',
   black: '#2C2C2C', // Dark charcoal
   gray50: '#FEFCFB', // Off-white with warm tint
-  gray100: '#F8F6F4', // Soft cream
+  gray100: '#F8F6F4', // Soft cream color
   gray200: '#F0EDEA', // Light beige
-  gray300: '#E5E1DD', // Soft grey
+  gray300: '#E5E1DD', // Soft grey color
   gray400: '#B8B3AE', // Muted grey
   gray500: '#8A857F', // Medium grey
-  gray600: '#5C5751', // Dark grey
+  gray600: '#5C5751', // Dark grey color
   gray700: '#3E3A35', // Charcoal
   gray800: '#2C2C2C', // Dark charcoal
   gray900: '#1C1C1C', // Almost black

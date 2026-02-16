@@ -79,7 +79,6 @@ Myra follows a **premium, minimalist design language** that prioritizes clarity,
 - **Hints**: Contextual hints for complex interactions
 
 ## Component Design Patterns
-
 ### Cards
 - **Elevation**: Subtle shadows (2-4px blur, 10-20% opacity)
 - **Padding**: 16px internal padding
@@ -184,5 +183,4 @@ Myra follows a **premium, minimalist design language** that prioritizes clarity,
 - **High Contrast**: Enhanced high contrast mode
 
 ---
-
 *This document is living and will be updated as the design system evolves.*
