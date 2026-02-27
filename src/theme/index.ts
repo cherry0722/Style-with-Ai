@@ -1,52 +1,4 @@
 export const colors = {
-<<<<<<< HEAD
-  // Primary brand colors - Fashion editorial
-  primary: '#2C2C2C', // Dark charcoal instead of pure black
-  primaryLight: '#3C3C3C',
-  primaryDark: '#1C1C1C',
-  
-  // Accent colors - Muted teal (fashion editorial)
-  accent: '#6B8E8E', // Muted teal
-  accentLight: '#8FA8A8',
-  accentDark: '#4A6B6B',
-  
-  // Fashion palette colors
-  dustyRose: '#D4A5A5', // Soft dusty rose
-  champagne: '#F7E7CE', // Champagne gold color
-  sageGreen: '#A8B5A0', // Sage green
-  softLavender: '#C8B8D8', // Soft lavender
-  nudeBeige: '#E8D5C4', // Nude beige
-  
-  // Neutral colors - Soft fashion tones
-  white: '#FFFFFF',
-  black: '#2C2C2C', // Dark charcoal
-  gray50: '#FEFCFB', // Off-white with warm tint
-  gray100: '#F8F6F4', // Soft cream color
-  gray200: '#F0EDEA', // Light beige
-  gray300: '#E5E1DD', // Soft grey color
-  gray400: '#B8B3AE', // Muted grey
-  gray500: '#8A857F', // Medium grey
-  gray600: '#5C5751', // Dark grey color
-  gray700: '#3E3A35', // Charcoal
-  gray800: '#2C2C2C', // Dark charcoal
-  gray900: '#1C1C1C', // Almost black
-  
-  // Semantic colors - Fashion tones
-  success: '#8FA8A8', // Muted teal
-  warning: '#D4A5A5', // Dusty rose
-  error: '#C8A8A8', // Soft red
-  info: '#A8B5A0', // Sage green
-  
-  // Background colors - Soft gradients
-  background: '#FEFCFB', // Off-white
-  backgroundSecondary: '#F8F6F4', // Soft cream
-  backgroundTertiary: '#F0EDEA', // Light beige
-  
-  // Text colors - Fashion editorial
-  textPrimary: '#2C2C2C', // Dark charcoal
-  textSecondary: '#8A857F', // Medium grey
-  textTertiary: '#B8B3AE', // Muted grey
-=======
   // Primary brand colors — warm dark brown
   primary: '#3D3426',
   primaryLight: '#5A4C3A',
@@ -61,7 +13,6 @@ export const colors = {
   dustyRose: '#D4A5A5',
   champagne: '#F7E7CE',
   sageGreen: '#A8B5A0',
-  softLavender: '#C8B8D8',
   nudeBeige: '#EDE6D8',
 
   // Neutrals
@@ -93,7 +44,6 @@ export const colors = {
   textPrimary: '#3D3426',
   textSecondary: '#8C7E6A',
   textTertiary: '#B5A894',
->>>>>>> 0178d85 (Updated UI with new layout)
   textInverse: '#FFFFFF',
 
   // Borders
@@ -194,7 +144,6 @@ export const darkColors = {
   dustyRose: '#E8B8B8',
   champagne: '#F9E7D4',
   sageGreen: '#B8C5B0',
-  softLavender: '#D8C8E8',
   nudeBeige: '#F0D5C4',
 
   white: '#FFFFFF',
