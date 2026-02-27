@@ -13,7 +13,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import SignInForm from '../components/auth/SignInForm';
 import SocialButtons from '../components/auth/SocialButtons';
 import { hapticFeedback } from '../utils/haptics';

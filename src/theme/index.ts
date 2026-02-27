@@ -1,4 +1,5 @@
 export const colors = {
+<<<<<<< HEAD
   // Primary brand colors - Fashion editorial
   primary: '#2C2C2C', // Dark charcoal instead of pure black
   primaryLight: '#3C3C3C',
@@ -45,16 +46,64 @@ export const colors = {
   textPrimary: '#2C2C2C', // Dark charcoal
   textSecondary: '#8A857F', // Medium grey
   textTertiary: '#B8B3AE', // Muted grey
+=======
+  // Primary brand colors — warm dark brown
+  primary: '#3D3426',
+  primaryLight: '#5A4C3A',
+  primaryDark: '#2A2318',
+
+  // Accent — warm gold
+  accent: '#C4A882',
+  accentLight: '#E8D9C5',
+  accentDark: '#A8896A',
+
+  // Fashion palette (kept for compatibility)
+  dustyRose: '#D4A5A5',
+  champagne: '#F7E7CE',
+  sageGreen: '#A8B5A0',
+  softLavender: '#C8B8D8',
+  nudeBeige: '#EDE6D8',
+
+  // Neutrals
+  white: '#FFFFFF',
+  black: '#3D3426',
+  gray50: '#FAF7F2',   // off-white cream
+  gray100: '#F5F0E8',  // warm beige (main bg)
+  gray200: '#EDE6D8',  // sand / card fill
+  gray300: '#E8E0D0',  // border
+  gray400: '#B5A894',  // text light
+  gray500: '#8C7E6A',  // text muted
+  gray600: '#6B5E4E',
+  gray700: '#4A3E30',
+  gray800: '#3D3426',
+  gray900: '#2A2318',
+
+  // Semantic
+  success: '#8BA888',
+  warning: '#D4A574',   // laundry / warm amber
+  error: '#C8706A',
+  info: '#A8B5A0',
+
+  // Backgrounds
+  background: '#F5F0E8',          // warm beige — main
+  backgroundSecondary: '#FAF7F2', // off-white cream
+  backgroundTertiary: '#EDE6D8',  // sand / card fill
+
+  // Text
+  textPrimary: '#3D3426',
+  textSecondary: '#8C7E6A',
+  textTertiary: '#B5A894',
+>>>>>>> 0178d85 (Updated UI with new layout)
   textInverse: '#FFFFFF',
-  
-  // Border colors - Soft fashion borders
-  border: '#E5E1DD', // Soft grey
-  borderLight: '#F0EDEA', // Light beige
-  borderDark: '#B8B3AE', // Muted grey
-  
-  // Overlay colors
-  overlay: 'rgba(44, 44, 44, 0.3)', // Soft charcoal overlay
-  overlayLight: 'rgba(44, 44, 44, 0.1)',
+
+  // Borders
+  border: '#E8E0D0',
+  borderLight: '#F0E8DC',
+  borderDark: '#D0C4B0',
+
+  // Overlays
+  overlay: 'rgba(61, 52, 38, 0.4)',
+  overlayLight: 'rgba(61, 52, 38, 0.08)',
 } as const;
 
 export const spacing = {
@@ -72,16 +121,15 @@ export const spacing = {
 
 export const borderRadius = {
   sm: 6,
-  md: 8,
-  lg: 12,
-  xl: 16,
-  '2xl': 20,
-  '3xl': 24,
+  md: 10,
+  lg: 14,
+  xl: 18,
+  '2xl': 22,
+  '3xl': 28,
   full: 9999,
 } as const;
 
 export const typography = {
-  // Font sizes
   xs: 12,
   sm: 14,
   base: 16,
@@ -91,15 +139,13 @@ export const typography = {
   '3xl': 30,
   '4xl': 36,
   '5xl': 48,
-  
-  // Font weights
+
   normal: '400' as const,
   medium: '500' as const,
   semibold: '600' as const,
   bold: '700' as const,
   extrabold: '800' as const,
-  
-  // Line heights
+
   tight: 1.25,
   lineHeight: 1.5,
   relaxed: 1.75,
@@ -107,91 +153,82 @@ export const typography = {
 
 export const shadows = {
   sm: {
-    shadowColor: colors.black,
+    shadowColor: 'rgba(61, 52, 38, 0.08)',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOpacity: 1,
+    shadowRadius: 3,
     elevation: 1,
   },
   md: {
-    shadowColor: colors.black,
+    shadowColor: 'rgba(61, 52, 38, 0.08)',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 1,
+    shadowRadius: 8,
     elevation: 2,
   },
   lg: {
-    shadowColor: colors.black,
+    shadowColor: 'rgba(61, 52, 38, 0.10)',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowOpacity: 1,
+    shadowRadius: 16,
     elevation: 4,
   },
   xl: {
-    shadowColor: colors.black,
+    shadowColor: 'rgba(61, 52, 38, 0.12)',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
+    shadowOpacity: 1,
+    shadowRadius: 24,
     elevation: 8,
   },
 } as const;
 
 export const darkColors = {
-  // Primary brand colors - Fashion dark mode
-  primary: '#FFFFFF', // White text on dark
+  primary: '#FFFFFF',
   primaryLight: '#F0F0F0',
   primaryDark: '#E0E0E0',
 
-  // Accent colors - Muted teal for dark mode
-  accent: '#8FA8A8', // Lighter muted teal
-  accentLight: '#A8B8B8',
-  accentDark: '#6B8E8E',
+  accent: '#C4A882',
+  accentLight: '#E8D9C5',
+  accentDark: '#A8896A',
 
-  // Fashion palette colors - Dark mode variants
-  dustyRose: '#E8B8B8', // Lighter dusty rose
-  champagne: '#F9E7D4', // Lighter champagne
-  sageGreen: '#B8C5B0', // Lighter sage
-  softLavender: '#D8C8E8', // Lighter lavender
-  nudeBeige: '#F0D5C4', // Lighter nude
+  dustyRose: '#E8B8B8',
+  champagne: '#F9E7D4',
+  sageGreen: '#B8C5B0',
+  softLavender: '#D8C8E8',
+  nudeBeige: '#F0D5C4',
 
-  // Neutral colors - Fashion dark theme
   white: '#FFFFFF',
-  black: '#1A1A1A', // Soft black
-  gray50: '#1A1A1A', // Soft black
-  gray100: '#2A2A2A', // Dark grey
-  gray200: '#3A3A3A', // Medium dark grey
-  gray300: '#4A4A4A', // Medium grey
-  gray400: '#5A5A5A', // Light grey
-  gray500: '#6A6A6A', // Lighter grey
-  gray600: '#7A7A7A', // Light grey
-  gray700: '#8A8A8A', // Very light grey
-  gray800: '#9A9A9A', // Almost white
-  gray900: '#AAAAAA', // Light grey
+  black: '#1A1A1A',
+  gray50: '#1A1A1A',
+  gray100: '#2A2A2A',
+  gray200: '#3A3A3A',
+  gray300: '#4A4A4A',
+  gray400: '#5A5A5A',
+  gray500: '#6A6A6A',
+  gray600: '#7A7A7A',
+  gray700: '#8A8A8A',
+  gray800: '#9A9A9A',
+  gray900: '#AAAAAA',
 
-  // Semantic colors - Fashion dark tones
-  success: '#A8B8B8', // Lighter muted teal
-  warning: '#E8B8B8', // Lighter dusty rose
-  error: '#D8A8A8', // Lighter soft red
-  info: '#B8C5B0', // Lighter sage
+  success: '#8BA888',
+  warning: '#E8B878',
+  error: '#D8A8A8',
+  info: '#B8C5B0',
 
-  // Background colors - Fashion dark
-  background: '#1A1A1A', // Soft black
-  backgroundSecondary: '#2A2A2A', // Dark grey
-  backgroundTertiary: '#3A3A3A', // Medium dark grey
+  background: '#1A1A1A',
+  backgroundSecondary: '#2A2A2A',
+  backgroundTertiary: '#3A3A3A',
 
-  // Text colors - Fashion dark mode
-  textPrimary: '#FFFFFF', // White
-  textSecondary: '#CCCCCC', // Light grey
-  textTertiary: '#999999', // Medium grey
-  textInverse: '#1A1A1A', // Soft black
+  textPrimary: '#FFFFFF',
+  textSecondary: '#CCCCCC',
+  textTertiary: '#999999',
+  textInverse: '#1A1A1A',
 
-  // Border colors - Fashion dark borders
-  border: '#3A3A3A', // Medium dark grey
-  borderLight: '#4A4A4A', // Medium grey
-  borderDark: '#2A2A2A', // Dark grey
+  border: '#3A3A3A',
+  borderLight: '#4A4A4A',
+  borderDark: '#2A2A2A',
 
-  // Overlay colors
-  overlay: 'rgba(26, 26, 26, 0.8)', // Soft black overlay
+  overlay: 'rgba(26, 26, 26, 0.8)',
   overlayLight: 'rgba(26, 26, 26, 0.5)',
 } as const;
 

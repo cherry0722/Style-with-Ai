@@ -1,4 +1,9 @@
-import React, { useState } from "react";
+/**
+ * Settings Screen — structured sections with icon rows and chevrons.
+ * Profile edit (name, pronouns, body) and preferences (temp unit, notifications)
+ * expand inline. Log out remains functional. Dev env hidden behind 5 taps on version.
+ */
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,632 +12,491 @@ import {
   Switch,
   Modal,
   TextInput,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "../context/AuthContext";
-import { useSettings } from "../store/settings";
-import { useTheme } from "../context/ThemeContext";
-import { hapticFeedback } from "../utils/haptics";
+  StyleSheet,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../store/settings';
+import { hapticFeedback } from '../utils/haptics';
 import { Picker } from '@react-native-picker/picker';
-import type { BodyType, Pronouns } from "../types";
-import { ENABLE_AI } from "../config";
+import type { BodyType, Pronouns } from '../types';
 
-const PRONOUNS: Pronouns[] = ["she/her", "he/him", "they/them", "prefer-not-to-say"];
-const BODY_TYPES: BodyType[] = ["skinny", "fit", "muscular", "bulk", "pear", "hourglass", "rectangle"];
+const P = {
+  background:    '#F5F0E8',
+  cardSurface:   '#EDE6D8',
+  cardWhite:     '#FFFFFF',
+  primaryText:   '#3D3426',
+  secondaryText: '#8C7E6A',
+  lightText:     '#B5A894',
+  accent:        '#C4A882',
+  border:        '#E8E0D0',
+  shadow:        'rgba(61, 52, 38, 0.08)',
+  danger:        '#C8706A',
+} as const;
+
+const PRONOUNS:   Pronouns[]  = ['she/her', 'he/him', 'they/them', 'prefer-not-to-say'];
+const BODY_TYPES: BodyType[]  = ['skinny', 'fit', 'muscular', 'bulk', 'pear', 'hourglass', 'rectangle'];
+const APP_VERSION = '1.0.0';
+
+function SettingsRow({
+  icon, label, value, onPress, danger, last,
+}: Readonly<{
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  danger?: boolean;
+  last?: boolean;
+}>) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.row, !last && styles.rowBorder, pressed && { opacity: 0.75 }]}
+      onPress={onPress}
+      disabled={!onPress}
+    >
+      <View style={[styles.rowIconWrap, danger && styles.rowIconWrapDanger]}>
+        <Ionicons name={icon} size={18} color={danger ? P.danger : P.accent} />
+      </View>
+      <View style={styles.rowBody}>
+        <Text style={[styles.rowLabel, danger && { color: P.danger }]}>{label}</Text>
+        {!!value && <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>}
+      </View>
+      {onPress && (
+        <Ionicons name="chevron-forward" size={16} color={P.lightText} />
+      )}
+    </Pressable>
+  );
+}
+
+function ChipSelector<T extends string>({
+  options, value, onChange,
+}: Readonly<{ options: readonly T[]; value: T | undefined; onChange: (v: T) => void }>) {
+  return (
+    <View style={styles.chips}>
+      {options.map((opt) => (
+        <Pressable
+          key={opt}
+          style={[styles.chip, value === opt && styles.chipActive]}
+          onPress={() => { hapticFeedback.light(); onChange(opt); }}
+        >
+          <Text style={[styles.chipText, value === opt && styles.chipTextActive]}>{opt}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function SectionHeader({ title }: Readonly<{ title: string }>) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
 
 export default function SettingsScreen() {
+  const navigation = useNavigation();
   const auth = useAuth();
   const { user, logout } = auth;
   const updateProfile = auth.updateProfile;
   const settings = useSettings();
-  const theme = useTheme();
-  const tabNav = useNavigation();
-  const p = (user?.profile ?? {}) as { preferredName?: string; pronouns?: Pronouns; heightCm?: number; weightLb?: number; bodyType?: BodyType };
 
-  const handleLogout = () => {
-    const root = tabNav.getParent() as undefined | { reset: (arg: { index: number; routes: { name: string }[] }) => void };
-    logout().then(() => {
-      if (root?.reset) root.reset({ index: 0, routes: [{ name: "AuthGate" }] });
-    });
+  const p = (user?.profile ?? {}) as {
+    preferredName?: string;
+    pronouns?: Pronouns;
+    heightCm?: number;
+    weightLb?: number;
+    bodyType?: BodyType;
   };
 
-  // View/edit mode
-  const [editing, setEditing] = useState(false);
+  const [expanded, setExpanded] = useState<'personalDetails' | 'accessibility' | null>(null);
+
+  const [preferredName, setPreferredName] = useState(p.preferredName ?? '');
+  const [pronouns,      setPronouns]      = useState<Pronouns | undefined>(p.pronouns);
+  const [heightCm,      setHeightCm]      = useState<number | undefined>(p.heightCm);
+  const [weightLb,      setWeightLb]      = useState<number | undefined>(p.weightLb);
+  const [bodyType,      setBodyType]      = useState<BodyType | undefined>(p.bodyType);
   const [showHeightPicker, setShowHeightPicker] = useState(false);
   const [showWeightPicker, setShowWeightPicker] = useState(false);
 
-  // Editable copies
-  const [preferredName, setPreferredName] = useState(p.preferredName || "");
-  const [pronouns, setPronouns] = useState<Pronouns | undefined>(p.pronouns);
-  const [heightCm, setHeightCm] = useState<number | undefined>(p.heightCm);
-  const [weightLb, setWeightLb] = useState<number | undefined>(p.weightLb);
-  const [bodyType, setBodyType] = useState<BodyType | undefined>(p.bodyType);
+  const [versionTaps, setVersionTaps] = useState(0);
+  const showDevSection = versionTaps >= 5;
 
-  function startEdit() {
-    setPreferredName(p.preferredName || "");
-    setPronouns(p.pronouns);
-    setHeightCm(p.heightCm);
-    setWeightLb(p.weightLb);
-    setBodyType(p.bodyType);
-    setEditing(true);
-  }
+  const toggleSection = (section: 'personalDetails' | 'accessibility') => {
+    if (expanded === section) {
+      setExpanded(null);
+    } else {
+      if (section === 'personalDetails') {
+        setPreferredName(p.preferredName ?? '');
+        setPronouns(p.pronouns);
+        setHeightCm(p.heightCm);
+        setWeightLb(p.weightLb);
+        setBodyType(p.bodyType);
+      }
+      setExpanded(section);
+    }
+  };
 
-  function cancelEdit() {
-    setPreferredName(p.preferredName || "");
-    setPronouns(p.pronouns);
-    setHeightCm(p.heightCm);
-    setWeightLb(p.weightLb);
-    setBodyType(p.bodyType);
-    setEditing(false);
-  }
-
-  function saveEdit() {
+  const saveProfile = () => {
     hapticFeedback.success();
-    updateProfile?.({
-      profile: {
-        preferredName: preferredName || undefined,
-        pronouns,
-        heightCm,
-        weightLb,
-        bodyType,
-      },
-    } as any);
-    setEditing(false);
-  }
+    updateProfile?.({ profile: { preferredName: preferredName || undefined, pronouns, heightCm, weightLb, bodyType } } as any);
+    setExpanded(null);
+  };
+
+  const handleLogout = () => {
+    const root = (auth as any).navigation ?? null;
+    logout().then(() => {
+      if (root?.reset) root.reset({ index: 0, routes: [{ name: 'AuthGate' }] });
+    });
+  };
 
   const formatHeight = (cm: number) => {
-    const feet = Math.floor(cm / 30.48);
+    const feet   = Math.floor(cm / 30.48);
     const inches = Math.round((cm % 30.48) / 2.54);
     return `${feet}'${inches}" (${cm} cm)`;
   };
-
-  const formatWeight = (lb: number) => {
-    const kg = Math.round(lb * 0.453592);
-    return `${lb} lb (${kg} kg)`;
-  };
-
-  const createStyles = (theme: any) => ({
-    container: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    scrollView: {
-      flex: 1,
-    },
-    header: {
-      flexDirection: 'row' as const,
-      justifyContent: 'space-between' as const,
-      alignItems: 'center' as const,
-      paddingHorizontal: theme.spacing.lg,
-      paddingTop: theme.spacing['2xl'],
-      paddingBottom: theme.spacing.lg,
-    },
-    title: {
-      fontSize: theme.typography['2xl'],
-      fontWeight: theme.typography.bold,
-      color: theme.colors.textPrimary,
-    },
-    editButton: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      gap: theme.spacing.xs,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.accent + '10',
-    },
-    editButtonText: {
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-      color: theme.colors.accent,
-    },
-    actionButtons: {
-      flexDirection: 'row' as const,
-      gap: theme.spacing.sm,
-    },
-    cancelButton: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    cancelButtonText: {
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-      color: theme.colors.textSecondary,
-    },
-    saveButton: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.accent,
-    },
-    saveButtonText: {
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-      color: theme.colors.white,
-    },
-    section: {
-      marginHorizontal: theme.spacing.lg,
-      marginBottom: theme.spacing.xl,
-    },
-    sectionTitle: {
-      fontSize: theme.typography.lg,
-      fontWeight: theme.typography.bold,
-      color: theme.colors.textPrimary,
-      marginBottom: theme.spacing.lg,
-    },
-    settingItem: {
-      backgroundColor: theme.colors.backgroundSecondary,
-      borderRadius: theme.borderRadius.lg,
-      padding: theme.spacing.lg,
-      marginBottom: theme.spacing.md,
-      ...theme.shadows.sm,
-    },
-    settingLeft: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-    },
-    iconContainer: {
-      width: 40,
-      height: 40,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.accent + '10',
-      justifyContent: 'center' as const,
-      alignItems: 'center' as const,
-      marginRight: theme.spacing.md,
-    },
-    settingContent: {
-      flex: 1,
-    },
-    settingLabel: {
-      fontSize: theme.typography.base,
-      fontWeight: theme.typography.medium,
-      color: theme.colors.textPrimary,
-      marginBottom: theme.spacing.xs,
-    },
-    settingValue: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.textSecondary,
-    },
-    readOnlyValue: {
-      color: theme.colors.textTertiary,
-    },
-    valueContainer: {
-      flexDirection: 'row' as const,
-      justifyContent: 'space-between' as const,
-      alignItems: 'center' as const,
-    },
-    input: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.textPrimary,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.md,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      backgroundColor: theme.colors.backgroundTertiary,
-    },
-    chipsContainer: {
-      flexDirection: 'row' as const,
-      flexWrap: 'wrap' as const,
-      gap: theme.spacing.sm,
-    },
-    chip: {
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.full,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.backgroundTertiary,
-    },
-    chipActive: {
-      backgroundColor: theme.colors.accent,
-      borderColor: theme.colors.accent,
-    },
-    chipText: {
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-      color: theme.colors.textSecondary,
-    },
-    chipTextActive: {
-      color: theme.colors.white,
-    },
-    toggleContainer: {
-      flexDirection: 'row' as const,
-      justifyContent: 'space-between' as const,
-      alignItems: 'center' as const,
-    },
-    pickerModal: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    pickerHeader: {
-      flexDirection: 'row' as const,
-      justifyContent: 'space-between' as const,
-      alignItems: 'center' as const,
-      paddingHorizontal: theme.spacing.lg,
-      paddingTop: theme.spacing.md,
-      paddingBottom: theme.spacing.lg,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-    },
-    pickerCancel: {
-      fontSize: theme.typography.base,
-      color: theme.colors.textSecondary,
-    },
-    pickerTitle: {
-      fontSize: theme.typography.lg,
-      fontWeight: theme.typography.bold,
-      color: theme.colors.textPrimary,
-    },
-    pickerDone: {
-      fontSize: theme.typography.base,
-      color: theme.colors.accent,
-      fontWeight: theme.typography.bold,
-    },
-    pickerContainer: {
-      flex: 1,
-      justifyContent: 'center' as const,
-    },
-    picker: {
-      height: 200,
-    },
-  });
-
-  const styles = createStyles(theme);
-
-  // Setting Item Component
-  function SettingItem({
-    icon,
-    label,
-    value,
-    readOnly = false,
-    editable = false,
-    type = 'text',
-    inputValue,
-    onInputChange,
-    placeholder,
-    options,
-    selectedValue,
-    onValueChange,
-    toggleValue,
-    onToggle,
-    onPress,
-  }: {
-    icon: string;
-    label: string;
-    value?: string;
-    readOnly?: boolean;
-    editable?: boolean;
-    type?: 'text' | 'chips' | 'toggle' | 'picker';
-    inputValue?: string;
-    onInputChange?: (value: string) => void;
-    placeholder?: string;
-    options?: string[];
-    selectedValue?: any;
-    onValueChange?: (value: any) => void;
-    toggleValue?: boolean;
-    onToggle?: () => void;
-    onPress?: () => void;
-  }) {
-    return (
-      <View style={styles.settingItem}>
-        <View style={styles.settingLeft}>
-          <View style={styles.iconContainer}>
-            <Ionicons name={icon as any} size={20} color={theme.colors.accent} />
-          </View>
-          <View style={styles.settingContent}>
-            <Text style={styles.settingLabel}>{label}</Text>
-            {type === 'text' && editable && onInputChange ? (
-              <TextInput
-                style={styles.input}
-                value={inputValue}
-                onChangeText={onInputChange}
-                placeholder={placeholder}
-                placeholderTextColor={theme.colors.textTertiary}
-              />
-            ) : type === 'chips' && editable && options ? (
-              <View style={styles.chipsContainer}>
-                {options.map((option) => (
-                  <Pressable
-                    key={option}
-                    style={[
-                      styles.chip,
-                      selectedValue === option && styles.chipActive,
-                    ]}
-                    onPress={() => {
-                      hapticFeedback.light();
-                      onValueChange?.(option);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.chipText,
-                        selectedValue === option && styles.chipTextActive,
-                      ]}
-                    >
-                      {option}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : type === 'toggle' ? (
-              <View style={styles.toggleContainer}>
-                <Text style={styles.settingValue}>{value}</Text>
-                <Switch
-                  value={toggleValue}
-                  onValueChange={onToggle}
-                  trackColor={{ false: theme.colors.gray200, true: theme.colors.accent + '40' }}
-                  thumbColor={toggleValue ? theme.colors.accent : theme.colors.gray400}
-                />
-              </View>
-            ) : (
-              <Pressable
-                style={styles.valueContainer}
-                onPress={editable ? onPress : undefined}
-                disabled={!editable}
-              >
-                <Text style={[styles.settingValue, !editable && styles.readOnlyValue]}>
-                  {value}
-                </Text>
-                {editable && type === 'picker' && (
-                  <Ionicons name="chevron-down" size={16} color={theme.colors.textTertiary} />
-                )}
-              </Pressable>
-            )}
-          </View>
-        </View>
-      </View>
-    );
-  }
+  const formatWeight = (lb: number) => `${lb} lb (${Math.round(lb * 0.453592)} kg)`;
 
   return (
-    <SafeAreaView edges={["top"]} style={[styles.container, { flex: 1 }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Account (v1): current user + Logout */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="person-outline" size={20} color={theme.colors.accent} />
-              </View>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingLabel}>Logged in as</Text>
-                <Text style={styles.settingValue}>{user?.email || user?.username || user?.phone || "—"}</Text>
-              </View>
-            </View>
-          </View>
-          <Pressable style={[styles.settingItem, { borderLeftWidth: 3, borderLeftColor: theme.colors.error }]} onPress={handleLogout}>
-            <View style={styles.settingLeft}>
-              <View style={styles.iconContainer}>
-                <Ionicons name="log-out-outline" size={20} color={theme.colors.error} />
-              </View>
-              <View style={styles.settingContent}>
-                <Text style={[styles.settingLabel, { color: theme.colors.error }]}>Log out</Text>
-                <Text style={styles.settingValue}>Clear token and sign out</Text>
-              </View>
-            </View>
-          </Pressable>
-        </View>
-
-        {/* Client env probe — dev only */}
-        {__DEV__ && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Client env (dev)</Text>
-            <View style={styles.settingItem}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingLabel}>EXPO_PUBLIC_ENABLE_AI (raw)</Text>
-                <Text style={styles.settingValue}>{process.env.EXPO_PUBLIC_ENABLE_AI === undefined ? '(undefined)' : String(process.env.EXPO_PUBLIC_ENABLE_AI)}</Text>
-              </View>
-            </View>
-            <View style={styles.settingItem}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingLabel}>ENABLE_AI (boolean)</Text>
-                <Text style={styles.settingValue}>{ENABLE_AI ? 'true' : 'false'}</Text>
-              </View>
-            </View>
-          </View>
-        )}
+    <SafeAreaView edges={['top']} style={styles.container}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Settings</Text>
-        {!editing ? (
-            <Pressable style={styles.editButton} onPress={startEdit}>
-              <Ionicons name="create-outline" size={20} color={theme.colors.accent} />
-              <Text style={styles.editButtonText}>Edit</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.actionButtons}>
-              <Pressable style={styles.cancelButton} onPress={cancelEdit}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color={P.primaryText} />
+          </Pressable>
+          <Text style={styles.pageTitle}>SETTINGS</Text>
+        </View>
+
+        {/* MY ACCOUNT */}
+        <SectionHeader title="My Account" />
+        <View style={styles.card}>
+          <SettingsRow icon="lock-closed-outline"  label="Password and Security"      onPress={() => {}} />
+          <SettingsRow icon="person-outline"        label="Personal Details"
+            value={p.preferredName ?? 'Set your name'}
+            onPress={() => toggleSection('personalDetails')}
+          />
+          {expanded === 'personalDetails' && (
+            <View style={styles.inlinePanel}>
+              <Text style={styles.inlineLabel}>Preferred Name</Text>
+              <TextInput
+                style={styles.inlineInput}
+                value={preferredName}
+                onChangeText={setPreferredName}
+                placeholder="Enter name"
+                placeholderTextColor={P.lightText}
+              />
+
+              <Text style={styles.inlineLabel}>Pronouns</Text>
+              <ChipSelector options={PRONOUNS} value={pronouns} onChange={setPronouns} />
+
+              <Text style={styles.inlineLabel}>Body Type</Text>
+              <ChipSelector options={BODY_TYPES} value={bodyType} onChange={setBodyType} />
+
+              <Text style={styles.inlineLabel}>Height</Text>
+              <Pressable style={styles.inlinePickerRow} onPress={() => setShowHeightPicker(true)}>
+                <Text style={styles.inlinePickerValue}>{heightCm ? formatHeight(heightCm) : '—'}</Text>
+                <Ionicons name="chevron-down" size={14} color={P.lightText} />
               </Pressable>
-              <Pressable style={styles.saveButton} onPress={saveEdit}>
-                <Text style={styles.saveButtonText}>Save</Text>
+
+              <Text style={styles.inlineLabel}>Weight</Text>
+              <Pressable style={styles.inlinePickerRow} onPress={() => setShowWeightPicker(true)}>
+                <Text style={styles.inlinePickerValue}>{weightLb ? formatWeight(weightLb) : '—'}</Text>
+                <Ionicons name="chevron-down" size={14} color={P.lightText} />
+              </Pressable>
+
+              <View style={styles.inlineActions}>
+                <Pressable style={styles.cancelBtn} onPress={() => setExpanded(null)}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={styles.saveBtn} onPress={saveProfile}>
+                  <Text style={styles.saveBtnText}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+          <SettingsRow icon="document-text-outline" label="Information & Permissions" onPress={() => {}} />
+          <SettingsRow icon="shield-outline"         label="Account Privacy"          onPress={() => {}} last />
+        </View>
+
+        {/* MYRA */}
+        <SectionHeader title="MYRA" />
+        <View style={styles.card}>
+          <SettingsRow icon="bookmark-outline"   label="Saved"         onPress={() => {}} />
+          <SettingsRow icon="heart-outline"      label="Favorites"     onPress={() => {}} />
+          <SettingsRow icon="bar-chart-outline"  label="Your Activity" onPress={() => {}} />
+          <SettingsRow icon="settings-outline"   label="Accessibility"
+            onPress={() => toggleSection('accessibility')}
+          />
+          {expanded === 'accessibility' && (
+            <View style={styles.inlinePanel}>
+              <View style={styles.prefRow}>
+                <Text style={styles.prefLabel}>Temperature Unit</Text>
+                <Switch
+                  value={settings.temperatureUnit === 'fahrenheit'}
+                  onValueChange={() => { hapticFeedback.light(); settings.toggleTemperatureUnit(); }}
+                  trackColor={{ false: P.border, true: `${P.accent}55` }}
+                  thumbColor={settings.temperatureUnit === 'fahrenheit' ? P.accent : P.lightText}
+                />
+              </View>
+              <Text style={styles.prefSublabel}>
+                {settings.temperatureUnit === 'fahrenheit' ? 'Fahrenheit (°F)' : 'Celsius (°C)'}
+              </Text>
+
+              <View style={[styles.prefRow, { marginTop: 12 }]}>
+                <Text style={styles.prefLabel}>Notifications</Text>
+                <Switch
+                  value={settings.notificationsEnabled}
+                  onValueChange={() => { hapticFeedback.light(); settings.toggleNotifications(); }}
+                  trackColor={{ false: P.border, true: `${P.accent}55` }}
+                  thumbColor={settings.notificationsEnabled ? P.accent : P.lightText}
+                />
+              </View>
+              <Text style={styles.prefSublabel}>
+                {settings.notificationsEnabled ? 'Enabled' : 'Disabled'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.rowLast} />
+        </View>
+
+        {/* SUPPORT — Help, About, Logout */}
+        <View style={styles.card}>
+          <SettingsRow icon="help-circle-outline"        label="Help"  onPress={() => {}} />
+          <SettingsRow icon="information-circle-outline" label="About" onPress={() => {}} />
+          <SettingsRow icon="log-out-outline" label="Log out" onPress={handleLogout} danger last />
+        </View>
+
+        {/* Version (tap 5× for dev section — not visible to user) */}
+        <Pressable onPress={() => setVersionTaps((n) => n + 1)} style={styles.versionRow}>
+          <Text style={styles.versionText}>MYRA v{APP_VERSION}</Text>
+        </Pressable>
+
+        {showDevSection && __DEV__ && (
+          <View style={styles.devCard}>
+            <Text style={styles.devTitle}>Developer</Text>
+            <Pressable onPress={() => setVersionTaps(0)} style={styles.devDismiss}>
+              <Text style={styles.devDismissText}>Hide</Text>
             </Pressable>
           </View>
         )}
-      </View>
 
-        {/* Profile Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Profile Information</Text>
-          
-          {/* Email (Read-only) */}
-          <SettingItem
-            icon="mail-outline"
-            label="Email"
-            value={user?.email || "—"}
-            readOnly
-          />
-
-          {/* Preferred Name */}
-          <SettingItem
-            icon="person-outline"
-            label="Preferred Name"
-            value={editing ? undefined : (p.preferredName || "—")}
-            editable={editing}
-            inputValue={preferredName}
-            onInputChange={setPreferredName}
-            placeholder="Enter your name"
-          />
-
-          {/* Pronouns */}
-          <SettingItem
-            icon="people-outline"
-            label="Pronouns"
-            value={pronouns || p.pronouns || "—"}
-            editable={editing}
-            type="chips"
-            options={PRONOUNS}
-            selectedValue={pronouns}
-            onValueChange={setPronouns}
-          />
-        </View>
-
-        {/* Measurements Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Measurements</Text>
-          
-          {/* Height */}
-          <SettingItem
-            icon="resize-outline"
-            label="Height"
-            value={heightCm ? formatHeight(heightCm) : (p.heightCm ? formatHeight(p.heightCm) : "—")}
-            editable={editing}
-            type="picker"
-            onPress={() => setShowHeightPicker(true)}
-          />
-
-          {/* Weight */}
-          <SettingItem
-            icon="fitness-outline"
-            label="Weight"
-            value={weightLb ? formatWeight(weightLb) : (p.weightLb ? formatWeight(p.weightLb) : "—")}
-            editable={editing}
-            type="picker"
-            onPress={() => setShowWeightPicker(true)}
-          />
-
-          {/* Body Type */}
-          <SettingItem
-            icon="body-outline"
-            label="Body Type"
-            value={bodyType || p.bodyType || "—"}
-            editable={editing}
-            type="chips"
-            options={BODY_TYPES}
-            selectedValue={bodyType}
-            onValueChange={setBodyType}
-          />
-        </View>
-
-        {/* App Settings Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Preferences</Text>
-          
-          {/* Temperature Unit */}
-          <SettingItem
-            icon="thermometer-outline"
-            label="Temperature Unit"
-            value={settings.temperatureUnit === 'celsius' ? 'Celsius (°C)' : 'Fahrenheit (°F)'}
-            type="toggle"
-            toggleValue={settings.temperatureUnit === 'fahrenheit'}
-            onToggle={() => {
-              hapticFeedback.light();
-              settings.toggleTemperatureUnit();
-            }}
-          />
-
-          {/* Notifications */}
-          <SettingItem
-            icon="notifications-outline"
-            label="Notifications"
-            value={settings.notificationsEnabled ? 'Enabled' : 'Disabled'}
-            type="toggle"
-            toggleValue={settings.notificationsEnabled}
-            onToggle={() => {
-              hapticFeedback.light();
-              settings.toggleNotifications();
-            }}
-      />
-    </View>
       </ScrollView>
 
-      {/* Height Picker Modal */}
-      <Modal
-        visible={showHeightPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowHeightPicker(false)}
-      >
+      {/* Height picker modal */}
+      <Modal visible={showHeightPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowHeightPicker(false)}>
         <View style={styles.pickerModal}>
           <View style={styles.pickerHeader}>
             <Pressable onPress={() => setShowHeightPicker(false)}>
               <Text style={styles.pickerCancel}>Cancel</Text>
             </Pressable>
-            <Text style={styles.pickerTitle}>Select Height</Text>
+            <Text style={styles.pickerTitle}>Height</Text>
             <Pressable onPress={() => setShowHeightPicker(false)}>
               <Text style={styles.pickerDone}>Done</Text>
             </Pressable>
           </View>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={heightCm || 170}
-              onValueChange={(value) => setHeightCm(value)}
-              style={styles.picker}
-            >
-              {Array.from({ length: 71 }, (_, i) => i + 140).map((cm) => (
-                <Picker.Item
-                  key={cm}
-                  label={formatHeight(cm)}
-                  value={cm}
-                />
-              ))}
-            </Picker>
-          </View>
+          <Picker selectedValue={heightCm ?? 170} onValueChange={(v) => setHeightCm(v)} style={styles.picker}>
+            {Array.from({ length: 71 }, (_, i) => i + 140).map((cm) => (
+              <Picker.Item key={cm} label={formatHeight(cm)} value={cm} />
+            ))}
+          </Picker>
         </View>
       </Modal>
 
-      {/* Weight Picker Modal */}
-      <Modal
-        visible={showWeightPicker}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowWeightPicker(false)}
-      >
+      {/* Weight picker modal */}
+      <Modal visible={showWeightPicker} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowWeightPicker(false)}>
         <View style={styles.pickerModal}>
           <View style={styles.pickerHeader}>
             <Pressable onPress={() => setShowWeightPicker(false)}>
               <Text style={styles.pickerCancel}>Cancel</Text>
             </Pressable>
-            <Text style={styles.pickerTitle}>Select Weight</Text>
+            <Text style={styles.pickerTitle}>Weight</Text>
             <Pressable onPress={() => setShowWeightPicker(false)}>
               <Text style={styles.pickerDone}>Done</Text>
             </Pressable>
           </View>
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={weightLb || 150}
-              onValueChange={(value) => setWeightLb(value)}
-              style={styles.picker}
-            >
-              {Array.from({ length: 261 }, (_, i) => i + 90).map((lb) => (
-                <Picker.Item
-                  key={lb}
-                  label={formatWeight(lb)}
-                  value={lb}
-                />
-              ))}
-            </Picker>
-          </View>
+          <Picker selectedValue={weightLb ?? 150} onValueChange={(v) => setWeightLb(v)} style={styles.picker}>
+            {Array.from({ length: 261 }, (_, i) => i + 90).map((lb) => (
+              <Picker.Item key={lb} label={formatWeight(lb)} value={lb} />
+            ))}
+          </Picker>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: P.background },
+  scroll:    { paddingHorizontal: 20, paddingBottom: 48 },
+
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 20,
+    gap: 10,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: P.cardSurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: P.primaryText,
+    letterSpacing: -0.5,
+  },
+
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: P.secondaryText,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+
+  card: {
+    backgroundColor: P.cardWhite,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: P.border,
+    marginBottom: 24,
+    overflow: 'hidden',
+    shadowColor: P.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  rowBorder:      { borderBottomWidth: 1, borderBottomColor: P.border },
+  rowLast:        { height: 0 },
+  rowIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: `${P.accent}15`,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rowIconWrapDanger: { backgroundColor: `${P.danger}12` },
+  rowBody:  { flex: 1 },
+  rowLabel: { fontSize: 15, color: P.primaryText, fontWeight: '500' },
+  rowValue: { fontSize: 12, color: P.secondaryText, marginTop: 2 },
+
+  inlinePanel: {
+    backgroundColor: `${P.accent}08`,
+    borderTopWidth: 1,
+    borderTopColor: P.border,
+    borderBottomWidth: 1,
+    borderBottomColor: P.border,
+    padding: 16,
+  },
+  inlineLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: P.secondaryText,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  inlineInput: {
+    borderWidth: 1,
+    borderColor: P.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    color: P.primaryText,
+    backgroundColor: P.background,
+  },
+  inlinePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: P.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: P.background,
+  },
+  inlinePickerValue: { fontSize: 14, color: P.primaryText },
+  inlineActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: P.border,
+    alignItems: 'center',
+  },
+  cancelBtnText: { fontSize: 14, fontWeight: '600', color: P.primaryText },
+  saveBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: P.accent,
+    alignItems: 'center',
+  },
+  saveBtnText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: P.border,
+    backgroundColor: P.background,
+  },
+  chipActive:     { backgroundColor: P.accent, borderColor: P.accent },
+  chipText:       { fontSize: 13, color: P.secondaryText },
+  chipTextActive: { color: '#FFFFFF', fontWeight: '600' },
+
+  prefRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  prefLabel:   { fontSize: 14, color: P.primaryText, fontWeight: '500' },
+  prefSublabel:{ fontSize: 12, color: P.lightText, marginTop: 2 },
+
+  versionRow: { alignItems: 'center', paddingVertical: 12 },
+  versionText:{ fontSize: 11, color: P.lightText, letterSpacing: 0.5 },
+
+  devCard: {
+    backgroundColor: '#1A1A2E',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 24,
+  },
+  devTitle:       { fontSize: 13, fontWeight: '700', color: '#8888CC', marginBottom: 8 },
+  devDismiss:     { marginTop: 10, alignSelf: 'flex-end' },
+  devDismissText: { fontSize: 12, color: '#6666AA' },
+
+  pickerModal: { flex: 1, backgroundColor: P.background },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: P.border,
+  },
+  pickerCancel: { fontSize: 16, color: P.secondaryText },
+  pickerTitle:  { fontSize: 17, fontWeight: '700', color: P.primaryText },
+  pickerDone:   { fontSize: 16, fontWeight: '700', color: P.accent },
+  picker:       { color: P.primaryText },
+});

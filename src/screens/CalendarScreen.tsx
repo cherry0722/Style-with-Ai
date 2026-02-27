@@ -8,6 +8,7 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -15,7 +16,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { Calendar, DateData } from 'react-native-calendars';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../context/ThemeContext';
 import { hapticFeedback } from '../utils/haptics';
 import {
   getPlannerRange,
@@ -26,32 +26,45 @@ import {
 } from '../api/planner';
 import { Picker } from '@react-native-picker/picker';
 
-const SLOT_LABELS: PlannerSlotLabel[] = ['morning', 'afternoon', 'evening', 'custom'];
+// ─── Design palette ──────────────────────────────────────────────────────────
+const P = {
+  background:    '#F5F0E8',
+  cardSurface:   '#EDE6D8',
+  cardWhite:     '#FFFFFF',
+  primaryText:   '#3D3426',
+  secondaryText: '#8C7E6A',
+  lightText:     '#B5A894',
+  accent:        '#C4A882',
+  border:        '#E8E0D0',
+  shadow:        'rgba(61, 52, 38, 0.08)',
+  error:         '#C8706A',
+} as const;
+
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
+
+const SLOT_LABELS: PlannerSlotLabel[]  = ['morning', 'afternoon', 'evening', 'custom'];
 const STATUSES: PlannerStatus[] = ['planned', 'worn', 'skipped'];
 
 function getMonthRange(date: Date): { from: string; to: string } {
   const y = date.getFullYear();
   const m = date.getMonth();
-  const first = new Date(y, m, 1);
-  const last = new Date(y, m + 1, 0);
-  const from = first.toISOString().slice(0, 10);
-  const to = last.toISOString().slice(0, 10);
+  const from = new Date(y, m, 1).toISOString().slice(0, 10);
+  const to   = new Date(y, m + 1, 0).toISOString().slice(0, 10);
   return { from, to };
 }
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'Calendar'>;
 
 export default function CalendarScreen() {
-  const theme = useTheme();
   const navigation = useNavigation<Nav>();
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [entries, setEntries] = useState<PlannerEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
+  const [entries, setEntries]   = useState<PlannerEntry[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [toast, setToast]       = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
-  const [addSlotLabel, setAddSlotLabel] = useState<PlannerSlotLabel>('morning');
-  const [addOccasion, setAddOccasion] = useState('');
+  const [addSlotLabel, setAddSlotLabel]       = useState<PlannerSlotLabel>('morning');
+  const [addOccasion, setAddOccasion]         = useState('');
   const [addOccasionError, setAddOccasionError] = useState<string | null>(null);
   const [patching, setPatching] = useState<string | null>(null);
 
@@ -63,32 +76,25 @@ export default function CalendarScreen() {
       const data = await getPlannerRange(from, to);
       setEntries(data.entries || []);
     } catch (err) {
-      setToast((err as { message?: string })?.message || 'Failed to load planner');
+      const msg = (err as { message?: string })?.message || 'Failed to load planner';
+      setToast(msg);
       setTimeout(() => setToast(null), 2500);
     } finally {
       setLoading(false);
     }
   }, [from, to]);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchRange();
-    }, [fetchRange])
-  );
+  useFocusEffect(useCallback(() => { fetchRange(); }, [fetchRange]));
 
   const markedDates = React.useMemo(() => {
-    const acc: Record<string, { marked: boolean; dotColor?: string; selectedColor?: string }> = {};
+    const acc: Record<string, { marked: boolean; dotColor?: string }> = {};
     for (const e of entries) {
       if (e.plans && e.plans.length > 0) {
-        acc[e.date] = {
-          marked: true,
-          dotColor: theme.colors.accent,
-          selectedColor: theme.colors.accent,
-        };
+        acc[e.date] = { marked: true, dotColor: P.accent };
       }
     }
     return acc;
-  }, [entries, theme.colors.accent]);
+  }, [entries]);
 
   const selectedEntry = entries.find((e) => e.date === selectedDate);
   const plans = selectedEntry?.plans ?? [];
@@ -96,8 +102,7 @@ export default function CalendarScreen() {
   const handleMonthChange = useCallback(
     (month: { year: number; month: number }) => {
       setCurrentMonth(new Date(month.year, month.month - 1));
-    },
-    []
+    }, []
   );
 
   const handleDateSelect = useCallback((day: DateData) => {
@@ -106,31 +111,20 @@ export default function CalendarScreen() {
     hapticFeedback.light();
   }, []);
 
-  const updatePlanStatus = useCallback(
-    async (planIndex: number, newStatus: PlannerStatus) => {
-      const nextPlans = plans.map((p, i) =>
-        i === planIndex ? { ...p, status: newStatus } : p
-      );
-      setEntries((prev) =>
-        prev.map((e) =>
-          e.date === selectedDate ? { ...e, plans: nextPlans } : e
-        )
-      );
-      setPatching(selectedDate);
-      try {
-        await patchPlanner(selectedDate, nextPlans);
-      } catch (err) {
-        setToast((err as { message?: string })?.message || 'Update failed');
-        setTimeout(() => setToast(null), 2500);
-        setEntries((prev) =>
-          prev.map((e) => (e.date === selectedDate ? { ...e, plans } : e))
-        );
-      } finally {
-        setPatching(null);
-      }
-    },
-    [selectedDate, plans]
-  );
+  const updatePlanStatus = useCallback(async (planIndex: number, newStatus: PlannerStatus) => {
+    const nextPlans = plans.map((p, i) => i === planIndex ? { ...p, status: newStatus } : p);
+    setEntries((prev) => prev.map((e) => e.date === selectedDate ? { ...e, plans: nextPlans } : e));
+    setPatching(selectedDate);
+    try {
+      await patchPlanner(selectedDate, nextPlans);
+    } catch (err) {
+      setToast((err as { message?: string })?.message || 'Update failed');
+      setTimeout(() => setToast(null), 2500);
+      setEntries((prev) => prev.map((e) => e.date === selectedDate ? { ...e, plans } : e));
+    } finally {
+      setPatching(null);
+    }
+  }, [selectedDate, plans]);
 
   const openAddModal = useCallback(() => {
     setAddOccasion('');
@@ -140,54 +134,45 @@ export default function CalendarScreen() {
   }, []);
 
   const handleContinueToSuggestions = useCallback(() => {
-    const occasionTrimmed = addOccasion.trim();
-    if (!occasionTrimmed) {
-      setAddOccasionError('Occasion is required');
-      return;
-    }
+    const occ = addOccasion.trim();
+    if (!occ) { setAddOccasionError('Occasion is required'); return; }
     setAddOccasionError(null);
     setAddModalVisible(false);
     hapticFeedback.light();
-    navigation.navigate('PlanOutfitSuggestions', {
-      date: selectedDate,
-      slotLabel: addSlotLabel,
-      occasion: occasionTrimmed,
-    });
+    navigation.navigate('PlanOutfitSuggestions', { date: selectedDate, slotLabel: addSlotLabel, occasion: occ });
   }, [selectedDate, addSlotLabel, addOccasion, navigation]);
 
-  const goToHistory = useCallback(() => {
-    hapticFeedback.light();
-    navigation.navigate('History');
-  }, [navigation]);
-
-  const goBack = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
-
-  const styles = createStyles(theme);
+  const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView edges={['top']} style={styles.container}>
+      {/* ── Header ──────────────────────────────────────────────────────── */}
       <View style={styles.header}>
-        <Pressable style={styles.headerBack} onPress={goBack}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.textPrimary} />
+        <Pressable style={styles.backBtn} onPress={goBack} hitSlop={8}>
+          <Ionicons name="chevron-back" size={22} color={P.primaryText} />
         </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.title}>Calendar</Text>
-          <Text style={styles.subtitle}>Plan your outfits by day</Text>
+        <Text style={styles.title}>CALENDAR</Text>
+        <View style={styles.headerRight}>
+          <Pressable style={styles.headerPill} onPress={() => {}}>
+            <Text style={styles.headerPillEmoji}>☁️</Text>
+          </Pressable>
+          <Pressable style={styles.headerPill} onPress={() => {}}>
+            <Text style={styles.headerPillEmoji}>👔</Text>
+          </Pressable>
+          <Pressable style={styles.headerPillSmall} onPress={openAddModal}>
+            <Ionicons name="add" size={18} color={P.primaryText} />
+          </Pressable>
         </View>
-        <Pressable style={styles.headerRight} onPress={goToHistory}>
-          <Text style={styles.historyButtonText}>History</Text>
-        </Pressable>
       </View>
 
       {loading ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.colors.accent} />
+          <ActivityIndicator size="large" color={P.accent} />
         </View>
       ) : (
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          <View style={styles.calendarContainer}>
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* ── Calendar card ─────────────────────────────────────────── */}
+          <View style={styles.calendarCard}>
             <Calendar
               current={`${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, '0')}-01`}
               onDayPress={handleDateSelect}
@@ -197,98 +182,88 @@ export default function CalendarScreen() {
                 [selectedDate]: {
                   ...markedDates[selectedDate],
                   selected: true,
-                  selectedColor: theme.colors.accent,
+                  selectedColor: P.accent,
                 },
               }}
               theme={{
-                backgroundColor: theme.colors.backgroundSecondary,
-                calendarBackground: theme.colors.backgroundSecondary,
-                textSectionTitleColor: theme.colors.textPrimary,
-                selectedDayBackgroundColor: theme.colors.accent,
-                selectedDayTextColor: theme.colors.white,
-                todayTextColor: theme.colors.accent,
-                dayTextColor: theme.colors.textPrimary,
-                textDisabledColor: theme.colors.textTertiary,
-                dotColor: theme.colors.accent,
-                selectedDotColor: theme.colors.white,
-                arrowColor: theme.colors.accent,
-                disabledArrowColor: theme.colors.textTertiary,
-                monthTextColor: theme.colors.textPrimary,
-                indicatorColor: theme.colors.accent,
-                textDayFontWeight: '600',
-                textMonthFontWeight: 'bold',
+                backgroundColor: 'transparent',
+                calendarBackground: 'transparent',
+                textSectionTitleColor: P.secondaryText,
+                selectedDayBackgroundColor: P.accent,
+                selectedDayTextColor: '#FFFFFF',
+                todayTextColor: '#FFFFFF',
+                todayBackgroundColor: P.primaryText,
+                dayTextColor: P.primaryText,
+                textDisabledColor: P.lightText,
+                dotColor: P.accent,
+                selectedDotColor: '#FFFFFF',
+                arrowColor: P.accent,
+                disabledArrowColor: P.lightText,
+                monthTextColor: P.primaryText,
+                indicatorColor: P.accent,
+                textDayFontWeight: '500',
+                textMonthFontWeight: '700',
                 textDayHeaderFontWeight: '600',
-                textDayFontSize: 16,
-                textMonthFontSize: 18,
-                textDayHeaderFontSize: 14,
+                textDayFontSize: 15,
+                textMonthFontSize: 17,
+                textDayHeaderFontSize: 13,
               }}
               style={styles.calendar}
             />
           </View>
 
+          {/* ── Day detail ────────────────────────────────────────────── */}
           <View style={styles.dayDetail}>
-            <Text style={styles.dayDetailTitle}>
+            <Text style={styles.dayTitle}>
               {new Date(selectedDate).toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
+                weekday: 'long', month: 'long', day: 'numeric',
               })}
             </Text>
 
             {patching === selectedDate && (
               <View style={styles.savingRow}>
-                <ActivityIndicator size="small" color={theme.colors.accent} />
+                <ActivityIndicator size="small" color={P.accent} />
                 <Text style={styles.savingText}>Saving…</Text>
               </View>
             )}
 
             {plans.length === 0 ? (
               <View style={styles.noPlans}>
+                <Ionicons name="calendar-outline" size={36} color={P.lightText} style={{ marginBottom: 10 }} />
                 <Text style={styles.noPlansText}>No plans for this day</Text>
-                <Pressable style={styles.addPlanButton} onPress={openAddModal}>
-                  <Ionicons name="add" size={18} color={theme.colors.white} />
-                  <Text style={styles.addPlanButtonText}>Add plan</Text>
+                <Pressable style={styles.addPlanBtn} onPress={openAddModal}>
+                  <Ionicons name="add" size={18} color="#FFFFFF" />
+                  <Text style={styles.addPlanBtnText}>Add plan</Text>
                 </Pressable>
               </View>
             ) : (
               <>
                 {plans.map((plan, index) => (
-                  <View
-                    key={`${selectedDate}-${plan.slotLabel}-${index}`}
-                    style={styles.planCard}
-                  >
+                  <View key={`${selectedDate}-${plan.slotLabel}-${index}`} style={styles.planCard}>
                     <View style={styles.planRow}>
                       <Text style={styles.planSlot}>{plan.slotLabel}</Text>
                       <Text style={styles.planOccasion}>{plan.occasion}</Text>
                     </View>
-                    {plan.outfitId ? (
+                    {!!plan.outfitId && (
                       <View style={styles.statusRow}>
                         {STATUSES.map((s) => (
                           <Pressable
                             key={s}
-                            style={[
-                              styles.statusChip,
-                              plan.status === s && styles.statusChipActive,
-                            ]}
+                            style={[styles.statusChip, plan.status === s && styles.statusChipActive]}
                             onPress={() => updatePlanStatus(index, s)}
                           >
-                            <Text
-                              style={[
-                                styles.statusChipText,
-                                plan.status === s && styles.statusChipTextActive,
-                              ]}
-                            >
+                            <Text style={[styles.statusChipText, plan.status === s && styles.statusChipTextActive]}>
                               {s}
                             </Text>
                           </Pressable>
                         ))}
                       </View>
-                    ) : null}
+                    )}
                   </View>
                 ))}
-                <Pressable style={styles.addPlanButtonSecondary} onPress={openAddModal}>
-                  <Ionicons name="add" size={18} color={theme.colors.accent} />
-                  <Text style={styles.addPlanButtonSecondaryText}>Add plan</Text>
+                <Pressable style={styles.addMoreBtn} onPress={openAddModal}>
+                  <Ionicons name="add" size={16} color={P.accent} />
+                  <Text style={styles.addMoreText}>Add plan</Text>
                 </Pressable>
               </>
             )}
@@ -296,275 +271,260 @@ export default function CalendarScreen() {
         </ScrollView>
       )}
 
+      {/* ── Add plan modal ────────────────────────────────────────────── */}
       <Modal visible={addModalVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setAddModalVisible(false)}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>Add plan</Text>
-            <Text style={styles.addFormLabel}>Slot</Text>
+
+            <Text style={styles.formLabel}>Time slot</Text>
             <View style={styles.pickerWrap}>
               <Picker
                 selectedValue={addSlotLabel}
                 onValueChange={(v) => setAddSlotLabel(v as PlannerSlotLabel)}
                 style={styles.picker}
-                dropdownIconColor={theme.colors.textPrimary}
+                dropdownIconColor={P.primaryText}
               >
-                {SLOT_LABELS.map((l) => (
-                  <Picker.Item key={l} label={l} value={l} />
-                ))}
+                {SLOT_LABELS.map((l) => <Picker.Item key={l} label={l} value={l} />)}
               </Picker>
             </View>
-            <Text style={styles.addFormLabel}>Occasion (required)</Text>
+
+            <Text style={styles.formLabel}>Occasion (required)</Text>
             <TextInput
               style={[styles.input, addOccasionError ? styles.inputError : null]}
               value={addOccasion}
-              onChangeText={(t) => {
-                setAddOccasion(t);
-                setAddOccasionError(null);
-              }}
+              onChangeText={(t) => { setAddOccasion(t); setAddOccasionError(null); }}
               placeholder="e.g. casual, work"
-              placeholderTextColor={theme.colors.textTertiary}
+              placeholderTextColor={P.lightText}
             />
-            {addOccasionError ? (
-              <Text style={styles.errorText}>{addOccasionError}</Text>
-            ) : null}
+            {addOccasionError && <Text style={styles.errorText}>{addOccasionError}</Text>}
+
             <View style={styles.modalActions}>
-              <Pressable style={styles.cancelButton} onPress={() => setAddModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Pressable style={styles.cancelBtn} onPress={() => setAddModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[styles.continueButton, !addOccasion.trim() && styles.continueButtonDisabled]}
+                style={[styles.continueBtn, !addOccasion.trim() && styles.continueBtnDisabled]}
                 onPress={handleContinueToSuggestions}
                 disabled={!addOccasion.trim()}
               >
-                <Text style={styles.continueButtonText}>Continue</Text>
+                <Text style={styles.continueBtnText}>Continue</Text>
               </Pressable>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
 
-      {toast ? (
-        <View style={styles.toastWrap}>
+      {/* ── Toast ─────────────────────────────────────────────────────── */}
+      {!!toast && (
+        <View style={styles.toast}>
           <Text style={styles.toastText}>{toast}</Text>
         </View>
-      ) : null}
+      )}
     </SafeAreaView>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>) {
-  return StyleSheet.create({
-    container: { flex: 1 },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: theme.spacing.md,
-      paddingTop: theme.spacing.md,
-      paddingBottom: theme.spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-    },
-    headerBack: { padding: theme.spacing.sm, marginRight: theme.spacing.xs },
-    headerCenter: { flex: 1 },
-    headerRight: { padding: theme.spacing.sm },
-    title: {
-      fontSize: theme.typography.xl,
-      fontWeight: theme.typography.bold,
-      color: theme.colors.textPrimary,
-      marginBottom: theme.spacing.xs,
-    },
-    subtitle: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.textSecondary,
-    },
-    historyButtonText: {
-      fontSize: theme.typography.sm,
-      fontWeight: '600',
-      color: theme.colors.accent,
-    },
-    centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    scrollView: { flex: 1 },
-    calendarContainer: {
-      marginHorizontal: theme.spacing.lg,
-      marginBottom: theme.spacing.lg,
-      marginTop: theme.spacing.lg,
-      backgroundColor: theme.colors.backgroundSecondary,
-      borderRadius: theme.borderRadius.xl,
-      padding: theme.spacing.lg,
-      ...theme.shadows.md,
-    },
-    calendar: { borderRadius: theme.borderRadius.lg },
-    dayDetail: {
-      marginHorizontal: theme.spacing.lg,
-      marginBottom: theme.spacing.xl,
-    },
-    dayDetailTitle: {
-      fontSize: theme.typography.lg,
-      fontWeight: theme.typography.bold,
-      color: theme.colors.textPrimary,
-      marginBottom: theme.spacing.md,
-    },
-    savingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-      marginBottom: theme.spacing.sm,
-    },
-    savingText: { fontSize: theme.typography.sm, color: theme.colors.textSecondary },
-    noPlans: {
-      alignItems: 'center',
-      paddingVertical: theme.spacing.xl,
-      backgroundColor: theme.colors.backgroundSecondary,
-      borderRadius: theme.borderRadius.lg,
-    },
-    noPlansText: {
-      fontSize: theme.typography.base,
-      color: theme.colors.textSecondary,
-      marginBottom: theme.spacing.md,
-    },
-    addPlanButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.xs,
-      backgroundColor: theme.colors.accent,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-    },
-    addPlanButtonText: {
-      color: theme.colors.white,
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-    },
-    addPlanButtonSecondary: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.xs,
-      marginTop: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-    },
-    addPlanButtonSecondaryText: {
-      color: theme.colors.accent,
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-    },
-    planCard: {
-      backgroundColor: theme.colors.backgroundSecondary,
-      borderRadius: theme.borderRadius.lg,
-      padding: theme.spacing.md,
-      marginBottom: theme.spacing.sm,
-      ...theme.shadows.sm,
-    },
-    planRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: theme.spacing.sm,
-    },
-    planSlot: {
-      fontSize: theme.typography.sm,
-      fontWeight: theme.typography.medium,
-      color: theme.colors.accent,
-      textTransform: 'capitalize',
-      marginRight: theme.spacing.sm,
-    },
-    planOccasion: {
-      fontSize: theme.typography.base,
-      color: theme.colors.textPrimary,
-      flex: 1,
-    },
-    statusRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: theme.spacing.xs,
-    },
-    statusChip: {
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: theme.spacing.xs,
-      borderRadius: theme.borderRadius.sm,
-      backgroundColor: theme.colors.border,
-    },
-    statusChipActive: { backgroundColor: theme.colors.accent },
-    statusChipText: { fontSize: theme.typography.xs, color: theme.colors.textSecondary },
-    statusChipTextActive: { color: theme.colors.white },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.4)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: theme.spacing.lg,
-    },
-    modalContent: {
-      backgroundColor: theme.colors.background,
-      borderRadius: theme.borderRadius.xl,
-      padding: theme.spacing.xl,
-      width: '100%',
-      maxWidth: 360,
-    },
-    modalTitle: {
-      fontSize: theme.typography.lg,
-      fontWeight: theme.typography.bold,
-      color: theme.colors.textPrimary,
-      marginBottom: theme.spacing.lg,
-    },
-    addFormLabel: {
-      fontSize: theme.typography.sm,
-      color: theme.colors.textSecondary,
-      marginBottom: theme.spacing.xs,
-      marginTop: theme.spacing.sm,
-    },
-    pickerWrap: {
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.md,
-      overflow: 'hidden',
-    },
-    picker: { color: theme.colors.textPrimary },
-    input: {
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.md,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      fontSize: theme.typography.base,
-      color: theme.colors.textPrimary,
-    },
-    inputError: { borderColor: theme.colors.error },
-    errorText: { fontSize: theme.typography.xs, color: theme.colors.error, marginTop: theme.spacing.xs },
-    modalActions: {
-      flexDirection: 'row',
-      gap: theme.spacing.md,
-      marginTop: theme.spacing.xl,
-    },
-    cancelButton: {
-      flex: 1,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.border,
-      alignItems: 'center',
-    },
-    cancelButtonText: { fontSize: theme.typography.sm, color: theme.colors.textPrimary },
-    continueButton: {
-      flex: 1,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.accent,
-      alignItems: 'center',
-    },
-    continueButtonDisabled: {
-      opacity: 0.5,
-      backgroundColor: theme.colors.border,
-    },
-    continueButtonText: { fontSize: theme.typography.sm, fontWeight: '600', color: theme.colors.white },
-    toastWrap: {
-      position: 'absolute',
-      bottom: theme.spacing.xl,
-      left: theme.spacing.lg,
-      right: theme.spacing.lg,
-      backgroundColor: theme.colors.textPrimary,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
-      borderRadius: theme.borderRadius.md,
-    },
-    toastText: { fontSize: theme.typography.sm, color: theme.colors.white, textAlign: 'center' },
-  });
-}
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: P.background },
+  scroll:    { flex: 1 },
+  centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: P.background,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: P.cardSurface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: P.primaryText,
+    letterSpacing: -0.3,
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  headerPill: {
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: P.cardWhite,
+    borderWidth: 1,
+    borderColor: P.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerPillEmoji: { fontSize: 15 },
+  headerPillSmall: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    backgroundColor: P.cardWhite,
+    borderWidth: 1,
+    borderColor: P.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Calendar card
+  calendarCard: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 20,
+    backgroundColor: P.cardWhite,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: P.border,
+    padding: 12,
+    shadowColor: P.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    elevation: 3,
+  },
+  calendar: { borderRadius: 14 },
+
+  // Day detail
+  dayDetail:   { marginHorizontal: 20, marginBottom: 32 },
+  dayTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: P.primaryText,
+    marginBottom: 14,
+    letterSpacing: 0.1,
+  },
+  savingRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  savingText: { fontSize: 13, color: P.secondaryText },
+
+  // No plans
+  noPlans: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    backgroundColor: P.cardSurface,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: P.border,
+  },
+  noPlansText: { fontSize: 15, color: P.secondaryText, marginBottom: 16 },
+  addPlanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: P.accent,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 14,
+  },
+  addPlanBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+
+  // Plan cards
+  planCard: {
+    backgroundColor: P.cardSurface,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: P.border,
+    shadowColor: P.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  planRow:     { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  planSlot:    { fontSize: 12, fontWeight: '700', color: P.accent, textTransform: 'capitalize', marginRight: 10, letterSpacing: 0.3 },
+  planOccasion:{ fontSize: 15, color: P.primaryText, flex: 1 },
+  statusRow:   { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  statusChip:       { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: P.border },
+  statusChipActive: { backgroundColor: P.accent },
+  statusChipText:       { fontSize: 12, color: P.secondaryText },
+  statusChipTextActive: { color: '#FFFFFF', fontWeight: '600' },
+
+  addMoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, paddingVertical: 6 },
+  addMoreText:{ fontSize: 13, color: P.accent, fontWeight: '600' },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(61, 52, 38, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: P.cardSurface,
+    borderRadius: 22,
+    padding: 24,
+    width: '100%',
+    maxWidth: 360,
+    borderWidth: 1,
+    borderColor: P.border,
+    shadowColor: P.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: P.primaryText, marginBottom: 18 },
+  formLabel:  { fontSize: 12, color: P.secondaryText, marginBottom: 6, marginTop: 12, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
+  pickerWrap: { borderWidth: 1, borderColor: P.border, borderRadius: 12, overflow: 'hidden', backgroundColor: P.background },
+  picker:     { color: P.primaryText },
+  input: {
+    borderWidth: 1,
+    borderColor: P.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: P.primaryText,
+    backgroundColor: P.background,
+  },
+  inputError: { borderColor: P.error },
+  errorText:  { fontSize: 12, color: P.error, marginTop: 4 },
+  modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: P.border,
+    alignItems: 'center',
+  },
+  cancelBtnText: { fontSize: 14, color: P.primaryText, fontWeight: '600' },
+  continueBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: P.accent,
+    alignItems: 'center',
+  },
+  continueBtnDisabled: { opacity: 0.45 },
+  continueBtnText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
+
+  // Toast
+  toast: {
+    position: 'absolute',
+    bottom: 28,
+    left: 20,
+    right: 20,
+    backgroundColor: P.primaryText,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  toastText: { fontSize: 13, color: '#FFFFFF', textAlign: 'center' },
+});

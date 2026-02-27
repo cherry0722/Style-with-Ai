@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { PersistStorage } from 'zustand/middleware';
 import { Notification } from '../types';
 import { persistStorage } from './persistStorage';
 
@@ -93,7 +94,7 @@ export const useNotifications = create<NotificationsState>()(
     {
       name: 'myra-notifications',
       version: 1,
-      storage: persistStorage,
+      storage: persistStorage as unknown as PersistStorage<NotificationsState>,
     }
   )
 );

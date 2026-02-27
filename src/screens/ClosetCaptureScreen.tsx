@@ -117,7 +117,7 @@ export default function ClosetCaptureScreen() {
       const data: WardrobeItemResponse[] = await fetchWardrobeItems();
 
       const mapped: Garment[] = data.map((item) => ({
-        id: item._id,
+        id: item._id ?? item.id ?? '',
         imageUrl: item.imageUrl,
         cleanImageUrl: item.cleanImageUrl,
         category: item.category as GarmentCategory,
@@ -445,7 +445,7 @@ export default function ClosetCaptureScreen() {
       });
 
       const garment: Garment = {
-        id: created._id,
+        id: created._id ?? created.id ?? '',
         imageUrl: created.imageUrl,
         cleanImageUrl: created.cleanImageUrl,
         category: created.category as GarmentCategory,

@@ -149,7 +149,7 @@ export async function suggestOutfitForUser(
     console.warn('[Recommender] ENABLE_AI is false. Returning fallback stub.');
     return {
       outfits: [],
-      context: { reason: 'AI disabled via config' },
+      context: { location: null, weather: null },
       used_memory: false,
     };
   }

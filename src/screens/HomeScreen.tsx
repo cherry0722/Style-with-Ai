@@ -1,6 +1,6 @@
 /**
  * Home tab — GET /api/home/today.
- * Layout: portrait avatar (78% width max 340, 44% height clamp 320–440), no-thumb slider (55% complete), tightened gaps, bottom fade into tab bar.
+ * Warm beige palette, CSS-drawn avatar, pressable CTA, 3 info cards, weather popup.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -13,7 +13,7 @@ import {
   RefreshControl,
   Dimensions,
   Animated,
-  PanResponder,
+  Easing,
   Platform,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,304 +21,210 @@ import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
 
-// Precision layout constants (px)
-const HORIZONTAL_PADDING = 24;
-const HEADER_HEIGHT = 60;
-const CTA_HEIGHT = 90;
-const CTA_INTERNAL_PADDING = 20;
-const INFO_CARD_SIZE = 110;
-const GRID_GAP = 12;
-const BOTTOM_TAB_RESERVE = 80;
-const BORDER_RADIUS = 16;
+const H_PAD = 24;
+const HEADER_H = 56;
+const GRID_GAP = 10;
+const BOTTOM_RESERVE = 88;
 
-const PRECISION_SHADOW = {
-  shadowColor: '#000',
-  shadowOpacity: 0.04,
-  shadowRadius: 30,
-  shadowOffset: { width: 0, height: 8 },
-  elevation: 2,
+const P = {
+  background:     '#F5F0E8',
+  cardSurface:    '#EDE6D8',
+  cardWhite:      '#FFFFFF',
+  primaryText:    '#3D3426',
+  secondaryText:  '#8C7E6A',
+  lightText:      '#B5A894',
+  accent:         '#C4A882',
+  accentLight:    '#E8D9C5',
+  border:         '#E8E0D0',
+  bottomBar:      '#FAF7F2',
+  shadow:         'rgba(61, 52, 38, 0.08)',
+  skin:           '#DEAD8F',
+  skinDark:       '#C9956E',
+  hair:           '#5C4A3A',
+  pants:          '#4A5568',
+  shoes:          '#F0EDE6',
+} as const;
+
+const CARD_SHADOW = {
+  shadowColor: P.shadow,
+  shadowOpacity: 1,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 3,
 };
 
-const HOME_PALETTE = {
-  background: '#F5F2EB',
-  cardSurface: '#EBE6DA',
-  primaryText: '#4A473E',
-  secondaryText: '#8C887D',
-  bottomBarSurface: '#FAF9F6',
-  activeHighlight: '#D9D2C2',
-} as const;
+const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
 
 function formatTodayLabel(dateStr: string): string {
   if (!dateStr || dateStr.length < 10) return 'Today';
   const d = new Date(dateStr + 'T12:00:00Z');
-  const options: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
-  return d.toLocaleDateString(undefined, options);
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-// Mock 7-day forecast for weather overlay (replace with real API later)
-const MOCK_7_DAY_FORECAST = [
-  { day: 'Today', icon: 'partly-sunny' as const, temp: 70 },
-  { day: 'Tue', icon: 'cloudy' as const, temp: 68 },
-  { day: 'Wed', icon: 'rainy' as const, temp: 65 },
-  { day: 'Thu', icon: 'partly-sunny' as const, temp: 72 },
-  { day: 'Fri', icon: 'sunny' as const, temp: 75 },
-  { day: 'Sat', icon: 'cloudy' as const, temp: 71 },
-  { day: 'Sun', icon: 'partly-sunny' as const, temp: 73 },
+const MOCK_7_DAY = [
+  { day: 'Today', icon: 'partly-sunny' as const,  temp: 70 },
+  { day: 'Tue',   icon: 'cloudy' as const,         temp: 68 },
+  { day: 'Wed',   icon: 'rainy' as const,           temp: 65 },
+  { day: 'Thu',   icon: 'partly-sunny' as const,  temp: 72 },
+  { day: 'Fri',   icon: 'sunny' as const,           temp: 75 },
+  { day: 'Sat',   icon: 'cloudy' as const,         temp: 71 },
+  { day: 'Sun',   icon: 'partly-sunny' as const,  temp: 73 },
 ];
 
-const MIN_TOUCH_TARGET = 44;
-const SLIDER_CONFIRM_THRESHOLD = 0.55;
-const AVATAR_WIDTH_PCT = 0.78;
-const AVATAR_WIDTH_MAX = 340;
-const AVATAR_HEIGHT_PCT = 0.44;
-const AVATAR_HEIGHT_MIN = 320;
-const AVATAR_HEIGHT_MAX = 440;
-const PROGRESS_FILL_OPACITY = 0.08;
-
-const SERIF_FONT = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
-
-// --- Internal components (all inside HomeScreen.tsx) ---
-
-function HeaderIconButton({
+// ─── Pill-style header button ────────────────────────────────────────────────
+function PillBtn({
+  children,
   onPress,
-  icon,
-  palette,
   style,
-}: Readonly<{
-  onPress: () => void;
-  icon: keyof typeof Ionicons.glyphMap;
-  palette: typeof HOME_PALETTE;
-  style?: object;
-}>) {
-  const styles = headerIconButtonStyles(palette);
+}: Readonly<{ children: React.ReactNode; onPress: () => void; style?: object }>) {
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.button, style, pressed && styles.pressed]}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={({ pressed }) => [styles.pillBtn, style, pressed && { opacity: 0.7 }]}
+      hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={icon}
     >
-      <Ionicons name={icon} size={22} color={palette.primaryText} />
+      {children}
     </Pressable>
   );
 }
 
-function headerIconButtonStyles(palette: typeof HOME_PALETTE) {
-  return StyleSheet.create({
-    button: {
-      width: Math.max(MIN_TOUCH_TARGET, 44),
-      height: Math.max(MIN_TOUCH_TARGET, 44),
-      borderRadius: BORDER_RADIUS,
-      backgroundColor: palette.cardSurface,
-      borderWidth: 1,
-      borderColor: palette.activeHighlight,
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...PRECISION_SHADOW,
-    },
-    pressed: { opacity: 0.7 },
-  });
+// ─── CSS-drawn avatar character ──────────────────────────────────────────────
+function AvatarFigure() {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -6,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [floatAnim]);
+
+  return (
+    <View style={avatarStyles.wrapper}>
+      {/* Radial glow behind */}
+      <View style={avatarStyles.glow} />
+
+      <Animated.View style={[avatarStyles.figure, { transform: [{ translateY: floatAnim }] }]}>
+        {/* Hair */}
+        <View style={avatarStyles.hair}>
+          <View style={avatarStyles.hairTop} />
+          <View style={avatarStyles.bangLeft} />
+          <View style={avatarStyles.bangRight} />
+        </View>
+
+        {/* Face */}
+        <View style={avatarStyles.face}>
+          {/* Ears */}
+          <View style={[avatarStyles.ear, avatarStyles.earLeft]} />
+          <View style={[avatarStyles.ear, avatarStyles.earRight]} />
+          {/* Eyes */}
+          <View style={avatarStyles.eyeRow}>
+            <View style={avatarStyles.eye} />
+            <View style={avatarStyles.eye} />
+          </View>
+          {/* Smile */}
+          <View style={avatarStyles.smile} />
+        </View>
+
+        {/* Neck */}
+        <View style={avatarStyles.neck} />
+
+        {/* Torso / shirt */}
+        <View style={avatarStyles.torso}>
+          {/* Collar V */}
+          <View style={avatarStyles.collarV}>
+            <View style={avatarStyles.collarLeft} />
+            <View style={avatarStyles.collarRight} />
+          </View>
+          {/* Arms */}
+          <View style={[avatarStyles.arm, avatarStyles.armLeft]}>
+            <View style={avatarStyles.hand} />
+          </View>
+          <View style={[avatarStyles.arm, avatarStyles.armRight]}>
+            <View style={avatarStyles.hand} />
+          </View>
+        </View>
+
+        {/* Legs */}
+        <View style={avatarStyles.legsRow}>
+          <View style={avatarStyles.leg} />
+          <View style={avatarStyles.leg} />
+        </View>
+
+        {/* Shoes */}
+        <View style={avatarStyles.shoesRow}>
+          <View style={avatarStyles.shoe} />
+          <View style={avatarStyles.shoe} />
+        </View>
+      </Animated.View>
+    </View>
+  );
 }
 
-/** Info grid card: square, exactly 110px height, width from grid layout. */
-function InfoCard({
-  children,
-  palette,
-  width,
-  style,
-}: Readonly<{
-  children: React.ReactNode;
-  palette: typeof HOME_PALETTE;
-  width: number;
-  style?: object;
-}>) {
+// ─── Info card wrapper ───────────────────────────────────────────────────────
+function InfoCard({ width, children }: Readonly<{ width: number; children: React.ReactNode }>) {
   return (
-    <View
-      style={[
-        {
-          width,
-          height: INFO_CARD_SIZE,
-          backgroundColor: palette.cardSurface,
-          borderRadius: BORDER_RADIUS,
-          padding: 12,
-          borderWidth: 1,
-          borderColor: palette.activeHighlight,
-          justifyContent: 'center',
-          alignItems: 'center',
-          ...PRECISION_SHADOW,
-        },
-        style,
-      ]}
-    >
+    <View style={[styles.infoCard, { width }, CARD_SHADOW]}>
       {children}
     </View>
   );
 }
 
-/** CTA: track + centered text only. No visible thumb. Invisible full-width drag; subtle progress fill at low opacity. 55% completes. */
-function DragToConfirmSlider({
-  label,
-  onConfirm,
-  palette,
-  width,
-}: Readonly<{
-  label: string;
-  onConfirm: () => void;
-  palette: typeof HOME_PALETTE;
-  width: number;
-}>) {
-  const trackHeight = CTA_HEIGHT - CTA_INTERNAL_PADDING * 2;
-  const trackWidth = Math.max(width - CTA_INTERNAL_PADDING * 2, 200);
-  const maxDrag = trackWidth;
-  const threshold = maxDrag * SLIDER_CONFIRM_THRESHOLD;
-
-  const progressAnim = useRef(new Animated.Value(0)).current;
-  const lastOffsetRef = useRef(0);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 3,
-      onPanResponderGrant: () => {},
-      onPanResponderMove: (_, g) => {
-        const dx = Math.max(0, Math.min(g.dx, maxDrag));
-        lastOffsetRef.current = dx;
-        progressAnim.setValue(dx);
-      },
-      onPanResponderRelease: () => {
-        const current = lastOffsetRef.current;
-        if (current >= threshold) {
-          onConfirm();
-          progressAnim.setValue(0);
-          lastOffsetRef.current = 0;
-        } else {
-          Animated.spring(progressAnim, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 28,
-            bounciness: 6,
-          }).start();
-          lastOffsetRef.current = 0;
-        }
-      },
-    })
-  ).current;
-
-  return (
-    <View style={{ width, height: CTA_HEIGHT, padding: CTA_INTERNAL_PADDING, justifyContent: 'center' }}>
-      <View
-        style={{
-          width: trackWidth,
-          height: trackHeight,
-          borderRadius: BORDER_RADIUS,
-          backgroundColor: palette.cardSurface,
-          borderWidth: 1,
-          borderColor: palette.activeHighlight,
-          justifyContent: 'center',
-          overflow: 'hidden',
-          ...PRECISION_SHADOW,
-        }}
-      >
-        {/* Subtle progress fill (very low opacity), no thumb; fill grows left-to-right via scaleX */}
-        <Animated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: trackWidth,
-            backgroundColor: palette.primaryText,
-            opacity: PROGRESS_FILL_OPACITY,
-            borderRadius: BORDER_RADIUS,
-            transform: [
-              { translateX: progressAnim.interpolate({ inputRange: [0, maxDrag], outputRange: [trackWidth / 2, 0] }) },
-              { scaleX: progressAnim.interpolate({ inputRange: [0, maxDrag], outputRange: [0, 1] }) },
-            ],
-          }}
-        />
-        <Text
-          style={{
-            position: 'absolute',
-            width: '100%',
-            textAlign: 'center',
-            fontSize: 12,
-            fontWeight: '700',
-            color: palette.secondaryText,
-            letterSpacing: 0.5,
-          }}
-        >
-          {label}
-        </Text>
-        {/* Invisible full-width drag handle */}
-        <Animated.View
-          style={StyleSheet.absoluteFill}
-          {...panResponder.panHandlers}
-        />
-      </View>
-    </View>
-  );
-}
-
+// ─── Main screen ─────────────────────────────────────────────────────────────
 export default function HomeScreen() {
-  const theme = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user, token } = useAuth();
-  const [data, setData] = useState<HomeTodayResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const [data, setData]             = useState<HomeTodayResponse | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const [weatherDropdownOpen, setWeatherDropdownOpen] = useState(false);
-  const [sliderTrackWidth, setSliderTrackWidth] = useState(0);
+  const [weatherOpen, setWeatherOpen] = useState(false);
 
-  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-  const containerWidth = screenWidth - HORIZONTAL_PADDING * 2;
-  const sliderWidth = sliderTrackWidth > 0 ? sliderTrackWidth : containerWidth;
-  const avatarWidth = Math.min(screenWidth * AVATAR_WIDTH_PCT, AVATAR_WIDTH_MAX);
-  const avatarHeightRaw = Math.round(screenHeight * AVATAR_HEIGHT_PCT);
-  const avatarHeight = Math.max(AVATAR_HEIGHT_MIN, Math.min(AVATAR_HEIGHT_MAX, avatarHeightRaw));
-  const bottomPadding = BOTTOM_TAB_RESERVE + (insets?.bottom ?? 0);
-  const infoCardW = (containerWidth - GRID_GAP * 2) / 3;
+  const { width: screenW, height: screenH } = Dimensions.get('window');
+  const containerW  = screenW - H_PAD * 2;
+  const avatarH     = Math.max(280, Math.min(screenH * 0.48, 440));
+  const infoCardW   = (containerW - GRID_GAP * 2) / 3;
+  const bottomPad   = BOTTOM_RESERVE + (insets?.bottom ?? 0);
 
+  // ── Data fetching (untouched) ─────────────────────────────────────────────
   const loadLocation = useCallback(async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationCoords(null);
-        return;
-      }
+      if (status !== 'granted') return;
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-      if (loc?.coords) {
-        setLocationCoords({ lat: loc.coords.latitude, lon: loc.coords.longitude });
-      } else {
-        setLocationCoords(null);
-      }
-    } catch {
-      setLocationCoords(null);
-    }
+      if (loc?.coords) setLocationCoords({ lat: loc.coords.latitude, lon: loc.coords.longitude });
+    } catch { /* no-op */ }
   }, []);
 
   const loadHomeToday = useCallback(async () => {
-    if (!token) {
-      setLoading(false);
-      setData(null);
-      setError(null);
-      return;
-    }
+    if (!token) { setLoading(false); setData(null); return; }
     try {
       setError(null);
       const params = locationCoords ? { lat: locationCoords.lat, lon: locationCoords.lon } : undefined;
       const result = await fetchHomeToday(params);
       setData(result);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Network error';
-      setError(msg);
+      setError(err instanceof Error ? err.message : 'Network error');
       setData(null);
     } finally {
       setLoading(false);
@@ -326,57 +232,31 @@ export default function HomeScreen() {
     }
   }, [token, locationCoords]);
 
+  useEffect(() => { loadLocation(); }, [loadLocation]);
   useEffect(() => {
-    loadLocation();
-  }, [loadLocation]);
-
-  useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      setData(null);
-      setError(null);
-      return;
-    }
+    if (!token) { setLoading(false); setData(null); return; }
     setLoading(true);
     loadHomeToday();
-  }, [token, locationCoords]);
+  }, [token, locationCoords]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadHomeToday();
-  }, [loadHomeToday]);
+  const onRefresh = useCallback(() => { setRefreshing(true); loadHomeToday(); }, [loadHomeToday]);
 
-  const closeWeatherOverlay = useCallback(() => {
-    setWeatherDropdownOpen(false);
-  }, []);
-
-  const toggleWeatherDropdown = useCallback(() => {
-    setWeatherDropdownOpen((prev) => !prev);
-  }, []);
-
-  const goToCalendar = useCallback(() => {
-    try {
-      (navigation as { navigate: (name: string) => void }).navigate('Calendar');
-    } catch {
-      // Safe no-op if Calendar not on stack.
-    }
+  const goTo = useCallback((screen: string) => {
+    try { navigation.navigate(screen); } catch { /* no-op */ }
   }, [navigation]);
 
-  const goToOutfits = useCallback(() => {
-    try {
-      (navigation as { navigate: (name: string) => void }).navigate('Outfits');
-    } catch {
-      // TODO: When we remove Outfits tab (Option A), change destination here.
-    }
-  }, [navigation]);
+  // ── Derived weather values ────────────────────────────────────────────────
+  const weather        = data?.weather;
+  const todayTemp      = weather?.ok && weather.tempF != null ? Math.round(weather.tempF) : 72;
+  const todayCondition = weather?.ok && weather.condition ? weather.condition : 'Clear';
+  const todayDateStr   = data?.date ? formatTodayLabel(data.date) : 'Today';
 
-  const styles = createStyles(theme);
-
+  // ── Auth / loading guards ─────────────────────────────────────────────────
   if (!user) {
     return (
-      <SafeAreaView edges={['top']} style={[styles.container, { flex: 1 }]}>
+      <SafeAreaView edges={['top']} style={styles.container}>
         <View style={styles.center}>
-          <Text style={styles.title}>Sign in to see your day</Text>
+          <Text style={styles.centerText}>Sign in to see your day</Text>
         </View>
       </SafeAreaView>
     );
@@ -384,110 +264,126 @@ export default function HomeScreen() {
 
   if (loading && !data) {
     return (
-      <SafeAreaView edges={['top']} style={[styles.container, { flex: 1 }]}>
+      <SafeAreaView edges={['top']} style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={HOME_PALETTE.primaryText} />
-          <Text style={styles.loadingText}>Loading...</Text>
+          <ActivityIndicator size="large" color={P.accent} />
+          <Text style={[styles.centerText, { marginTop: 12 }]}>Loading…</Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const weather = data?.weather;
-  const todayTemp = weather?.ok && weather.tempF != null ? Math.round(weather.tempF) : 70;
-  const todayCondition = weather?.ok && weather.condition ? weather.condition : 'Clouds';
-  const todayDateStr = data?.date ? formatTodayLabel(data.date) : 'Today';
-
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: HOME_PALETTE.background }}>
+    <SafeAreaView edges={['top']} style={styles.container}>
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={[styles.scrollContent, { paddingHorizontal: HORIZONTAL_PADDING, paddingBottom: bottomPadding }]}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: H_PAD, paddingBottom: bottomPad }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[HOME_PALETTE.primaryText]} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={P.accent} />
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Header: exactly 60px height, serif HOME ~48px, letterSpacing -1, icons gap 16px */}
-        <View style={[styles.headerRow, { height: HEADER_HEIGHT }]}>
+        {/* ── Top row ────────────────────────────────────────────────────── */}
+        <View style={[styles.headerRow, { height: HEADER_H }]}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>HOME</Text>
+            <Text style={styles.headerEmoji}> 🏠</Text>
           </View>
           <View style={styles.headerRight}>
-            <HeaderIconButton onPress={toggleWeatherDropdown} icon="partly-sunny-outline" palette={HOME_PALETTE} style={styles.headerIconGap} />
-            <HeaderIconButton onPress={goToCalendar} icon="calendar-outline" palette={HOME_PALETTE} style={styles.headerIconGap} />
-            <HeaderIconButton onPress={goToOutfits} icon="add" palette={HOME_PALETTE} />
+            <PillBtn onPress={() => setWeatherOpen((v) => !v)} style={styles.pillGap}>
+              <Text style={styles.pillEmoji}>☀️</Text>
+              <Text style={styles.pillText}>{todayTemp}°</Text>
+            </PillBtn>
+            <PillBtn onPress={() => goTo('Calendar')} style={styles.pillGap}>
+              <Text style={styles.pillEmoji}>📅</Text>
+            </PillBtn>
+            <PillBtn onPress={() => goTo('Closet')} style={styles.pillGap}>
+              <Text style={styles.pillEmoji}>👔</Text>
+            </PillBtn>
+            <PillBtn onPress={() => goTo('Settings')}>
+              <Text style={styles.pillEmoji}>👤</Text>
+            </PillBtn>
           </View>
         </View>
 
-        {/* Compact error (only when API fails) */}
+        {/* ── Error banner ───────────────────────────────────────────────── */}
         {error && (
           <View style={styles.errorBanner}>
-            <Text style={styles.errorBannerText} numberOfLines={1}>{error}</Text>
-            <Pressable style={styles.errorBannerRetry} onPress={() => { setLoading(true); loadHomeToday(); }}>
-              <Text style={styles.errorBannerRetryText}>Retry</Text>
+            <Text style={styles.errorText} numberOfLines={1}>{error}</Text>
+            <Pressable onPress={() => { setLoading(true); loadHomeToday(); }} style={styles.retryBtn}>
+              <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
         )}
 
-        {/* Avatar: portrait card, 78% width (max 340), 44% height (clamp 320–440), centered */}
-        <View style={[styles.avatarArea, { height: avatarHeight }]}>
-          <View style={[styles.avatarPlaceholder, { width: avatarWidth, height: avatarHeight }]}>
-            <Ionicons name="person" size={Math.min(72, avatarWidth * 0.2)} color={HOME_PALETTE.secondaryText} />
-          </View>
+        {/* ── Avatar area (~55% height) ──────────────────────────────────── */}
+        <View style={[styles.avatarArea, { height: avatarH }]}>
+          <AvatarFigure />
         </View>
 
-        {/* CTA: no visible thumb; full-width invisible drag; subtle progress fill; 55% completes */}
-        <View
-          style={styles.sliderSection}
-          onLayout={(e) => { const w = e.nativeEvent.layout.width; if (w > 0) setSliderTrackWidth(w); }}
+        {/* ── CTA button ─────────────────────────────────────────────────── */}
+        <Pressable
+          style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
+          onPress={() => goTo('Outfits')}
         >
-          <DragToConfirmSlider label="PLAN MY OUTFIT OF THE DAY" onConfirm={goToOutfits} palette={HOME_PALETTE} width={sliderWidth} />
-        </View>
-
-        {/* Info grid + bottom fade into tab bar */}
-        <View style={styles.infoGridWrapper}>
-          <View style={styles.infoGridRow}>
-          <InfoCard palette={HOME_PALETTE} width={infoCardW}>
-            <Ionicons name="partly-sunny-outline" size={20} color={HOME_PALETTE.primaryText} />
-            <Text style={styles.infoCardValue}>{todayTemp}°F</Text>
-            <Text style={styles.infoCardLabel} numberOfLines={1}>{todayCondition}</Text>
-            <Text style={styles.infoCardMeta}>{todayDateStr}</Text>
-          </InfoCard>
-          <InfoCard palette={HOME_PALETTE} width={infoCardW}>
-            <Text style={styles.infoCardTitle}>IN LAUNDRY</Text>
-            <Text style={styles.infoCardValue}>0</Text>
-            <Text style={styles.infoCardMeta}>items</Text>
-          </InfoCard>
-          <InfoCard palette={HOME_PALETTE} width={infoCardW}>
-            <Text style={styles.infoCardTitle}>Fashion Fact</Text>
-            <Text style={styles.infoCardFact}>Neutral tones pair with any accent.</Text>
-          </InfoCard>
+          <Text style={styles.ctaBtnText}>PLAN MY OUTFIT OF THE DAY</Text>
+          <View style={styles.ctaIcons}>
+            <Text style={styles.ctaEmoji}>👔</Text>
+            <Text style={styles.ctaEmoji}>✨</Text>
           </View>
-          {/* Subtle bottom fade so content blends into tab bar (does not overlap tab bar) */}
-          <View style={styles.bottomFade} />
+        </Pressable>
+
+        {/* ── 3 info cards ───────────────────────────────────────────────── */}
+        <View style={styles.infoRow}>
+          {/* Weather */}
+          <InfoCard width={infoCardW}>
+            <Text style={styles.infoEmoji}>☁️</Text>
+            <Text style={styles.infoValue}>{todayTemp}°F</Text>
+            <Text style={styles.infoLabel} numberOfLines={1}>{todayCondition}</Text>
+            <Text style={styles.infoMeta}>{todayDateStr}</Text>
+          </InfoCard>
+          {/* Laundry */}
+          <InfoCard width={infoCardW}>
+            <Text style={styles.infoTitle}>IN LAUNDRY</Text>
+            <Text style={styles.infoValue}>0</Text>
+            <Text style={styles.infoMeta}>items</Text>
+          </InfoCard>
+          {/* Fashion fact */}
+          <InfoCard width={infoCardW}>
+            <View style={styles.factHeader}>
+              <Text style={styles.infoTitle}>Fashion Fact</Text>
+              <Text style={styles.factSparkle}>✨</Text>
+            </View>
+            <Text style={styles.infoFact}>Neutral tones pair with any accent.</Text>
+          </InfoCard>
         </View>
       </ScrollView>
 
-      {/* Weather overlay: absolute, anchor under header right, tap outside closes */}
-      {weatherDropdownOpen && (
+      {/* ── Weather popup overlay (unchanged logic) ──────────────────────── */}
+      {weatherOpen && (
         <>
-          <Pressable style={[StyleSheet.absoluteFill, styles.overlayBackdrop]} onPress={closeWeatherOverlay} accessibilityRole="button" accessibilityLabel="Close weather" />
-          <View style={[styles.weatherOverlay, { top: HEADER_HEIGHT, right: HORIZONTAL_PADDING }]} pointerEvents="box-none">
-            <View style={styles.weatherDropdown}>
-              <View style={styles.weatherDropdownHeader}>
-                <Text style={styles.weatherDropdownTitle}>Next 7 days</Text>
-                <Pressable onPress={closeWeatherOverlay} hitSlop={12} style={{ padding: 4 }}>
-                  <Ionicons name="close" size={18} color={HOME_PALETTE.secondaryText} />
-                </Pressable>
-              </View>
-              {MOCK_7_DAY_FORECAST.map((row, idx) => (
-                <View key={`${row.day}-${idx}`} style={styles.weatherDropdownRow}>
-                  <Text style={styles.weatherDropdownDay}>{row.day}</Text>
-                  <Ionicons name={row.icon as keyof typeof Ionicons.glyphMap} size={20} color={HOME_PALETTE.secondaryText} />
-                  <Text style={styles.weatherDropdownTemp}>{row.temp}°F</Text>
+          <Pressable
+            style={[StyleSheet.absoluteFill, styles.weatherBackdrop]}
+            onPress={() => setWeatherOpen(false)}
+          />
+          <View style={[styles.weatherPanel, { top: HEADER_H + (insets?.top ?? 0), right: H_PAD }]}>
+            <View style={CARD_SHADOW}>
+              <View style={styles.weatherCard}>
+                <View style={styles.weatherHeader}>
+                  <Text style={styles.weatherTitle}>Next 7 days</Text>
+                  <Pressable onPress={() => setWeatherOpen(false)} hitSlop={12}>
+                    <Ionicons name="close" size={18} color={P.secondaryText} />
+                  </Pressable>
                 </View>
-              ))}
+                {MOCK_7_DAY.map((row, idx) => (
+                  <View key={`${row.day}-${idx}`} style={styles.weatherRow}>
+                    <Text style={styles.weatherDay}>{row.day}</Text>
+                    <Ionicons name={row.icon as keyof typeof Ionicons.glyphMap} size={18} color={P.secondaryText} />
+                    <Text style={styles.weatherTemp}>{row.temp}°F</Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
         </>
@@ -496,125 +392,367 @@ export default function HomeScreen() {
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>) {
-  const p = HOME_PALETTE;
-  return StyleSheet.create({
-    container: { flex: 1, backgroundColor: p.background },
-    scrollContent: { flexGrow: 1 },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: HORIZONTAL_PADDING },
-    title: { fontSize: 18, color: p.secondaryText },
-    loadingText: { marginTop: 12, fontSize: 14, color: p.secondaryText },
+// ─── Avatar figure styles ────────────────────────────────────────────────────
+const avatarStyles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  glow: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: `${P.accentLight}54`,
+    alignSelf: 'center',
+  },
+  figure: {
+    alignItems: 'center',
+  },
 
-    headerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 4,
-    },
-    headerLeft: { flexDirection: 'row', alignItems: 'center' },
-    headerTitle: {
-      fontFamily: SERIF_FONT,
-      fontSize: 48,
-      fontWeight: '700',
-      color: p.primaryText,
-      letterSpacing: -1,
-    },
-    headerRight: { flexDirection: 'row', alignItems: 'center' },
-    headerIconGap: { marginRight: 16 },
+  // Hair
+  hair: {
+    width: 72,
+    height: 34,
+    position: 'relative',
+    marginBottom: -8,
+    zIndex: 2,
+  },
+  hairTop: {
+    width: 72,
+    height: 34,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    backgroundColor: P.hair,
+  },
+  bangLeft: {
+    position: 'absolute',
+    bottom: -6,
+    left: 2,
+    width: 16,
+    height: 18,
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 4,
+    backgroundColor: P.hair,
+  },
+  bangRight: {
+    position: 'absolute',
+    bottom: -6,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 10,
+    backgroundColor: P.hair,
+  },
 
-    errorBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: p.cardSurface,
-      borderWidth: 1,
-      borderColor: p.activeHighlight,
-      borderRadius: BORDER_RADIUS,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      marginBottom: 12,
-      ...PRECISION_SHADOW,
-    },
-    errorBannerText: { flex: 1, fontSize: 14, color: p.primaryText, marginRight: 8 },
-    errorBannerRetry: { paddingVertical: 6, paddingHorizontal: 12, backgroundColor: p.activeHighlight, borderRadius: BORDER_RADIUS },
-    errorBannerRetryText: { fontSize: 12, fontWeight: '600', color: p.primaryText },
+  // Face
+  face: {
+    width: 64,
+    height: 72,
+    borderRadius: 32,
+    backgroundColor: P.skin,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+    overflow: 'visible',
+  },
+  ear: {
+    position: 'absolute',
+    width: 12,
+    height: 16,
+    borderRadius: 6,
+    backgroundColor: P.skinDark,
+    top: 26,
+  },
+  earLeft:  { left: -5 },
+  earRight: { right: -5 },
+  eyeRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 4,
+  },
+  eye: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: P.primaryText,
+  },
+  smile: {
+    width: 14,
+    height: 7,
+    borderBottomLeftRadius: 7,
+    borderBottomRightRadius: 7,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderWidth: 2,
+    borderTopWidth: 0,
+    borderColor: P.primaryText,
+    backgroundColor: 'transparent',
+    marginTop: 8,
+  },
 
-    avatarArea: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 8,
-      width: '100%',
-    },
-    avatarPlaceholder: {
-      borderRadius: BORDER_RADIUS,
-      backgroundColor: p.cardSurface,
-      borderWidth: 1,
-      borderColor: p.activeHighlight,
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...PRECISION_SHADOW,
-    },
+  // Neck
+  neck: {
+    width: 18,
+    height: 10,
+    backgroundColor: P.skinDark,
+    zIndex: 0,
+  },
 
-    sliderSection: { marginBottom: 12, width: '100%' },
+  // Torso
+  torso: {
+    width: 90,
+    height: 80,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: P.accentLight,
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'visible',
+  },
+  collarV: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  collarLeft: {
+    width: 14,
+    height: 14,
+    borderBottomRightRadius: 14,
+    borderRightWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: P.accent,
+    backgroundColor: 'transparent',
+    transform: [{ rotate: '15deg' }],
+    marginRight: -2,
+  },
+  collarRight: {
+    width: 14,
+    height: 14,
+    borderBottomLeftRadius: 14,
+    borderLeftWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: P.accent,
+    backgroundColor: 'transparent',
+    transform: [{ rotate: '-15deg' }],
+    marginLeft: -2,
+  },
 
-    infoGridWrapper: { width: '100%' },
-    infoGridRow: {
-      flexDirection: 'row',
-      gap: GRID_GAP,
-    },
-    bottomFade: {
-      height: 32,
-      backgroundColor: p.bottomBarSurface,
-      marginTop: 8,
-      borderTopLeftRadius: BORDER_RADIUS,
-      borderTopRightRadius: BORDER_RADIUS,
-    },
-    infoCardTitle: { fontSize: 11, fontWeight: '700', color: p.secondaryText, letterSpacing: 0.5, marginBottom: 4 },
-    infoCardValue: { fontSize: 18, fontWeight: '700', color: p.primaryText, marginTop: 4 },
-    infoCardLabel: { fontSize: 12, color: p.secondaryText, marginTop: 2 },
-    infoCardMeta: { fontSize: 11, color: p.secondaryText, marginTop: 2 },
-    infoCardFact: { fontSize: 11, color: p.secondaryText, marginTop: 2 },
+  // Arms
+  arm: {
+    position: 'absolute',
+    width: 20,
+    height: 60,
+    borderRadius: 10,
+    backgroundColor: P.accentLight,
+    top: 6,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 2,
+  },
+  armLeft:  { left: -14 },
+  armRight: { right: -14 },
+  hand: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: P.skin,
+  },
 
-    overlayBackdrop: { backgroundColor: 'rgba(0,0,0,0.35)', zIndex: 100, elevation: 100 },
-    weatherOverlay: { position: 'absolute', zIndex: 101, elevation: 101, minWidth: 260, maxWidth: 320 },
-    weatherDropdown: {
-      backgroundColor: p.cardSurface,
-      borderRadius: BORDER_RADIUS,
-      borderWidth: 1,
-      borderColor: p.activeHighlight,
-      overflow: 'hidden',
-      ...PRECISION_SHADOW,
-    },
-    weatherDropdownHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: p.activeHighlight,
-    },
-    weatherDropdownTitle: { fontSize: 16, fontWeight: '600', color: p.primaryText },
-    weatherDropdownRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: p.activeHighlight,
-    },
-    weatherDropdownDay: { fontSize: 14, color: p.primaryText, minWidth: 48 },
-    weatherDropdownTemp: { fontSize: 14, fontWeight: '600', color: p.primaryText },
-  });
-}
+  // Legs
+  legsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 0,
+  },
+  leg: {
+    width: 24,
+    height: 52,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    backgroundColor: P.pants,
+  },
 
-/*
-VERIFICATION
-===========
-- Only src/screens/HomeScreen.tsx changed. Run: npx expo start -c --tunnel
-- Avatar: portrait card, 78% width (max 340), 44% height (320–440), centered; less empty space.
-- Slider: no visible thumb; track + text only; full-width invisible drag; subtle progress fill; 55% completes in one swipe; spring back if released early.
-- Layout: tightened gaps (header–avatar, avatar–slider); bottom fade blends into tab bar; no extra top margins.
-- Works on iPhone SE and Pro Max; no new deps; no TS/runtime errors.
-*/
+  // Shoes
+  shoesRow: {
+    flexDirection: 'row',
+    gap: 4,
+    marginTop: 0,
+  },
+  shoe: {
+    width: 28,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: P.shoes,
+  },
+});
+
+// ─── Main styles ─────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: P.background },
+  center:    { flex: 1, justifyContent: 'center', alignItems: 'center', padding: H_PAD },
+  centerText:{ fontSize: 16, color: P.secondaryText },
+
+  // Header
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontFamily: SERIF,
+    fontSize: 30,
+    fontWeight: '700',
+    color: P.primaryText,
+    letterSpacing: -0.5,
+  },
+  headerEmoji: {
+    fontSize: 22,
+    marginLeft: 4,
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+
+  // Pill buttons
+  pillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 34,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: P.cardWhite,
+    borderWidth: 1,
+    borderColor: P.border,
+    shadowColor: P.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    gap: 3,
+  },
+  pillGap: { marginRight: 6 },
+  pillEmoji: { fontSize: 15 },
+  pillText: { fontSize: 13, fontWeight: '600', color: P.primaryText },
+
+  // Error
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: P.cardSurface,
+    borderWidth: 1,
+    borderColor: P.border,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  errorText: { flex: 1, fontSize: 13, color: P.primaryText },
+  retryBtn:  { paddingVertical: 4, paddingHorizontal: 12, backgroundColor: P.border, borderRadius: 8 },
+  retryText: { fontSize: 12, fontWeight: '600', color: P.primaryText },
+
+  // Avatar area
+  avatarArea: {
+    alignSelf: 'center',
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+
+  // CTA
+  ctaBtn: {
+    width: '100%',
+    height: 54,
+    backgroundColor: P.cardWhite,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: P.border,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    shadowColor: P.shadow,
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  ctaBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: P.primaryText,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  ctaIcons: {
+    flexDirection: 'row',
+    marginLeft: 10,
+    gap: 2,
+  },
+  ctaEmoji: {
+    fontSize: 16,
+  },
+
+  // Info cards
+  infoRow: { flexDirection: 'row', gap: GRID_GAP, marginBottom: 0 },
+  infoCard: {
+    backgroundColor: P.cardSurface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: P.border,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 110,
+  },
+  infoEmoji:  { fontSize: 20, marginBottom: 2 },
+  infoTitle:  { fontSize: 10, fontWeight: '700', color: P.secondaryText, letterSpacing: 0.5, marginBottom: 4, textAlign: 'center' },
+  infoValue:  { fontSize: 18, fontWeight: '700', color: P.primaryText, marginTop: 2 },
+  infoLabel:  { fontSize: 11, color: P.secondaryText, marginTop: 2 },
+  infoMeta:   { fontSize: 10, color: P.lightText, marginTop: 2 },
+  factHeader: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  factSparkle:{ fontSize: 10 },
+  infoFact:   { fontSize: 10, color: P.secondaryText, marginTop: 4, textAlign: 'center', lineHeight: 14 },
+
+  // Weather overlay
+  weatherBackdrop: { backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 100 },
+  weatherPanel: { position: 'absolute', zIndex: 101, minWidth: 260, maxWidth: 320 },
+  weatherCard: {
+    backgroundColor: P.cardWhite,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: P.border,
+    overflow: 'hidden',
+  },
+  weatherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: P.border,
+  },
+  weatherTitle: { fontSize: 15, fontWeight: '600', color: P.primaryText },
+  weatherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: P.border,
+  },
+  weatherDay:  { fontSize: 14, color: P.primaryText, minWidth: 48 },
+  weatherTemp: { fontSize: 14, fontWeight: '600', color: P.primaryText },
+});
