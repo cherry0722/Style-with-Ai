@@ -22,6 +22,7 @@ import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
+import { listLaundry } from '../api/wardrobe';
 
 const H_PAD = 24;
 const HEADER_H = 56;
@@ -199,6 +200,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [laundryCount, setLaundryCount] = useState(0);
 
   const { width: screenW, height: screenH } = Dimensions.get('window');
   const containerW  = screenW - H_PAD * 2;
@@ -239,7 +241,20 @@ export default function HomeScreen() {
     loadHomeToday();
   }, [token, locationCoords]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onRefresh = useCallback(() => { setRefreshing(true); loadHomeToday(); }, [loadHomeToday]);
+  const loadLaundryCount = useCallback(async () => {
+    if (!token) { setLaundryCount(0); return; }
+    try {
+      const result = await listLaundry(false);
+      setLaundryCount(result.count ?? result.items?.length ?? 0);
+    } catch { setLaundryCount(0); }
+  }, [token]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => { void loadLaundryCount(); });
+    return unsubscribe;
+  }, [navigation, loadLaundryCount]);
+
+  const onRefresh = useCallback(() => { setRefreshing(true); loadHomeToday(); loadLaundryCount(); }, [loadHomeToday, loadLaundryCount]);
 
   const goTo = useCallback((screen: string) => {
     try { navigation.navigate(screen); } catch { /* no-op */ }
@@ -344,11 +359,13 @@ export default function HomeScreen() {
             <Text style={styles.infoMeta}>{todayDateStr}</Text>
           </InfoCard>
           {/* Laundry */}
-          <InfoCard width={infoCardW}>
-            <Text style={styles.infoTitle}>IN LAUNDRY</Text>
-            <Text style={styles.infoValue}>0</Text>
-            <Text style={styles.infoMeta}>items</Text>
-          </InfoCard>
+          <Pressable onPress={() => goTo('Laundry')} style={{ width: infoCardW }}>
+            <InfoCard width={infoCardW}>
+              <Text style={styles.infoTitle}>IN LAUNDRY</Text>
+              <Text style={styles.infoValue}>{laundryCount}</Text>
+              <Text style={styles.infoMeta}>items</Text>
+            </InfoCard>
+          </Pressable>
           {/* Fashion fact */}
           <InfoCard width={infoCardW}>
             <View style={styles.factHeader}>

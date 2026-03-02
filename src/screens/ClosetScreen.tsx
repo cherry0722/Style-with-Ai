@@ -20,7 +20,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import {
   listWardrobe,
@@ -245,6 +245,7 @@ function ClosetDetailView({
 export default function ClosetScreen() {
   const { user, token } = useAuth();
   const isFocused = useIsFocused();
+  const navigation = useNavigation<any>();
 
   const [items,            setItems]            = useState<WardrobeItemResponse[]>([]);
   const [loading,          setLoading]          = useState(false);
@@ -345,7 +346,7 @@ export default function ClosetScreen() {
             <Pressable style={styles.pillBtn} onPress={() => {}}>
               <Text style={styles.pillEmoji}>🔍</Text>
             </Pressable>
-            <Pressable style={styles.pillBtn} onPress={() => {}}>
+            <Pressable style={styles.pillBtn} onPress={() => navigation.navigate('Laundry')}>
               <Text style={styles.pillEmoji}>🧺</Text>
             </Pressable>
           </View>

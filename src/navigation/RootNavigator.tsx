@@ -11,6 +11,7 @@ import HistoryScreen from "../screens/HistoryScreen";
 import PlanOutfitSuggestionsScreen from "../screens/PlanOutfitSuggestionsScreen";
 import OnboardingProfileScreen from "../screens/OnboardingProfileScreen";
 import OutfitScreen from "../screens/OutfitScreen";
+import LaundryScreen from "../screens/LaundryScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -24,6 +25,7 @@ export type RootStackParamList = {
   Outfits: undefined;
   PlanOutfitSuggestions: { date: string; slotLabel: string; occasion: string };
   OnboardingProfile: undefined;
+  Laundry: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -46,6 +48,7 @@ export default function RootNavigator() {
         component={OnboardingProfileScreen}
         options={{ headerShown: false }}
       />
+      <Stack.Screen name="Laundry" component={LaundryScreen} />
     </Stack.Navigator>
   );
 }

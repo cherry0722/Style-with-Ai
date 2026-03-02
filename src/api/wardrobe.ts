@@ -270,6 +270,22 @@ export async function deleteWardrobeItem(id: string): Promise<void> {
   await client.delete(`/api/wardrobe/${id}`);
 }
 
+/** GET /api/wardrobe/laundry — items currently in laundry (or also packed). */
+export async function listLaundry(includePacked = false): Promise<{ ok: boolean; count: number; items: WardrobeItemResponse[] }> {
+  const url = includePacked ? '/api/wardrobe/laundry?includePacked=true' : '/api/wardrobe/laundry';
+  const res = await client.get<{ ok: boolean; count: number; items: WardrobeItemResponse[] }>(url);
+  return res.data;
+}
+
+/** POST /api/wardrobe/laundry/mark-clean — bulk-mark laundry items as available. */
+export async function markClean(itemIds: string[]): Promise<{ ok: boolean; matched: number; modified: number }> {
+  const res = await client.post<{ ok: boolean; matched: number; modified: number }>(
+    '/api/wardrobe/laundry/mark-clean',
+    { itemIds }
+  );
+  return res.data;
+}
+
 /** PATCH /api/wardrobe/:id/v2 — update only v2 overlay (e.g. availability). */
 export async function patchWardrobeV2(
   id: string,

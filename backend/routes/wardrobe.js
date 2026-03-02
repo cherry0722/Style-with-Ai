@@ -12,6 +12,7 @@ const {
   getConfig,
 } = require('../services/r2Storage');
 const aiService = require('../services/aiServiceClient');
+const { sanitizeWardrobeItem } = require('../utils/sanitizeWardrobeItem');
 
 // NOTE: All wardrobe routes are auth-protected and scoped to the current user.
 const router = express.Router();
@@ -444,6 +445,60 @@ router.get('/', auth, async (req, res, next) => {
         : { userTags: [], overrides: null, availability: { status: 'available', reason: null, untilDate: null } },
     }));
     return res.json({ items: normalized });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/wardrobe/laundry — items currently in laundry (or also packed if includePacked=true)
+router.get('/laundry', auth, async (req, res, next) => {
+  try {
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    if (!userId) {
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
+    }
+    const includePacked = req.query.includePacked === 'true';
+    const query = {
+      userId,
+      'v2.availability.status': 'unavailable',
+    };
+    if (!includePacked) {
+      query['v2.availability.reason'] = 'laundry';
+    }
+    const items = await Wardrobe.find(query).sort({ updatedAt: -1 }).lean().exec();
+    const sanitized = items.map(sanitizeWardrobeItem);
+    return res.json({ ok: true, count: sanitized.length, items: sanitized });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/wardrobe/laundry/mark-clean — bulk-mark laundry items as available
+router.post('/laundry/mark-clean', auth, async (req, res, next) => {
+  try {
+    const userId = req.user?.userId || req.user?._id?.toString() || req.user?.id || req.user?._id;
+    if (!userId) {
+      const err = new Error('Invalid auth payload');
+      err.status = 401;
+      return next(err);
+    }
+    const { itemIds } = req.body || {};
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+      return res.status(400).json({ ok: false, message: 'itemIds must be a non-empty array of strings' });
+    }
+    const result = await Wardrobe.updateMany(
+      { _id: { $in: itemIds }, userId },
+      {
+        $set: {
+          'v2.availability.status': 'available',
+          'v2.availability.reason': null,
+          'v2.availability.untilDate': null,
+        },
+      }
+    );
+    return res.json({ ok: true, matched: result.matchedCount, modified: result.modifiedCount });
   } catch (err) {
     next(err);
   }
