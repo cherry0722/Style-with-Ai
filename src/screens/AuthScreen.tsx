@@ -52,7 +52,7 @@ function validatePassword(value: string): string | null {
 
 export default function AuthScreen() {
   const theme = useTheme();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Auth'>>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { login, signup, sessionExpiredMessage, clearSessionMessage } = useAuth();
   const clearSessionRef = React.useRef(clearSessionMessage);
   clearSessionRef.current = clearSessionMessage;
@@ -95,7 +95,6 @@ export default function AuthScreen() {
     try {
       await login(email.trim(), password);
       setLoading(false);
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err: any) {
       setLoading(false);
       const status = err?.status ?? err?.response?.status;
@@ -128,7 +127,6 @@ export default function AuthScreen() {
     try {
       await signup(e, password, u);
       setLoading(false);
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (err: any) {
       setLoading(false);
       const status = err?.status ?? err?.response?.status;
@@ -243,6 +241,19 @@ export default function AuthScreen() {
             )}
 
             {displayError ? <Text style={styles.errorText}>{displayError}</Text> : null}
+
+            <View style={styles.guestDivider}>
+              <View style={styles.guestDividerLine} />
+              <Text style={styles.guestDividerText}>or</Text>
+              <View style={styles.guestDividerLine} />
+            </View>
+
+            <Pressable
+              style={({ pressed }) => [styles.guestButton, pressed && { opacity: 0.7 }]}
+              onPress={() => navigation.navigate('GuestHome')}
+            >
+              <Text style={styles.guestButtonText}>Continue as Guest</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -295,5 +306,17 @@ function createStyles(theme: ReturnType<typeof useTheme>) {
     buttonDisabled: { opacity: 0.5 },
     buttonText: { fontSize: theme.typography.base, fontWeight: theme.typography.bold, color: theme.colors.white },
     errorText: { fontSize: theme.typography.sm, color: theme.colors.error, marginTop: theme.spacing.md, textAlign: 'center' },
+    guestDivider: { flexDirection: 'row', alignItems: 'center', marginTop: theme.spacing.xl, marginBottom: theme.spacing.md },
+    guestDividerLine: { flex: 1, height: 1, backgroundColor: theme.colors.border },
+    guestDividerText: { marginHorizontal: theme.spacing.md, fontSize: theme.typography.sm, color: theme.colors.textSecondary },
+    guestButton: {
+      borderRadius: theme.borderRadius.lg,
+      paddingVertical: theme.spacing.md,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: 'transparent',
+    },
+    guestButtonText: { fontSize: theme.typography.base, fontWeight: '600' as const, color: theme.colors.textSecondary },
   });
 }

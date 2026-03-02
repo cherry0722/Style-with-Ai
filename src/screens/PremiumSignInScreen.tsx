@@ -33,13 +33,6 @@ export default function PremiumSignInScreen({ navigation: navigationProp }: Prem
 
   const handleSignInSuccess = () => {
     hapticFeedback.success();
-    try {
-      console.log("[Login] Login successful, navigating to Main");
-      navigation.replace("Main");
-    } catch (error) {
-      console.error("[Login] Navigation error:", error);
-      navigation.navigate("Main" as any);
-    }
   };
 
   const handleCreateAccount = () => {

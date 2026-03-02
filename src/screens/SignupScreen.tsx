@@ -122,7 +122,6 @@ export default function SignupScreen({
     try {
       await signup(email.trim(), password, username.trim(), phone.trim() || undefined);
       setLoading(false);
-      navigation.replace("OnboardingProfile");
     } catch (err: any) {
       setLoading(false);
       const status = err?.status ?? err?.response?.status;

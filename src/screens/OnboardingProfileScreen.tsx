@@ -36,13 +36,11 @@ export default function OnboardingProfileScreen() {
 
   const styles = createStyles(theme);
 
-  // Redirect defensively if there is no user (should only come here right after signup)
   useEffect(() => {
-    console.log("[OnboardingProfile] Mounted with user:", user);
     if (!user) {
       navigation.reset({
         index: 0,
-        routes: [{ name: "Login" }],
+        routes: [{ name: "Main" }],
       });
     }
   }, [user, navigation]);

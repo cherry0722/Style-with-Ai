@@ -142,10 +142,7 @@ export default function SettingsScreen() {
   };
 
   const handleLogout = () => {
-    const root = (auth as any).navigation ?? null;
-    logout().then(() => {
-      if (root?.reset) root.reset({ index: 0, routes: [{ name: 'AuthGate' }] });
-    });
+    void logout();
   };
 
   const formatHeight = (cm: number) => {
