@@ -2,6 +2,9 @@ const axios = require('axios');
 const { get: cacheGet, set: cacheSet, cacheKey: buildCacheKey } = require('../utils/weatherCache');
 
 const WEATHER_API_URL = 'https://api.openweathermap.org/data/2.5/weather';
+const FORECAST_5DAY_URL = 'https://api.openweathermap.org/data/2.5/forecast';
+const ONECALL_URL = 'https://api.openweathermap.org/data/3.0/onecall';
+const FORECAST_TIMEOUT_MS = 8000;
 const HOME_WEATHER_TIMEOUT_MS = 3000;
 const WEATHER_SOURCE_NAME = 'openweathermap';
 
@@ -174,8 +177,126 @@ async function getWeatherForHome(lat, lon, dateStr) {
   }
 }
 
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * Try One Call API 3.0 for 8-day daily forecast.
+ * Returns null if the key doesn't have access (401/403).
+ */
+async function tryOneCall(lat, lon, apiKey) {
+  try {
+    const url = `${ONECALL_URL}?lat=${lat}&lon=${lon}&appid=${apiKey}&units=imperial&exclude=minutely,hourly,alerts,current`;
+    const res = await axios.get(url, { timeout: FORECAST_TIMEOUT_MS });
+    if (res.status !== 200 || !res.data?.daily) return null;
+
+    return res.data.daily.slice(0, 7).map((d) => {
+      const date = new Date(d.dt * 1000);
+      const dateISO = date.toISOString().slice(0, 10);
+      const dayIdx = date.getDay();
+      const isToday = dateISO === new Date().toISOString().slice(0, 10);
+      return {
+        dateISO,
+        label: isToday ? 'Today' : WEEKDAY_LABELS[dayIdx],
+        summary: d.weather?.[0]?.main || 'Mild',
+        tempHighF: Math.round(clampTemperatureF(d.temp?.max ?? d.temp?.day ?? 72)),
+        tempLowF: Math.round(clampTemperatureF(d.temp?.min ?? d.temp?.night ?? 60)),
+        precipChance: d.pop != null ? Math.round(d.pop * 100) : null,
+      };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fallback: 5-day / 3-hour forecast, aggregated into daily buckets.
+ */
+async function tryFiveDayForecast(lat, lon, apiKey) {
+  const url = `${FORECAST_5DAY_URL}?lat=${lat}&lon=${lon}&appid=${apiKey}&units=imperial`;
+  const res = await axios.get(url, { timeout: FORECAST_TIMEOUT_MS });
+  if (res.status !== 200 || !Array.isArray(res.data?.list)) {
+    throw new Error('Bad forecast response');
+  }
+
+  const buckets = {};
+  for (const entry of res.data.list) {
+    const dateISO = entry.dt_txt?.slice(0, 10) || new Date(entry.dt * 1000).toISOString().slice(0, 10);
+    if (!buckets[dateISO]) {
+      buckets[dateISO] = { temps: [], conditions: [], pops: [] };
+    }
+    buckets[dateISO].temps.push(entry.main?.temp ?? 72);
+    buckets[dateISO].conditions.push(entry.weather?.[0]?.main || 'Mild');
+    if (entry.pop != null) buckets[dateISO].pops.push(entry.pop);
+  }
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const sortedDates = Object.keys(buckets).sort();
+
+  return sortedDates.slice(0, 7).map((dateISO) => {
+    const b = buckets[dateISO];
+    const date = new Date(dateISO + 'T12:00:00Z');
+    const isToday = dateISO === todayISO;
+
+    const mostCommon = b.conditions.sort((a, c) =>
+      b.conditions.filter((v) => v === c).length - b.conditions.filter((v) => v === a).length
+    ).pop() || 'Mild';
+
+    const maxPop = b.pops.length > 0 ? Math.max(...b.pops) : null;
+
+    return {
+      dateISO,
+      label: isToday ? 'Today' : WEEKDAY_LABELS[date.getUTCDay()],
+      summary: mostCommon,
+      tempHighF: Math.round(clampTemperatureF(Math.max(...b.temps))),
+      tempLowF: Math.round(clampTemperatureF(Math.min(...b.temps))),
+      precipChance: maxPop != null ? Math.round(maxPop * 100) : null,
+    };
+  });
+}
+
+/**
+ * Get 7-day forecast. Tries One Call API first, falls back to 5-day/3-hour.
+ * Cached per rounded lat/lon, 15 min TTL.
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {Promise<{ days: Array }>}
+ */
+async function getForecast7Day(lat, lon) {
+  const latNum = parseFloat(lat);
+  const lonNum = parseFloat(lon);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+    return { error: 'Invalid lat/lon' };
+  }
+
+  const apiKey = getApiKey();
+  if (!apiKey || apiKey === 'demo_key') {
+    return { error: 'Weather not configured' };
+  }
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const key = `forecast_${buildCacheKey(latNum, lonNum, todayISO)}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  try {
+    let days = await tryOneCall(latNum, lonNum, apiKey);
+    if (!days || days.length === 0) {
+      days = await tryFiveDayForecast(latNum, lonNum, apiKey);
+    }
+    const result = { days: days || [] };
+    cacheSet(key, result);
+    return result;
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[Weather] Forecast fetch failed:', err.code || err.message?.slice(0, 60));
+    }
+    return { error: 'Forecast temporarily unavailable' };
+  }
+}
+
 module.exports = {
   getWeatherSummary,
   getWeatherForHome,
+  getForecast7Day,
 };
 

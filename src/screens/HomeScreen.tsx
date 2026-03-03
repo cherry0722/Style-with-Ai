@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
 import { listLaundry } from '../api/wardrobe';
+import { fetchForecast, ForecastDay } from '../api/weather';
 
 const H_PAD = 24;
 const HEADER_H = 56;
@@ -64,15 +65,16 @@ function formatTodayLabel(dateStr: string): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-const MOCK_7_DAY = [
-  { day: 'Today', icon: 'partly-sunny' as const,  temp: 70 },
-  { day: 'Tue',   icon: 'cloudy' as const,         temp: 68 },
-  { day: 'Wed',   icon: 'rainy' as const,           temp: 65 },
-  { day: 'Thu',   icon: 'partly-sunny' as const,  temp: 72 },
-  { day: 'Fri',   icon: 'sunny' as const,           temp: 75 },
-  { day: 'Sat',   icon: 'cloudy' as const,         temp: 71 },
-  { day: 'Sun',   icon: 'partly-sunny' as const,  temp: 73 },
-];
+function iconForCondition(c: string | null): keyof typeof Ionicons.glyphMap {
+  if (!c) return 'partly-sunny';
+  const lc = c.toLowerCase();
+  if (lc.includes('rain') || lc.includes('drizzle')) return 'rainy';
+  if (lc.includes('cloud')) return 'cloudy';
+  if (lc.includes('clear') || lc.includes('sun')) return 'sunny';
+  if (lc.includes('snow')) return 'snow';
+  if (lc.includes('thunder')) return 'thunderstorm';
+  return 'partly-sunny';
+}
 
 // ─── Pill-style header button ────────────────────────────────────────────────
 function PillBtn({
@@ -199,7 +201,10 @@ export default function HomeScreen() {
   const [error, setError]           = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [forecastDays, setForecastDays] = useState<ForecastDay[]>([]);
+  const [forecastLoading, setForecastLoading] = useState(false);
   const [laundryCount, setLaundryCount] = useState(0);
 
   const { width: screenW, height: screenH } = Dimensions.get('window');
@@ -212,7 +217,11 @@ export default function HomeScreen() {
   const loadLocation = useCallback(async () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        setLocationDenied(true);
+        return;
+      }
+      setLocationDenied(false);
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
       if (loc?.coords) setLocationCoords({ lat: loc.coords.latitude, lon: loc.coords.longitude });
     } catch { /* no-op */ }
@@ -260,11 +269,33 @@ export default function HomeScreen() {
     try { navigation.navigate(screen); } catch { /* no-op */ }
   }, [navigation]);
 
-  // ── Derived weather values ────────────────────────────────────────────────
+  // ── Derived weather values (backend only) ────────────────────────────────
   const weather        = data?.weather;
-  const todayTemp      = weather?.ok && weather.tempF != null ? Math.round(weather.tempF) : 72;
-  const todayCondition = weather?.ok && weather.condition ? weather.condition : 'Clear';
+  const weatherOk      = weather?.ok === true && weather.tempF != null;
+  const todayTemp      = weatherOk ? Math.round(weather!.tempF!) : null;
+  const todayCondition = weatherOk && weather!.condition ? weather!.condition : null;
   const todayDateStr   = data?.date ? formatTodayLabel(data.date) : 'Today';
+
+  const loadForecast = useCallback(async () => {
+    if (!locationCoords) return;
+    setForecastLoading(true);
+    try {
+      const res = await fetchForecast(locationCoords.lat, locationCoords.lon);
+      setForecastDays(res.days ?? []);
+    } catch {
+      setForecastDays([]);
+    } finally {
+      setForecastLoading(false);
+    }
+  }, [locationCoords]);
+
+  const toggleWeatherPopup = useCallback(() => {
+    setWeatherOpen((prev) => {
+      const opening = !prev;
+      if (opening && forecastDays.length === 0) void loadForecast();
+      return opening;
+    });
+  }, [forecastDays.length, loadForecast]);
 
   // ── Auth / loading guards ─────────────────────────────────────────────────
   if (!user) {
@@ -306,9 +337,9 @@ export default function HomeScreen() {
             <Text style={styles.headerEmoji}> 🏠</Text>
           </View>
           <View style={styles.headerRight}>
-            <PillBtn onPress={() => setWeatherOpen((v) => !v)} style={styles.pillGap}>
+            <PillBtn onPress={toggleWeatherPopup} style={styles.pillGap}>
               <Text style={styles.pillEmoji}>☀️</Text>
-              <Text style={styles.pillText}>{todayTemp}°</Text>
+              <Text style={styles.pillText}>{todayTemp != null ? `${todayTemp}°` : '—'}</Text>
             </PillBtn>
             <PillBtn onPress={() => goTo('Calendar')} style={styles.pillGap}>
               <Text style={styles.pillEmoji}>📅</Text>
@@ -351,12 +382,29 @@ export default function HomeScreen() {
 
         {/* ── 3 info cards ───────────────────────────────────────────────── */}
         <View style={styles.infoRow}>
-          {/* Weather */}
+          {/* Weather — backend only */}
           <InfoCard width={infoCardW}>
             <Text style={styles.infoEmoji}>☁️</Text>
-            <Text style={styles.infoValue}>{todayTemp}°F</Text>
-            <Text style={styles.infoLabel} numberOfLines={1}>{todayCondition}</Text>
-            <Text style={styles.infoMeta}>{todayDateStr}</Text>
+            {locationDenied ? (
+              <>
+                <Text style={styles.infoValue}>—</Text>
+                <Text style={[styles.infoLabel, { fontSize: 9 }]} numberOfLines={2}>Enable location for weather</Text>
+              </>
+            ) : todayTemp != null ? (
+              <>
+                <Text style={styles.infoValue}>{todayTemp}°F</Text>
+                <Text style={styles.infoLabel} numberOfLines={1}>{todayCondition ?? 'Mild'}</Text>
+                <Text style={styles.infoMeta}>{todayDateStr}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.infoValue}>—</Text>
+                <Text style={styles.infoLabel} numberOfLines={1}>Unavailable</Text>
+                <Pressable onPress={onRefresh} hitSlop={8}>
+                  <Text style={[styles.infoMeta, { color: P.accent }]}>Retry</Text>
+                </Pressable>
+              </>
+            )}
           </InfoCard>
           {/* Laundry */}
           <Pressable onPress={() => goTo('Laundry')} style={{ width: infoCardW }}>
@@ -393,13 +441,32 @@ export default function HomeScreen() {
                     <Ionicons name="close" size={18} color={P.secondaryText} />
                   </Pressable>
                 </View>
-                {MOCK_7_DAY.map((row, idx) => (
-                  <View key={`${row.day}-${idx}`} style={styles.weatherRow}>
-                    <Text style={styles.weatherDay}>{row.day}</Text>
-                    <Ionicons name={row.icon as keyof typeof Ionicons.glyphMap} size={18} color={P.secondaryText} />
-                    <Text style={styles.weatherTemp}>{row.temp}°F</Text>
+                {forecastLoading ? (
+                  <View style={styles.forecastNote}>
+                    <ActivityIndicator size="small" color={P.accent} />
                   </View>
-                ))}
+                ) : forecastDays.length > 0 ? (
+                  forecastDays.map((day, idx) => (
+                    <View key={day.dateISO} style={styles.weatherRow}>
+                      <Text style={styles.weatherDay}>{day.label}</Text>
+                      <Ionicons name={iconForCondition(day.summary)} size={18} color={P.secondaryText} />
+                      <Text style={styles.weatherTemp}>
+                        {day.tempHighF}° / {day.tempLowF}°
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.forecastNote}>
+                    <Text style={styles.forecastNoteText}>
+                      {locationDenied ? 'Enable location for forecast' : 'Forecast unavailable'}
+                    </Text>
+                    {!locationDenied && (
+                      <Pressable onPress={loadForecast} hitSlop={8} style={{ marginTop: 6 }}>
+                        <Text style={[styles.forecastNoteText, { color: P.accent, fontStyle: 'normal' }]}>Retry</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -772,4 +839,6 @@ const styles = StyleSheet.create({
   },
   weatherDay:  { fontSize: 14, color: P.primaryText, minWidth: 48 },
   weatherTemp: { fontSize: 14, fontWeight: '600', color: P.primaryText },
+  forecastNote: { paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center' },
+  forecastNoteText: { fontSize: 11, color: P.lightText, fontStyle: 'italic' },
 });
