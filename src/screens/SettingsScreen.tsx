@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../store/settings';
+import { saveUserProfile, updateUserSettings } from '../api/user';
 import { hapticFeedback } from '../utils/haptics';
 import { Picker } from '@react-native-picker/picker';
 import type { BodyType, Pronouns } from '../types';
@@ -95,7 +96,7 @@ function SectionHeader({ title }: Readonly<{ title: string }>) {
 export default function SettingsScreen() {
   const navigation = useNavigation();
   const auth = useAuth();
-  const { user, logout } = auth;
+  const { user, logout, refreshUserFromBackend } = auth;
   const updateProfile = auth.updateProfile;
   const settings = useSettings();
 
@@ -135,10 +136,22 @@ export default function SettingsScreen() {
     }
   };
 
-  const saveProfile = () => {
-    hapticFeedback.success();
-    updateProfile?.({ profile: { preferredName: preferredName || undefined, pronouns, heightCm, weightLb, bodyType } } as any);
-    setExpanded(null);
+  const saveProfile = async () => {
+    try {
+      await saveUserProfile({
+        preferredName: preferredName.trim() || undefined,
+        pronouns: pronouns ?? undefined,
+        bodyType: bodyType ?? undefined,
+        heightCm: heightCm ?? undefined,
+        weightLb: weightLb ?? undefined,
+      });
+      hapticFeedback.success();
+      await refreshUserFromBackend?.();
+      setExpanded(null);
+    } catch (_) {
+      updateProfile?.({ profile: { preferredName: preferredName || undefined, pronouns, heightCm, weightLb, bodyType } } as any);
+      setExpanded(null);
+    }
   };
 
   const handleLogout = () => {
@@ -167,7 +180,16 @@ export default function SettingsScreen() {
         {/* MY ACCOUNT */}
         <SectionHeader title="My Account" />
         <View style={styles.card}>
-          <SettingsRow icon="lock-closed-outline"  label="Password and Security"      onPress={() => {}} />
+          <SettingsRow
+            icon="lock-closed-outline"
+            label="Password and Security"
+            onPress={() => {
+              // Reuse existing navigation patterns (HomeScreen.goTo)
+              // Route is registered on the Root stack.
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("PasswordAndSecurity");
+            }}
+          />
           <SettingsRow icon="person-outline"        label="Personal Details"
             value={p.preferredName ?? 'Set your name'}
             onPress={() => toggleSection('personalDetails')}
@@ -211,16 +233,52 @@ export default function SettingsScreen() {
               </View>
             </View>
           )}
-          <SettingsRow icon="document-text-outline" label="Information & Permissions" onPress={() => {}} />
-          <SettingsRow icon="shield-outline"         label="Account Privacy"          onPress={() => {}} last />
+          <SettingsRow
+            icon="document-text-outline"
+            label="Information & Permissions"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("InformationPermissions");
+            }}
+          />
+          <SettingsRow
+            icon="shield-outline"
+            label="Account Privacy"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("AccountPrivacy");
+            }}
+            last
+          />
         </View>
 
         {/* MYRA */}
         <SectionHeader title="MYRA" />
         <View style={styles.card}>
-          <SettingsRow icon="bookmark-outline"   label="Saved"         onPress={() => {}} />
-          <SettingsRow icon="heart-outline"      label="Favorites"     onPress={() => {}} />
-          <SettingsRow icon="bar-chart-outline"  label="Your Activity" onPress={() => {}} />
+          <SettingsRow
+            icon="bookmark-outline"
+            label="Saved"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("Saved");
+            }}
+          />
+          <SettingsRow
+            icon="heart-outline"
+            label="Favorites"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("Favorites");
+            }}
+          />
+          <SettingsRow
+            icon="bar-chart-outline"
+            label="Your Activity"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("Activity");
+            }}
+          />
           <SettingsRow icon="settings-outline"   label="Accessibility"
             onPress={() => toggleSection('accessibility')}
           />
@@ -230,7 +288,16 @@ export default function SettingsScreen() {
                 <Text style={styles.prefLabel}>Temperature Unit</Text>
                 <Switch
                   value={settings.temperatureUnit === 'fahrenheit'}
-                  onValueChange={() => { hapticFeedback.light(); settings.toggleTemperatureUnit(); }}
+                  onValueChange={async () => {
+                    const newUnit = settings.temperatureUnit === 'celsius' ? 'fahrenheit' : 'celsius';
+                    hapticFeedback.light();
+                    settings.toggleTemperatureUnit();
+                    try {
+                      await updateUserSettings({ temperatureUnit: newUnit });
+                    } catch (_) {
+                      settings.toggleTemperatureUnit();
+                    }
+                  }}
                   trackColor={{ false: P.border, true: `${P.accent}55` }}
                   thumbColor={settings.temperatureUnit === 'fahrenheit' ? P.accent : P.lightText}
                 />
@@ -243,7 +310,16 @@ export default function SettingsScreen() {
                 <Text style={styles.prefLabel}>Notifications</Text>
                 <Switch
                   value={settings.notificationsEnabled}
-                  onValueChange={() => { hapticFeedback.light(); settings.toggleNotifications(); }}
+                  onValueChange={async () => {
+                    const next = !settings.notificationsEnabled;
+                    hapticFeedback.light();
+                    settings.toggleNotifications();
+                    try {
+                      await updateUserSettings({ notificationsEnabled: next });
+                    } catch (_) {
+                      settings.toggleNotifications();
+                    }
+                  }}
                   trackColor={{ false: P.border, true: `${P.accent}55` }}
                   thumbColor={settings.notificationsEnabled ? P.accent : P.lightText}
                 />
@@ -258,8 +334,22 @@ export default function SettingsScreen() {
 
         {/* SUPPORT — Help, About, Logout */}
         <View style={styles.card}>
-          <SettingsRow icon="help-circle-outline"        label="Help"  onPress={() => {}} />
-          <SettingsRow icon="information-circle-outline" label="About" onPress={() => {}} />
+          <SettingsRow
+            icon="help-circle-outline"
+            label="Help"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("Help");
+            }}
+          />
+          <SettingsRow
+            icon="information-circle-outline"
+            label="About"
+            onPress={() => {
+              // @ts-expect-error string-based navigation for mixed stack/tab routes
+              (navigation as any).navigate("About");
+            }}
+          />
           <SettingsRow icon="log-out-outline" label="Log out" onPress={handleLogout} danger last />
         </View>
 

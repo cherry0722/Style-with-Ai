@@ -1,5 +1,7 @@
 import axios, { AxiosError } from 'axios';
-import { API_BASE_URL } from '../config';
+
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL?.trim() || 'http://localhost:5001';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getTokenFromAuthSync } from './tokenGetter';
 import { callOn401 } from './on401';

@@ -27,22 +27,23 @@ const userSchema = Schema(
     },
     // Optional profile fields used for personalization / onboarding
     profile: {
-      age: {
-        type: Number,
-        default: null,
-      },
-      gender: {
-        type: String,
-        default: null,
-      },
-      heightCm: {
-        type: Number,
-        default: null,
-      },
-      weightLb: {
-        type: Number,
-        default: null,
-      },
+      age: { type: Number, default: null },
+      gender: { type: String, default: null },
+      heightCm: { type: Number, default: null },
+      weightLb: { type: Number, default: null },
+      preferredName: { type: String, default: null },
+      pronouns: { type: String, default: null },
+      bodyType: { type: String, default: null },
+    },
+    settings: {
+      temperatureUnit: { type: String, default: null },
+      notificationsEnabled: { type: Boolean, default: null },
+      preferredLocation: { type: String, default: null },
+    },
+    privacy: {
+      profileVisible: { type: Boolean, default: null },
+      activityVisible: { type: Boolean, default: null },
+      dataSharingConsent: { type: Boolean, default: null },
     },
   },
   {

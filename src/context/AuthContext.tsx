@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
 import type { UserAuth } from "../types";
 import * as authApi from "../api/auth";
+import { getCurrentUser } from "../api/user";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setOn401 } from "../api/on401";
 import { setTokenGetter } from "../api/tokenGetter";
@@ -9,6 +10,7 @@ import { useCurrentOutfitStore } from "../store/useCurrentOutfitStore";
 import { useCalendar } from "../store/calendar";
 import { useNotifications } from "../store/notifications";
 import { useFavorites } from "../store/favorites";
+import { useSettings } from "../store/settings";
 
 export type NavigationRef = { current: { reset: (arg: { index: number; routes: { name: string }[] }) => void } | null };
 
@@ -27,6 +29,7 @@ interface AuthCtx {
   loginWithPhone: (phone: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile?: (patch: Partial<UserAuth>) => void;
+  refreshUserFromBackend?: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -78,6 +81,44 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
             setToken(null);
           }
         }
+        if (storedToken && !cancelled) {
+          try {
+            const me = await getCurrentUser();
+            if (cancelled) return;
+            const normalized: UserAuth = {
+              id: (me._id as string)?.toString?.() ?? me.id as string,
+              email: me.email as string,
+              username: me.username as string,
+              phone: (me.phone as string) ?? '',
+              image: me.image as string | undefined,
+              profile: (me.profile as UserAuth['profile']) ?? undefined,
+            };
+            setUser(normalized);
+            await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(normalized));
+
+            const s = (me as any).settings;
+            if (s && typeof s === "object") {
+              useSettings.setState((prev) => ({
+                ...prev,
+                temperatureUnit:
+                  s.temperatureUnit === "celsius" || s.temperatureUnit === "fahrenheit"
+                    ? s.temperatureUnit
+                    : prev.temperatureUnit,
+                notificationsEnabled:
+                  typeof s.notificationsEnabled === "boolean"
+                    ? s.notificationsEnabled
+                    : prev.notificationsEnabled,
+              }));
+            }
+          } catch (_) {
+            if (!cancelled && storedUser) {
+              try {
+                const userData = JSON.parse(storedUser);
+                setUser(userData);
+              } catch (__) {}
+            }
+          }
+        }
       } catch (_) {
         if (!cancelled) setToken(null);
       } finally {
@@ -114,9 +155,17 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
       try { localStorage.setItem(TOKEN_STORAGE_KEY, t); } catch (_) {}
     }
     setToken(t);
-    const userData: UserAuth = { id: u.id, email: u.email, username: u.username ?? '', phone: '' };
-    await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
-    setUser(userData);
+    const me = await getCurrentUser();
+const userData: UserAuth = {
+  id: (me._id as string)?.toString?.() ?? (me.id as string),
+  email: me.email as string,
+  username: me.username as string,
+  phone: (me.phone as string) ?? '',
+  image: me.image as string | undefined,
+  profile: (me.profile as UserAuth['profile']) ?? undefined,
+};
+await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+setUser(userData);
   }
 
   async function signup(email: string, password: string, username?: string, phone?: string) {
@@ -164,6 +213,39 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
     });
   };
 
+  const refreshUserFromBackend = async () => {
+    try {
+      const me = await getCurrentUser();
+      const normalized: UserAuth = {
+        id: (me._id as string)?.toString?.() ?? (me.id as string),
+        email: me.email as string,
+        username: me.username as string,
+        phone: (me.phone as string) ?? '',
+        image: me.image as string | undefined,
+        profile: (me.profile as UserAuth['profile']) ?? undefined,
+      };
+      setUser(normalized);
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(normalized));
+      if (typeof localStorage !== 'undefined') {
+        try { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(normalized)); } catch (__) {}
+      }
+      const s = (me as any).settings;
+      if (s && typeof s === "object") {
+        useSettings.setState((prev) => ({
+          ...prev,
+          temperatureUnit:
+            s.temperatureUnit === "celsius" || s.temperatureUnit === "fahrenheit"
+              ? s.temperatureUnit
+              : prev.temperatureUnit,
+          notificationsEnabled:
+            typeof s.notificationsEnabled === "boolean"
+              ? s.notificationsEnabled
+              : prev.notificationsEnabled,
+        }));
+      }
+    } catch (_) {}
+  };
+
   return (
     <Ctx.Provider
       value={{
@@ -181,6 +263,7 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
         loginWithPhone,
         logout,
         updateProfile,
+        refreshUserFromBackend,
       }}
     >
       {children}

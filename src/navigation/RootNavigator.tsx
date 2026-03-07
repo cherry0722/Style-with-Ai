@@ -16,6 +16,9 @@ import PlanOutfitSuggestionsScreen from "../screens/PlanOutfitSuggestionsScreen"
 import OnboardingProfileScreen from "../screens/OnboardingProfileScreen";
 import OutfitScreen from "../screens/OutfitScreen";
 import LaundryScreen from "../screens/LaundryScreen";
+import ComingSoonScreen from "../screens/ComingSoonScreen";
+import PasswordAndSecurityScreen from "../screens/PasswordAndSecurityScreen";
+import AccountPrivacyScreen from "../screens/AccountPrivacyScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -30,6 +33,14 @@ export type RootStackParamList = {
   PlanOutfitSuggestions: { date: string; slotLabel: string; occasion: string };
   OnboardingProfile: undefined;
   Laundry: undefined;
+  PasswordAndSecurity: undefined;
+  AccountPrivacy: undefined;
+  InformationPermissions: undefined;
+  Saved: undefined;
+  Favorites: undefined;
+  Activity: undefined;
+  Help: undefined;
+  About: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -63,6 +74,14 @@ export default function RootNavigator() {
           <Stack.Screen name="PlanOutfitSuggestions" component={PlanOutfitSuggestionsScreen} />
           <Stack.Screen name="OnboardingProfile" component={OnboardingProfileScreen} />
           <Stack.Screen name="Laundry" component={LaundryScreen} />
+          <Stack.Screen name="PasswordAndSecurity" component={PasswordAndSecurityScreen} />
+          <Stack.Screen name="AccountPrivacy" component={AccountPrivacyScreen} />
+          <Stack.Screen name="InformationPermissions" component={ComingSoonScreen} />
+          <Stack.Screen name="Saved" component={ComingSoonScreen} />
+          <Stack.Screen name="Favorites" component={ComingSoonScreen} />
+          <Stack.Screen name="Activity" component={ComingSoonScreen} />
+          <Stack.Screen name="Help" component={ComingSoonScreen} />
+          <Stack.Screen name="About" component={ComingSoonScreen} />
         </>
       ) : (
         <>
