@@ -22,16 +22,16 @@ import { useAuth } from '../context/AuthContext';
 import { listLaundry, markClean, WardrobeItemResponse } from '../api/wardrobe';
 
 const P = {
-  background:    '#F5F0E8',
-  cardSurface:   '#EDE6D8',
-  cardWhite:     '#FFFFFF',
-  primaryText:   '#3D3426',
+  background: '#F5F0E8',
+  cardSurface: '#EDE6D8',
+  cardWhite: '#FFFFFF',
+  primaryText: '#3D3426',
   secondaryText: '#8C7E6A',
-  lightText:     '#B5A894',
-  accent:        '#C4A882',
-  border:        '#E8E0D0',
-  shadow:        'rgba(61, 52, 38, 0.08)',
-  warning:       '#D4A574',
+  lightText: '#B5A894',
+  accent: '#C4A882',
+  border: '#E8E0D0',
+  shadow: 'rgba(61, 52, 38, 0.08)',
+  warning: '#D4A574',
 } as const;
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
@@ -76,7 +76,7 @@ function ItemRow({
     <View style={[styles.itemRow, CARD_SHADOW]}>
       <View style={styles.thumbWrap}>
         {uri ? (
-          <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+          <Image source={{ uri }} style={styles.thumb} resizeMode="contain" />
         ) : (
           <View style={styles.thumbPlaceholder}>
             <Ionicons name="shirt-outline" size={20} color={P.lightText} />
@@ -262,7 +262,7 @@ export default function LaundryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: P.background },
-  center:    { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   centerText:{ fontSize: 15, color: P.secondaryText },
 
   header: {
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
 
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: P.primaryText, marginBottom: 6 },
-  emptyHint:  { fontSize: 13, color: P.lightText },
+  emptyHint: { fontSize: 13, color: P.lightText },
 
   bottomBar: {
     position: 'absolute',

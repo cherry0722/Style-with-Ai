@@ -31,11 +31,11 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 function iconFor(route: keyof TabParamList): keyof typeof Ionicons.glyphMap {
   switch (route) {
-    case "Home":     return "home-outline";
-    case "Closet":   return "shirt-outline";
-    case "Avatar":   return "person-outline";
+    case "Home": return "home-outline";
+    case "Closet": return "shirt-outline";
+    case "Avatar": return "person-outline";
     case "Settings": return "settings-outline";
-    default:         return "grid-outline";
+    default: return "grid-outline";
   }
 }
 
@@ -129,8 +129,7 @@ export default function Tabs() {
         }
         const r = await ImagePicker.launchCameraAsync({
           mediaTypes: ["images"],
-          allowsEditing: true,
-          aspect: [1, 1],
+          allowsEditing: false,
           quality: 0.85,
         });
         if (!r.canceled && r.assets?.length) {
@@ -155,8 +154,7 @@ export default function Tabs() {
         }
         const r = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ["images"],
-          allowsEditing: true,
-          aspect: [1, 1],
+          allowsEditing: false,
           quality: 0.85,
         });
         if (!r.canceled && r.assets?.length) {

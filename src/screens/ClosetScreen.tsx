@@ -1,8 +1,3 @@
-/**
- * Closet Screen — category grid → filtered item list drill-down.
- * All API calls, auth logic, and upload flow preserved.
- * The + add-item button lives in the bottom nav bar (Tabs.tsx), not here.
- */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -29,24 +24,24 @@ import {
 } from '../api/wardrobe';
 
 const P = {
-  background:    '#F5F0E8',
-  cardSurface:   '#EDE6D8',
-  cardWhite:     '#FFFFFF',
-  primaryText:   '#3D3426',
+  background: '#F5F0E8',
+  cardSurface: '#EDE6D8',
+  cardWhite: '#FFFFFF',
+  primaryText: '#3D3426',
   secondaryText: '#8C7E6A',
-  lightText:     '#B5A894',
-  accent:        '#C4A882',
-  border:        '#E8E0D0',
-  shadow:        'rgba(61, 52, 38, 0.08)',
-  warning:       '#D4A574',
-  error:         '#C8706A',
+  lightText: '#B5A894',
+  accent: '#C4A882',
+  border: '#E8E0D0',
+  shadow: 'rgba(61, 52, 38, 0.08)',
+  warning: '#D4A574',
+  error: '#C8706A',
 } as const;
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
 const { width: SCREEN_W } = Dimensions.get('window');
-const H_PAD    = 24;
+const H_PAD = 24;
 const GRID_GAP = 14;
-const CARD_W   = (SCREEN_W - H_PAD * 2 - GRID_GAP) / 2;
+const CARD_W = (SCREEN_W - H_PAD * 2 - GRID_GAP) / 2;
 
 const CARD_SHADOW = {
   shadowColor: P.shadow,
@@ -57,12 +52,12 @@ const CARD_SHADOW = {
 };
 
 const WARDROBE_CATEGORIES = [
-  { key: 'top',       label: 'T-SHIRTS',     emoji: '👕' },
-  { key: 'dress',     label: 'SKIRTS',       emoji: '👗' },
-  { key: 'bottom',    label: 'DRESSES',      emoji: '👘' },
-  { key: 'outerwear', label: 'PANTS',        emoji: '👖' },
-  { key: 'shoes',     label: 'SHOES',        emoji: '👟' },
-  { key: 'accessory', label: 'ACCESSORIES',  emoji: '🎒' },
+  { key: 'top', label: 'T-SHIRTS', emoji: '👕' },
+  { key: 'dress', label: 'SKIRTS', emoji: '👗' },
+  { key: 'bottom', label: 'DRESSES', emoji: '👘' },
+  { key: 'outerwear', label: 'PANTS', emoji: '👖' },
+  { key: 'shoes', label: 'SHOES', emoji: '👟' },
+  { key: 'accessory', label: 'ACCESSORIES', emoji: '🎒' },
 ] as const;
 
 type CategoryKey = typeof WARDROBE_CATEGORIES[number]['key'];
@@ -108,9 +103,9 @@ function ItemRowCard({
   item: WardrobeItemResponse;
   onSetAvailability: (id: string, unavailable: boolean) => void;
 }>) {
-  const itemId        = item.id ?? item._id ?? '';
+  const itemId = item.id ?? item._id ?? '';
   const isUnavailable = item.v2?.availability?.status === 'unavailable';
-  const itemName      = item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
+  const itemName = item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
 
   return (
     <View style={[styles.itemRow, isUnavailable && styles.itemRowUnavailable]}>
@@ -120,7 +115,7 @@ function ItemRowCard({
           <Image
             source={{ uri: item.cleanImageUrl || item.imageUrl }}
             style={styles.itemThumb}
-            resizeMode="cover"
+            resizeMode="contain"
           />
         ) : (
           <View style={styles.itemThumbPlaceholder}>
@@ -219,7 +214,7 @@ function ClosetDetailView({
       </View>
 
       {!!error && <Text style={styles.errorText}>{error}</Text>}
-      {!!toast  && <Text style={styles.toastInline}>{toast}</Text>}
+      {!!toast && <Text style={styles.toastInline}>{toast}</Text>}
 
       {/* Show unavailable toggle */}
       <Pressable
@@ -247,11 +242,11 @@ export default function ClosetScreen() {
   const isFocused = useIsFocused();
   const navigation = useNavigation<any>();
 
-  const [items,            setItems]            = useState<WardrobeItemResponse[]>([]);
-  const [loading,          setLoading]          = useState(false);
-  const [error,            setError]            = useState<string | null>(null);
-  const [showUnavailable,  setShowUnavailable]  = useState(false);
-  const [toast,            setToast]            = useState<string | null>(null);
+  const [items, setItems] = useState<WardrobeItemResponse[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showUnavailable, setShowUnavailable] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey | null>(null);
   const loadingRef = useRef(false);
 
@@ -285,7 +280,7 @@ export default function ClosetScreen() {
     try {
       const patch = unavailable
         ? { availability: { status: 'unavailable' as const, reason: 'laundry' as const, untilDate: null } }
-        : { availability: { status: 'available'   as const, reason: null, untilDate: null } };
+        : { availability: { status: 'available' as const, reason: null, untilDate: null } };
       await patchWardrobeV2(itemId, patch);
       setToast(unavailable ? 'Marked as laundry.' : 'Marked as available.');
       await loadWardrobe();
@@ -318,7 +313,7 @@ export default function ClosetScreen() {
 
   // ── Detail view ───────────────────────────────────────────────────────────
   if (selectedCategory) {
-    const catDef   = WARDROBE_CATEGORIES.find((c) => c.key === selectedCategory)!;
+    const catDef = WARDROBE_CATEGORIES.find((c) => c.key === selectedCategory)!;
     const filtered = items.filter((i) => getItemCategory(i) === selectedCategory);
     return (
       <ClosetDetailView
@@ -380,7 +375,7 @@ export default function ClosetScreen() {
 // ─── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: P.background },
-  center:    { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   centerText:{ fontSize: 15, color: P.secondaryText },
 
   // ── Grid view ─────────────────────────────────────────────────────────────
@@ -483,7 +478,7 @@ const styles = StyleSheet.create({
     borderColor: P.border,
   },
   toggleRowActive: { borderColor: P.accent },
-  toggleText:      { fontSize: 13, color: P.secondaryText },
+  toggleText: { fontSize: 13, color: P.secondaryText },
 
   detailList: {
     paddingHorizontal: H_PAD,
@@ -558,10 +553,10 @@ const styles = StyleSheet.create({
 
   // ── Empty state ───────────────────────────────────────────────────────────
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText:  { fontSize: 15, color: P.secondaryText, marginBottom: 6 },
-  emptyHint:  { fontSize: 13, color: P.lightText },
+  emptyText: { fontSize: 15, color: P.secondaryText, marginBottom: 6 },
+  emptyHint: { fontSize: 13, color: P.lightText },
 
   // ── Error / toast ─────────────────────────────────────────────────────────
-  errorText:   { fontSize: 13, color: P.error,  marginHorizontal: H_PAD, marginBottom: 8 },
+  errorText: { fontSize: 13, color: P.error, marginHorizontal: H_PAD, marginBottom: 8 },
   toastInline: { fontSize: 13, color: P.accent, marginHorizontal: H_PAD, marginBottom: 8, fontWeight: '600' },
 });

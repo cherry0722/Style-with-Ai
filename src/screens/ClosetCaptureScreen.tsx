@@ -284,8 +284,7 @@ export default function ClosetCaptureScreen() {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.85,
       });
 
@@ -308,8 +307,7 @@ export default function ClosetCaptureScreen() {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.85,
       });
 
@@ -704,7 +702,11 @@ export default function ClosetCaptureScreen() {
               {selectedImage ? (
                 <>
                   <View style={themeStyles.imageContainer}>
-                    <Image source={{ uri: selectedImage }} style={themeStyles.selectedImage} />
+                    <Image
+                      source={{ uri: selectedImage }}
+                      style={themeStyles.selectedImage}
+                      resizeMode="contain"
+                    />
                   </View>
                   <View style={themeStyles.photoActions}>
                     <Pressable
@@ -1066,8 +1068,9 @@ const styles = (theme: any) =>
       alignItems: "center",
     },
     selectedImage: {
-      width: 200,
-      height: 200,
+      width: "100%",
+      height: 280,
+      alignSelf: "center",
       borderRadius: theme.borderRadius.lg,
     },
     photoActions: {
@@ -1339,4 +1342,3 @@ const styles = (theme: any) =>
       textAlign: "center",
     },
   });
-

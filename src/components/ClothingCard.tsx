@@ -24,7 +24,7 @@ export default function ClothingCard({
         <Image
           source={{ uri: item.imageUrl || item.uri }}
           style={styles.image}
-          resizeMode="cover"
+          resizeMode="contain"
         />
         {onToggleFavorite && (
           <Pressable
