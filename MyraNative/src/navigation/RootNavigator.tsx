@@ -1,11 +1,6 @@
 /**
  * MyraNative — RootNavigator
- * Real auth-gated stack, ported from the Expo app.
- *
- * TEMPORARY PLACEHOLDERS (marked TODO — remove when milestone resolves):
- *   "Login"    → ComingSoonScreen — blocked: PremiumSignInScreen needs SignInForm/SocialButtons components
- *   "Calendar" → ComingSoonScreen — blocked: CalendarScreen needs react-native-calendars
- *   Tabs/Home  → HomeScreen (expo-location → react-native-geolocation-service ✓)
+ * Auth-gated stack. Token presence (AsyncStorage) determines which stack renders.
  */
 import React from 'react';
 import {View, ActivityIndicator, StyleSheet} from 'react-native';
@@ -25,6 +20,7 @@ import OutfitScreen from '../screens/OutfitScreen';
 import PlanOutfitSuggestionsScreen from '../screens/PlanOutfitSuggestionsScreen';
 import OnboardingProfileScreen from '../screens/OnboardingProfileScreen';
 import LaundryScreen from '../screens/LaundryScreen';
+import CalendarScreen from '../screens/CalendarScreen';
 import PasswordAndSecurityScreen from '../screens/PasswordAndSecurityScreen';
 import AccountPrivacyScreen from '../screens/AccountPrivacyScreen';
 
@@ -69,8 +65,7 @@ export default function RootNavigator() {
       {token ? (
         <>
           <Stack.Screen name="Main" component={Tabs} />
-          {/* TODO: replace with CalendarScreen when expo-haptics is replaced */}
-          <Stack.Screen name="Calendar" component={ComingSoonScreen} />
+          <Stack.Screen name="Calendar" component={CalendarScreen} />
           <Stack.Screen name="History" component={HistoryScreen} />
           <Stack.Screen name="Outfits" component={OutfitScreen} />
           <Stack.Screen
