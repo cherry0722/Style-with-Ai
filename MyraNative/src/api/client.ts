@@ -41,6 +41,18 @@ client.interceptors.response.use(
     const status = err?.response?.status;
     const data = err?.response?.data as Record<string, unknown> | undefined;
     const url = err?.config?.url ?? '';
+    const fullUrl = err?.config?.baseURL
+      ? `${err.config.baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+      : url;
+
+    // Network-level failures (no response at all — timeout, refused, unreachable)
+    if (!err.response && __DEV__) {
+      console.warn('[API Client] Network failure — no response received', {
+        code: err.code,          // ERR_NETWORK, ETIMEDOUT, ECONNREFUSED, etc.
+        message: err.message,
+        fullUrl,
+      });
+    }
 
     const errBody =
       data && typeof data === 'object' && data.error && typeof (data as { error?: { message?: string } }).error === 'object'
