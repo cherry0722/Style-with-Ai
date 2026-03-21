@@ -17,6 +17,7 @@ import AuthScreen from '../screens/AuthScreen';
 import SignupScreen from '../screens/SignupScreen';
 import GuestHomeScreen from '../screens/GuestHomeScreen';
 import ComingSoonScreen from '../screens/ComingSoonScreen';
+import PremiumSignInScreen from '../screens/PremiumSignInScreen';
 
 import Tabs from './Tabs';
 import HistoryScreen from '../screens/HistoryScreen';
@@ -100,8 +101,7 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Auth" component={AuthScreen} />
-          {/* TODO: replace with real LoginScreen when expo-haptics is replaced (PremiumSignInScreen) */}
-          <Stack.Screen name="Login" component={ComingSoonScreen} />
+          <Stack.Screen name="Login" component={PremiumSignInScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="GuestHome" component={GuestHomeScreen} />
         </>

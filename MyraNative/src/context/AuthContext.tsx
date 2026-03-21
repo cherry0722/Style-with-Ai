@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
+import { Alert } from "react-native";
 import type { UserAuth } from "../types";
 import * as authApi from "../api/auth";
 import { getCurrentUser } from "../api/user";
@@ -183,13 +184,16 @@ setUser(userData);
   const clearSessionMessage = () => setSessionExpiredMessage(null);
 
   async function loginWithGoogle() {
-    setUser({ id: "demo-google", email: "you@gmail.com", username: "You", phone: "" });
+    Alert.alert('Coming Soon', 'Google sign-in is not yet available.');
+    throw new Error('Google sign-in is not yet available.');
   }
   async function loginWithApple() {
-    setUser({ id: "demo-apple", email: "you@icloud.com", username: "You", phone: "" });
+    Alert.alert('Coming Soon', 'Apple sign-in is not yet available.');
+    throw new Error('Apple sign-in is not yet available.');
   }
-  async function loginWithPhone(phone: string) {
-    setUser({ id: "demo-phone", email: "", username: phone, phone });
+  async function loginWithPhone(_phone: string) {
+    Alert.alert('Coming Soon', 'Phone sign-in is not yet available.');
+    throw new Error('Phone sign-in is not yet available.');
   }
 
   const updateProfile = async (patch: Partial<UserAuth>) => {
