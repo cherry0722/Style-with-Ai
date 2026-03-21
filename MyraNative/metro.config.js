@@ -8,9 +8,9 @@ const defaultConfig = getDefaultConfig(__dirname);
  * We spread defaultConfig.resolver.assetExts to avoid overwriting
  * existing extensions (png, jpg, ttf, etc.).
  *
- * resolveRequest aliases @expo/vector-icons to a local stub so that
- * expo-font / expo-asset are never pulled into the Metro bundle.
- * TODO: remove alias once icons are migrated to react-native-vector-icons.
+ * resolveRequest aliases @expo/vector-icons → src/stubs/vector-icons.js,
+ * a compatibility shim backed by react-native-vector-icons. This keeps
+ * all screen imports unchanged while ensuring expo-font is never executed.
  */
 const config = {
   resolver: {

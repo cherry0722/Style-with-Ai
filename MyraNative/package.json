@@ -29,6 +29,7 @@
     "react-native-image-picker": "^8.2.1",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.24.0",
+    "react-native-vector-icons": "^10.3.0",
     "react-native-worklets-core": "^1.6.3",
     "zustand": "^5.0.12"
   },

@@ -1,21 +1,18 @@
 /**
- * Temporary stub for @expo/vector-icons
- * Aliased via metro.config.js resolveRequest to prevent expo-font/expo-asset from being pulled in.
- * Icons render as invisible placeholder text.
- * TODO: Replace with react-native-vector-icons once fonts are properly linked.
+ * @expo/vector-icons compatibility shim for bare React Native.
+ *
+ * All screens import { Ionicons } from '@expo/vector-icons'.
+ * metro.config.js aliases that module here so that @expo/vector-icons'
+ * expo-font dependency is never executed.
+ *
+ * This shim re-exports react-native-vector-icons components so icons
+ * render via natively linked TTF fonts (linked by react-native-asset).
  */
-import React from 'react';
-import {Text} from 'react-native';
 
-const makeIcon = () =>
-  function IconStub({size = 24, color = '#000', style}) {
-    return React.createElement(Text, {style: [{fontSize: size, color}, style]}, '');
-  };
-
-export const Ionicons = makeIcon();
-export const MaterialIcons = makeIcon();
-export const FontAwesome = makeIcon();
-export const Feather = makeIcon();
-export const AntDesign = makeIcon();
-export const Entypo = makeIcon();
-export const MaterialCommunityIcons = makeIcon();
+export { default as Ionicons } from 'react-native-vector-icons/Ionicons';
+export { default as MaterialIcons } from 'react-native-vector-icons/MaterialIcons';
+export { default as FontAwesome } from 'react-native-vector-icons/FontAwesome';
+export { default as Feather } from 'react-native-vector-icons/Feather';
+export { default as AntDesign } from 'react-native-vector-icons/AntDesign';
+export { default as Entypo } from 'react-native-vector-icons/Entypo';
+export { default as MaterialCommunityIcons } from 'react-native-vector-icons/MaterialCommunityIcons';
