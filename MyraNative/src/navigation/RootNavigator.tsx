@@ -3,9 +3,10 @@
  * Real auth-gated stack, ported from the Expo app.
  *
  * TEMPORARY PLACEHOLDERS (marked TODO — remove when milestone resolves):
- *   "Main"   → MainPlaceholder   — replace with Tabs when expo-image-picker is replaced
- *   "Login"  → ComingSoonScreen  — replace when expo-haptics is replaced (PremiumSignInScreen)
+ *   "Login"    → ComingSoonScreen — replace when expo-haptics is replaced (PremiumSignInScreen)
  *   "Calendar" → ComingSoonScreen — replace when expo-haptics is replaced (CalendarScreen)
+ *   Tabs/Home  → ComingSoonScreen — replace when expo-location is replaced (HomeScreen)
+ *   Tabs/Settings → ComingSoonScreen — replace when expo-haptics is replaced (SettingsScreen)
  */
 import React from 'react';
 import {View, ActivityIndicator, StyleSheet} from 'react-native';
@@ -18,7 +19,7 @@ import SignupScreen from '../screens/SignupScreen';
 import GuestHomeScreen from '../screens/GuestHomeScreen';
 import ComingSoonScreen from '../screens/ComingSoonScreen';
 
-import MainPlaceholder from './MainPlaceholder'; // TODO: replace with real Tabs
+import Tabs from './Tabs';
 import HistoryScreen from '../screens/HistoryScreen';
 import OutfitScreen from '../screens/OutfitScreen';
 import PlanOutfitSuggestionsScreen from '../screens/PlanOutfitSuggestionsScreen';
@@ -67,8 +68,7 @@ export default function RootNavigator() {
     <Stack.Navigator screenOptions={{headerShown: false}}>
       {token ? (
         <>
-          {/* TODO: replace MainPlaceholder with real Tabs (Milestone: expo-image-picker replacement) */}
-          <Stack.Screen name="Main" component={MainPlaceholder} />
+          <Stack.Screen name="Main" component={Tabs} />
           {/* TODO: replace with CalendarScreen when expo-haptics is replaced */}
           <Stack.Screen name="Calendar" component={ComingSoonScreen} />
           <Stack.Screen name="History" component={HistoryScreen} />
