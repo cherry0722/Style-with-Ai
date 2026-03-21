@@ -3,10 +3,9 @@
  * Real auth-gated stack, ported from the Expo app.
  *
  * TEMPORARY PLACEHOLDERS (marked TODO — remove when milestone resolves):
- *   "Login"    → ComingSoonScreen — replace when expo-haptics is replaced (PremiumSignInScreen)
- *   "Calendar" → ComingSoonScreen — replace when expo-haptics is replaced (CalendarScreen)
- *   Tabs/Home  → ComingSoonScreen — replace when expo-location is replaced (HomeScreen)
- *   Tabs/Settings → ComingSoonScreen — replace when expo-haptics is replaced (SettingsScreen)
+ *   "Login"    → ComingSoonScreen — blocked: PremiumSignInScreen needs SignInForm/SocialButtons components
+ *   "Calendar" → ComingSoonScreen — blocked: CalendarScreen needs react-native-calendars
+ *   Tabs/Home  → HomeScreen (expo-location → react-native-geolocation-service ✓)
  */
 import React from 'react';
 import {View, ActivityIndicator, StyleSheet} from 'react-native';

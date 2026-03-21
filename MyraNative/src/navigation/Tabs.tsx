@@ -4,8 +4,8 @@
  *
  * Changes from Expo version:
  *   - expo-image-picker  → react-native-image-picker  (FAB upload)
- *   - HomeScreen         → ComingSoonScreen  (TODO: unblock when expo-location replaced)
- *   - SettingsScreen     → ComingSoonScreen  (TODO: unblock when expo-haptics replaced)
+ *   - HomeScreen: real screen (expo-location → react-native-geolocation-service ✓)
+ *   - SettingsScreen: real screen (expo-haptics → react-native-haptic-feedback ✓)
  *
  * Icon names typed as string because @expo/vector-icons is Metro-aliased to a stub
  * during this migration phase (glyphMap property not available on stub).
@@ -13,6 +13,8 @@
 import React, { useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import ComingSoonScreen from '../screens/ComingSoonScreen';
+import HomeScreen from '../screens/HomeScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import ClosetScreen from '../screens/ClosetScreen';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -221,8 +223,7 @@ export default function Tabs() {
         tabBarHideOnKeyboard: true,
       })}
     >
-      {/* TODO: replace ComingSoonScreen with HomeScreen when expo-location is replaced */}
-      <Tab.Screen name="Home"    component={ComingSoonScreen} />
+      <Tab.Screen name="Home"    component={HomeScreen} />
       <Tab.Screen name="Closet"  component={ClosetScreen} />
       <Tab.Screen
         name="AddItem"
@@ -233,8 +234,7 @@ export default function Tabs() {
         }}
       />
       <Tab.Screen name="Avatar"   component={ComingSoonScreen} />
-      {/* TODO: replace ComingSoonScreen with SettingsScreen when expo-haptics is replaced */}
-      <Tab.Screen name="Settings" component={ComingSoonScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }
