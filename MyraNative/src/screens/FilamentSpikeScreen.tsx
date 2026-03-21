@@ -4,46 +4,70 @@
  * Minimal proof-of-concept: loads assets/models/box.glb and renders it
  * using react-native-filament. No MYRA business logic.
  *
- * Confirmed component names from node_modules/react-native-filament/src/index.tsx:
- *   FilamentView, Model, Camera, DefaultLight
+ * Architecture (confirmed from package source):
  *
- * DefaultLight internally uses:
- *   - EnvironmentalLight sourced from the pod-bundled RNF_default_env_ibl.ktx
- *   - A directional light at 10,000 lux / 6500 K
+ *   FilamentScene  ← provides FilamentContext (engine, camera, renderer…)
+ *                    and RenderCallbackContext (render loop registration)
+ *     └─ SceneContent  ← MUST be a separate child component so React
+ *                         context propagates before hooks run
+ *          └─ FilamentView  ← the Metal/GL surface
+ *               ├─ Camera        ← uses RenderCallbackContext + FilamentContext
+ *               ├─ DefaultLight  ← uses FilamentContext (engine.setIndirectLight)
+ *               └─ Model         ← uses FilamentContext (renderableManager, scene)
+ *
+ * DefaultLight sources its IBL from the pod-bundled RNF_default_env_ibl.ktx
+ * (declared as s.resources in react-native-filament.podspec).
  */
 
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {Camera, DefaultLight, FilamentView, Model} from 'react-native-filament';
+import {
+  Camera,
+  DefaultLight,
+  FilamentScene,
+  FilamentView,
+  Model,
+} from 'react-native-filament';
 
 // Metro resolves this via the 'glb' assetExt added in metro.config.js.
-// The file lives at assets/models/box.glb.
+// The file lives at assets/models/box.glb (1.6 KB Khronos Box sample).
 const MODEL_SOURCE = require('../../assets/models/box.glb');
+
+/**
+ * SceneContent must be a separate component from FilamentScene so that
+ * the FilamentContext and RenderCallbackContext are available when the
+ * hooks inside Camera, DefaultLight, and Model execute.
+ */
+function SceneContent() {
+  return (
+    <FilamentView style={styles.filamentView}>
+      {/* Camera default: position [0,0,8], target [0,0,0] — box is visible */}
+      <Camera />
+      {/* DefaultLight = IBL from RNF_default_env_ibl.ktx + directional 10k lux */}
+      <DefaultLight />
+      {/* Model loads the GLB binary via useModel internally */}
+      <Model source={MODEL_SOURCE} />
+    </FilamentView>
+  );
+}
 
 export function FilamentSpikeScreen() {
   return (
     <View style={styles.root}>
       <Text style={styles.label}>Filament Spike — Milestone 1</Text>
 
-      <FilamentView style={styles.filamentView}>
-        {/*
-         * Camera: default position [0,0,8] looking at origin.
-         * The Box GLB is a unit cube at the origin — visible at this distance.
-         */}
-        <Camera />
-
-        {/*
-         * DefaultLight: pods-bundled IBL (RNF_default_env_ibl.ktx)
-         * + directional light. Required for the model to be visible.
-         */}
-        <DefaultLight />
-
-        {/*
-         * Model: loads the .glb binary via the useModel hook internally.
-         * castShadow / receiveShadow are false by default.
-         */}
-        <Model source={MODEL_SOURCE} />
-      </FilamentView>
+      {/*
+       * FilamentScene initialises the Filament engine and provides:
+       *   - FilamentContext.Provider  (engine, camera, renderer, scene…)
+       *   - RenderCallbackContext.RenderContextProvider (render loop)
+       * Without this wrapper, Camera/DefaultLight/Model all throw at runtime.
+       */}
+      {/* FilamentScene does not accept a style prop — size it via a View wrapper */}
+      <View style={styles.scene}>
+        <FilamentScene>
+          <SceneContent />
+        </FilamentScene>
+      </View>
     </View>
   );
 }
@@ -59,6 +83,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 15,
     letterSpacing: 0.4,
+  },
+  scene: {
+    flex: 1,
   },
   filamentView: {
     flex: 1,
