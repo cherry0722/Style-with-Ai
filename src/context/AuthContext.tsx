@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect, useRef } from "react";
+import { Alert } from "react-native";
 import type { UserAuth } from "../types";
 import * as authApi from "../api/auth";
 import { getCurrentUser } from "../api/user";
@@ -48,12 +49,6 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
     setUser(null);
     await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
     await AsyncStorage.removeItem(USER_STORAGE_KEY);
-    if (typeof localStorage !== 'undefined') {
-      try {
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
-        localStorage.removeItem(USER_STORAGE_KEY);
-      } catch (_) {}
-    }
     useCloset.getState().reset();
     useCurrentOutfitStore.getState().reset();
     useCalendar.getState().reset();
@@ -151,9 +146,6 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
     const { user: u, accessToken: t } = await authApi.login(email, password);
     if (!t) throw new Error('No accessToken in response');
     await AsyncStorage.setItem(TOKEN_STORAGE_KEY, t);
-    if (typeof localStorage !== 'undefined') {
-      try { localStorage.setItem(TOKEN_STORAGE_KEY, t); } catch (_) {}
-    }
     setToken(t);
     const me = await getCurrentUser();
 const userData: UserAuth = {
@@ -176,9 +168,6 @@ setUser(userData);
     });
     if (!t) throw new Error('No accessToken in response');
     await AsyncStorage.setItem(TOKEN_STORAGE_KEY, t);
-    if (typeof localStorage !== 'undefined') {
-      try { localStorage.setItem(TOKEN_STORAGE_KEY, t); } catch (_) {}
-    }
     setToken(t);
     const userData: UserAuth = { id: u.id, email: u.email, username: u.username ?? '', phone: phone ?? '' };
     await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
@@ -195,13 +184,16 @@ setUser(userData);
   const clearSessionMessage = () => setSessionExpiredMessage(null);
 
   async function loginWithGoogle() {
-    setUser({ id: "demo-google", email: "you@gmail.com", username: "You", phone: "" });
+    Alert.alert('Coming Soon', 'Google sign-in is not yet available.');
+    throw new Error('Google sign-in is not yet available.');
   }
   async function loginWithApple() {
-    setUser({ id: "demo-apple", email: "you@icloud.com", username: "You", phone: "" });
+    Alert.alert('Coming Soon', 'Apple sign-in is not yet available.');
+    throw new Error('Apple sign-in is not yet available.');
   }
-  async function loginWithPhone(phone: string) {
-    setUser({ id: "demo-phone", email: "", username: phone, phone });
+  async function loginWithPhone(_phone: string) {
+    Alert.alert('Coming Soon', 'Phone sign-in is not yet available.');
+    throw new Error('Phone sign-in is not yet available.');
   }
 
   const updateProfile = async (patch: Partial<UserAuth>) => {
@@ -226,9 +218,6 @@ setUser(userData);
       };
       setUser(normalized);
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(normalized));
-      if (typeof localStorage !== 'undefined') {
-        try { localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(normalized)); } catch (__) {}
-      }
       const s = (me as any).settings;
       if (s && typeof s === "object") {
         useSettings.setState((prev) => ({

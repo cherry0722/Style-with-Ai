@@ -1,10 +1,11 @@
 import axios, { AxiosError } from 'axios';
-
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL?.trim() || 'http://localhost:5001';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config';
 import { getTokenFromAuthSync } from './tokenGetter';
 import { callOn401 } from './on401';
+
+// Re-export so any file that does `import { API_BASE_URL } from './client'` still works
+export { API_BASE_URL };
 
 async function getToken(): Promise<string | undefined> {
   try {
@@ -12,14 +13,11 @@ async function getToken(): Promise<string | undefined> {
     if (fromAuth) return fromAuth;
     const token = await AsyncStorage.getItem('token');
     if (token) return token;
-    if (typeof localStorage !== 'undefined') {
-      return localStorage?.getItem?.('token') ?? undefined;
-    }
   } catch (_) {}
   return undefined;
 }
 
-if (typeof __DEV__ !== 'undefined' && __DEV__) {
+if (__DEV__) {
   console.log('[API Client] baseURL =', API_BASE_URL);
 }
 
@@ -43,28 +41,53 @@ client.interceptors.response.use(
     const status = err?.response?.status;
     const data = err?.response?.data as Record<string, unknown> | undefined;
     const url = err?.config?.url ?? '';
+    const fullUrl = err?.config?.baseURL
+      ? `${err.config.baseURL.replace(/\/$/, '')}/${url.replace(/^\//, '')}`
+      : url;
 
-    const errBody = data && typeof data === 'object' && data.error && typeof (data as { error?: { message?: string } }).error === 'object'
-      ? (data as { error: { message?: string } }).error
-      : null;
-    const msgFromBody = errBody?.message ?? (data && typeof data === 'object' && 'message' in data ? (data as { message: string }).message : null);
+    // Network-level failures (no response at all — timeout, refused, unreachable)
+    if (!err.response && __DEV__) {
+      console.warn('[API Client] Network failure — no response received', {
+        code: err.code,          // ERR_NETWORK, ETIMEDOUT, ECONNREFUSED, etc.
+        message: err.message,
+        fullUrl,
+      });
+    }
+
+    const errBody =
+      data && typeof data === 'object' && data.error && typeof (data as { error?: { message?: string } }).error === 'object'
+        ? (data as { error: { message?: string } }).error
+        : null;
+    const msgFromBody =
+      errBody?.message ??
+      (data && typeof data === 'object' && 'message' in data
+        ? (data as { message: string }).message
+        : null);
 
     if (status === 401) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      if (__DEV__) {
         console.log('[API Client] Auth failure (401)', { url, status });
       }
       callOn401();
-      const cleanMessage = msgFromBody ? String(msgFromBody) : 'Session expired. Please log in again.';
+      const cleanMessage = msgFromBody
+        ? String(msgFromBody)
+        : 'Session expired. Please log in again.';
       return Promise.reject({ status: 401, data, message: cleanMessage });
     }
 
-    if (typeof __DEV__ !== 'undefined' && __DEV__ && (status === 400 || status === 401 || status === 403)) {
+    if (__DEV__ && (status === 400 || status === 403)) {
       console.log('[API Client] Auth/validation failure', { url, status, body: data });
     }
 
-    const cleanMessage = msgFromBody ? String(msgFromBody) : err?.message || (status ? `Request failed with status ${status}` : 'Request failed');
+    const cleanMessage = msgFromBody
+      ? String(msgFromBody)
+      : err?.message || (status ? `Request failed with status ${status}` : 'Request failed');
 
-    return Promise.reject({ status: status || undefined, data: data || undefined, message: cleanMessage });
+    return Promise.reject({
+      status: status || undefined,
+      data: data || undefined,
+      message: cleanMessage,
+    });
   }
 );
 

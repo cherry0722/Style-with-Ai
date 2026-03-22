@@ -1,179 +1,97 @@
-# 🪞 MYRA – AI Wardrobe & Style Assistant  
+This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
-An intelligent React Native app that helps users manage wardrobes, plan outfits, and get AI + weather-based clothing recommendations.  
+# Getting Started
 
-## 🚀 Features  
+> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
 
-### 🏠 Dashboard  
-- Real-time **weather integration** (auto location detection)  
-- **Outfit suggestions** based on temperature & event context  
-- **Calendar widget** synced with user events  
+## Step 1: Start Metro
 
-### 👕 Wardrobe  
-- Add clothes via **photo scanner**  
-- Smart **categorization** (top, bottom, dress, shoes, accessories)  
-- **Color detection** + tagging  
-- AI-based **outfit generation** using backend agent  
+First, you will need to run **Metro**, the JavaScript build tool for React Native.
 
-### 📅 Calendar  
-- Add/edit/delete events  
-- Suggests **outfits per event type** (formal, casual, interview, etc.)  
+To start the Metro dev server, run the following command from the root of your React Native project:
 
-### 🔔 Notifications  
-- Smart alerts for **weather, outfits, and events**  
-- Supports **local push notifications**  
+```sh
+# Using npm
+npm start
 
-### 🧠 AI Features  
-- Integrated **RAG pipeline** for personalized outfit reasoning  
-- Backend **AI Agent** connected with weather + calendar APIs  
-- Uses **LLM + vector DB** for contextual recommendations  
-
----
-
-
-## 🧰 Tech Stack  
-
-| Layer | Tools |
-|-------|-------|
-| **Frontend** | React Native, Expo, TypeScript |
-| **Backend** | Python (FastAPI/Flask), LangGraph/LangChain |
-| **Database** | MongoDB / AWS DynamoDB |
-| **AI & NLP** | Microsoft Phi-3, GPT-4, OpenAI API |
-| **State Mgmt** | Zustand |
-| **APIs** | OpenWeatherMap, Google Calendar |
-| **Dev Tools** | ESLint, Prettier, Expo CLI |
-
----
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone [<repository-url>](https://github.com/cherry0722/Style-with-Ai.git)
-   cd ai-wardrobe
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables**
-   Create a `.env` file in the root directory:
-   ```env
-   EXPO_PUBLIC_WEATHER_API_KEY=your_openweathermap_api_key
-   ```
-
-4. **Start the development server**
-   ```bash
-   npm start
-   ```
-
-5. **Run on device/simulator**
-   ```bash
-   # iOS
-   npm run ios
-   
-   # Android
-   npm run android
-   
-   # Web
-   npm run web
-   ```
-
-## Project Structure
-
-```
-myra/
-├── src/
-│   ├── screens/         # App screens
-│   ├── components/      # Reusable UI components
-│   ├── services/        # Weather, AI, Notifications
-│   ├── store/           # Zustand stores
-│   ├── navigation/      # App navigation
-│   ├── utils/           # Helper functions
-│   └── theme/           # Styling system
-├── backend/
-│   ├── main.py          # FastAPI entry point
-│   ├── rag_engine.py    # RAG pipeline logic
-│   ├── agent.py         # AI Agent core
-│   └── db/              # MongoDB integration
-
+# OR using Yarn
+yarn start
 ```
 
-## Architecture
+## Step 2: Build and run your app
 
-### State Management
-- **Zustand**: Lightweight, unopinionated state management
-- **Persistent Storage**: Settings and user data persist across sessions
-- **Modular Stores**: Separate stores for different features (closet, calendar, notifications, settings)
+With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
 
-### Navigation
-- **Stack Navigator**: Root navigation with auth flow
-- **Bottom Tabs**: Main app navigation with Home as default
-- **Type Safety**: Full TypeScript support for navigation
+### Android
 
-### Services
-- **Weather Service**: OpenWeatherMap API integration with caching
-- **Location Service**: GPS and geocoding with permission handling
-- **Notification Service**: Local notifications for reminders and alerts
+```sh
+# Using npm
+npm run android
 
-## Configuration
-
-### Weather API
-1. Sign up for a free API key at [OpenWeatherMap](https://openweathermap.org/api)
-2. Add your API key to the `.env` file as `EXPO_PUBLIC_WEATHER_API_KEY`
-
-### Permissions
-The app requests the following permissions:
-- **Location**: For weather data and location-based features
-- **Camera**: For scanning clothing items
-- **Notifications**: For outfit reminders and weather alerts
-
-## Development
-
-### Code Style
-- **TypeScript**: Strict type checking enabled
-- **ESLint**: Code linting and formatting
-- **Prettier**: Code formatting (if configured)
-
-### Testing
-```bash
-# Run tests
-npm test
-
-# Run tests in watch mode
-npm test -- --watch
+# OR using Yarn
+yarn android
 ```
 
-### Building for Production
+### iOS
 
-#### iOS
-```bash
-expo build:ios
+For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+
+The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+
+```sh
+bundle install
 ```
 
-#### Android
-```bash
-expo build:android
+Then, and every time you update your native dependencies, run:
+
+```sh
+bundle exec pod install
 ```
 
-## Contributing
+For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+```sh
+# Using npm
+npm run ios
 
-## License
+# OR using Yarn
+yarn ios
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
 
-## Support
+This is one way to run your app — you can also build it directly from Android Studio or Xcode.
 
-For support, email support@myra-app.com or join our Discord community.
+## Step 3: Modify your app
 
----
+Now that you have successfully run the app, let's make changes!
 
-Built with ❤️ by the Myra team
+Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+
+When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+
+- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
+- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+
+## Congratulations! :tada:
+
+You've successfully run and modified your React Native App. :partying_face:
+
+### Now what?
+
+- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
+- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+
+# Troubleshooting
+
+If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+
+# Learn More
+
+To learn more about React Native, take a look at the following resources:
+
+- [React Native Website](https://reactnative.dev) - learn more about React Native.
+- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
+- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
+- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
+- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.

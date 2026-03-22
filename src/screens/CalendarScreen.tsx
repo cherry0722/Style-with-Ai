@@ -8,7 +8,6 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -39,8 +38,6 @@ const P = {
   shadow:        'rgba(61, 52, 38, 0.08)',
   error:         '#C8706A',
 } as const;
-
-const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
 
 const SLOT_LABELS: PlannerSlotLabel[]  = ['morning', 'afternoon', 'evening', 'custom'];
 const STATUSES: PlannerStatus[] = ['planned', 'worn', 'skipped'];

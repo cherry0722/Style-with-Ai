@@ -1,9 +1,6 @@
-// babel.config.js
-module.exports = function (api) {
-  api.cache(true);
-  return {
-    presets: ['babel-preset-expo'],
-    plugins: ['react-native-worklets/plugin'], // MUST be last
-  };
+module.exports = {
+  presets: ['module:@react-native/babel-preset'],
+  plugins: [
+    'react-native-worklets-core/plugin', // MUST be last — required by react-native-filament
+  ],
 };
-

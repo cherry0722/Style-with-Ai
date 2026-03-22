@@ -1,24 +1,28 @@
-import React from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useAuth } from "../context/AuthContext";
+/**
+ * MyraNative — RootNavigator
+ * Auth-gated stack. Token presence (AsyncStorage) determines which stack renders.
+ */
+import React from 'react';
+import {View, ActivityIndicator, StyleSheet} from 'react-native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
+import {useAuth} from '../context/AuthContext';
 
-import SplashScreen from "../screens/SplashScreen";
-import AuthScreen from "../screens/AuthScreen";
-import LoginScreen from "../screens/LoginScreen";
-import SignupScreen from "../screens/SignupScreen";
-import GuestHomeScreen from "../screens/GuestHomeScreen";
+import SplashScreen from '../screens/SplashScreen';
+import AuthScreen from '../screens/AuthScreen';
+import SignupScreen from '../screens/SignupScreen';
+import GuestHomeScreen from '../screens/GuestHomeScreen';
+import ComingSoonScreen from '../screens/ComingSoonScreen';
+import PremiumSignInScreen from '../screens/PremiumSignInScreen';
 
-import Tabs from "./Tabs";
-import CalendarScreen from "../screens/CalendarScreen";
-import HistoryScreen from "../screens/HistoryScreen";
-import PlanOutfitSuggestionsScreen from "../screens/PlanOutfitSuggestionsScreen";
-import OnboardingProfileScreen from "../screens/OnboardingProfileScreen";
-import OutfitScreen from "../screens/OutfitScreen";
-import LaundryScreen from "../screens/LaundryScreen";
-import ComingSoonScreen from "../screens/ComingSoonScreen";
-import PasswordAndSecurityScreen from "../screens/PasswordAndSecurityScreen";
-import AccountPrivacyScreen from "../screens/AccountPrivacyScreen";
+import Tabs from './Tabs';
+import HistoryScreen from '../screens/HistoryScreen';
+import OutfitScreen from '../screens/OutfitScreen';
+import PlanOutfitSuggestionsScreen from '../screens/PlanOutfitSuggestionsScreen';
+import OnboardingProfileScreen from '../screens/OnboardingProfileScreen';
+import LaundryScreen from '../screens/LaundryScreen';
+import CalendarScreen from '../screens/CalendarScreen';
+import PasswordAndSecurityScreen from '../screens/PasswordAndSecurityScreen';
+import AccountPrivacyScreen from '../screens/AccountPrivacyScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -30,7 +34,7 @@ export type RootStackParamList = {
   Calendar: undefined;
   History: undefined;
   Outfits: undefined;
-  PlanOutfitSuggestions: { date: string; slotLabel: string; occasion: string };
+  PlanOutfitSuggestions: {date: string; slotLabel: string; occasion: string};
   OnboardingProfile: undefined;
   Laundry: undefined;
   PasswordAndSecurity: undefined;
@@ -45,38 +49,43 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-/**
- * Auth-gated navigator.
- * While hydrating (reading token from AsyncStorage): MYRA loading screen.
- * If token exists: authenticated stack (Tabs + all app screens).
- * If token missing: auth stack (Splash → Auth → Login → Signup).
- * React Navigation handles transitions automatically when token changes.
- */
 export default function RootNavigator() {
-  const { token, loading } = useAuth();
+  const {token, loading} = useAuth();
 
   if (loading) {
     return (
-      <View style={hydrationStyles.container}>
+      <View style={styles.loader}>
         <ActivityIndicator size="large" color="#C4A882" />
       </View>
     );
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{headerShown: false}}>
       {token ? (
         <>
           <Stack.Screen name="Main" component={Tabs} />
           <Stack.Screen name="Calendar" component={CalendarScreen} />
           <Stack.Screen name="History" component={HistoryScreen} />
           <Stack.Screen name="Outfits" component={OutfitScreen} />
-          <Stack.Screen name="PlanOutfitSuggestions" component={PlanOutfitSuggestionsScreen} />
-          <Stack.Screen name="OnboardingProfile" component={OnboardingProfileScreen} />
+          <Stack.Screen
+            name="PlanOutfitSuggestions"
+            component={PlanOutfitSuggestionsScreen}
+          />
+          <Stack.Screen
+            name="OnboardingProfile"
+            component={OnboardingProfileScreen}
+          />
           <Stack.Screen name="Laundry" component={LaundryScreen} />
-          <Stack.Screen name="PasswordAndSecurity" component={PasswordAndSecurityScreen} />
+          <Stack.Screen
+            name="PasswordAndSecurity"
+            component={PasswordAndSecurityScreen}
+          />
           <Stack.Screen name="AccountPrivacy" component={AccountPrivacyScreen} />
-          <Stack.Screen name="InformationPermissions" component={ComingSoonScreen} />
+          <Stack.Screen
+            name="InformationPermissions"
+            component={ComingSoonScreen}
+          />
           <Stack.Screen name="Saved" component={ComingSoonScreen} />
           <Stack.Screen name="Favorites" component={ComingSoonScreen} />
           <Stack.Screen name="Activity" component={ComingSoonScreen} />
@@ -87,7 +96,7 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Auth" component={AuthScreen} />
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Login" component={PremiumSignInScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="GuestHome" component={GuestHomeScreen} />
         </>
@@ -96,11 +105,11 @@ export default function RootNavigator() {
   );
 }
 
-const hydrationStyles = StyleSheet.create({
-  container: {
+const styles = StyleSheet.create({
+  loader: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F5F0E8",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F0E8',
   },
 });
