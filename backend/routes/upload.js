@@ -40,6 +40,7 @@ router.post('/image', auth, upload.single('image'), async (req, res) => {
     console.log('[Upload] v1 RAW uploaded for user', userId, 'key', key);
 
     return res.status(200).json({
+      imageUrl: rawUrl,
       rawKey: key,
       rawUrl,
       contentType: req.file.mimetype,

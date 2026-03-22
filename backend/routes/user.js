@@ -316,4 +316,84 @@ router.post("/users/change-password", auth, async (req, res) => {
   }
 });
 
+// GET /api/users/permissions - return the authenticated user's device permissions state
+router.get("/users/permissions", auth, async (req, res) => {
+  try {
+    const userId =
+      (req.user && req.user.id) ||
+      (req.user && req.user.userId) ||
+      (req.user && (req.user._id?.toString?.() || req.user._id));
+
+    if (!userId) {
+      return res.status(401).json({ message: "Invalid auth payload" });
+    }
+
+    const user = await User.findById(userId).lean();
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const permissions = user.permissions || {
+      camera: false,
+      photos: false,
+      location: false,
+      notifications: false,
+      microphone: false,
+    };
+
+    return res.status(200).json({ permissions });
+  } catch (err) {
+    console.error("Error fetching user permissions:", err);
+    return res.status(500).json({ message: "Server error while fetching permissions" });
+  }
+});
+
+// PATCH /api/users/permissions - update one or more device permission flags
+router.patch("/users/permissions", auth, async (req, res) => {
+  try {
+    const userId =
+      (req.user && req.user.id) ||
+      (req.user && req.user.userId) ||
+      (req.user && (req.user._id?.toString?.() || req.user._id));
+
+    if (!userId) {
+      return res.status(401).json({ message: "Invalid auth payload" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const { camera, photos, location, notifications, microphone } = req.body || {};
+    const provided = { camera, photos, location, notifications, microphone };
+
+    for (const [key, value] of Object.entries(provided)) {
+      if (typeof value !== "undefined" && typeof value !== "boolean") {
+        return res.status(400).json({ message: `${key} must be a boolean` });
+      }
+    }
+
+    if (!user.permissions) {
+      user.permissions = {};
+    }
+
+    if (typeof camera !== "undefined") user.permissions.camera = camera;
+    if (typeof photos !== "undefined") user.permissions.photos = photos;
+    if (typeof location !== "undefined") user.permissions.location = location;
+    if (typeof notifications !== "undefined") user.permissions.notifications = notifications;
+    if (typeof microphone !== "undefined") user.permissions.microphone = microphone;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      permissions: user.permissions,
+    });
+  } catch (err) {
+    console.error("Error updating user permissions:", err);
+    return res.status(500).json({ message: "Server error while updating permissions" });
+  }
+});
+
 module.exports = router;

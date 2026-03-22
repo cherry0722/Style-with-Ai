@@ -45,6 +45,13 @@ const userSchema = Schema(
       activityVisible: { type: Boolean, default: null },
       dataSharingConsent: { type: Boolean, default: null },
     },
+    permissions: {
+      camera: { type: Boolean, default: false },
+      photos: { type: Boolean, default: false },
+      location: { type: Boolean, default: false },
+      notifications: { type: Boolean, default: false },
+      microphone: { type: Boolean, default: false },
+    },
   },
   {
     timestamps: true,
