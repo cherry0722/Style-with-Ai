@@ -4,23 +4,31 @@
  * Dedicated stage for the user's 3D avatar.
  * Layout: header → stage card (flex) → reserved bottom strip for future controls.
  *
- * Rendering architecture (unchanged — required by react-native-filament):
+ * Rendering architecture (required by react-native-filament):
  *
  *   FilamentScene   — initialises the Filament engine; provides
  *                     FilamentContext + RenderCallbackContext to children
  *     └─ SceneContent  — MUST be a separate child component so both contexts
- *                        are available when hooks inside Camera/Model run
+ *                        are available when hooks inside Camera/Model run.
+ *                        Owns rotationY state; exposes SceneHandle imperatively.
  *          └─ FilamentView   — the Metal surface
- *               ├─ Camera        — default position [0, 0, 8], target origin
- *               ├─ DefaultLight  — IBL (RNF_default_env_ibl.ktx) + directional
- *               └─ Model         — loads avatar.glb via useModel internally
+ *               ├─ StaticSceneParts  — React.memo'd: Camera + DefaultLight.
+ *               │    Never re-renders during drag — prevents the
+ *               │    "FilamentBuffer already released" crash in EnvironmentalLight.
+ *               └─ Model  — receives rotate prop; only this subtree updates per frame.
+ *
+ * Rotation isolation strategy (two layers):
+ *   1. Avatar3DScreen holds NO rotation state. PanResponder calls
+ *      sceneRef.current.setRotationY() imperatively → zero outer re-renders.
+ *   2. StaticSceneParts is React.memo'd with no props → Camera and DefaultLight
+ *      are never re-rendered even when SceneContent's rotationY state changes.
  *
  * Model path: assets/models/avatar.glb
  *   Metro resolves .glb via the assetExts entry in metro.config.js.
  */
 
-import React from 'react';
-import {StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import React, {useImperativeHandle, useRef, useState} from 'react';
+import {PanResponder, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Ionicons} from '@expo/vector-icons';
 import {
@@ -34,11 +42,32 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AVATAR_MODEL = require('../../assets/models/avatar.glb');
 
-// SceneContent is a separate component — FilamentContext must propagate
-// before the hooks inside Camera, DefaultLight, and Model execute.
-function SceneContent() {
+// ── Interaction constants ──────────────────────────────────────────────────────
+const ROTATION_SENSITIVITY = 0.4;  // deg/px  (225 px swipe ≈ 90°, full 360° possible)
+
+// NOTE: no scale feedback prop is passed to Model.
+// useApplyTransformations (react-native-filament internal) only re-applies
+// rotate when its value *changes*. If any other Model prop changes while rotate
+// stays the same, transformToUnitCube resets the matrix but rotate is skipped
+// (areFloat3Equal guard), causing a snap back to front. Keeping rotate as the
+// ONLY changing prop avoids that entirely.
+
+// ── Imperative handle exposed by SceneContent ─────────────────────────────────
+// Methods reference only refs/stable setters → no stale closures.
+export interface SceneHandle {
+  setRotationY: (deg: number) => void;
+  // Returns the authoritative current rotationY so onGrant anchors correctly
+  // across consecutive drags with no snap and no accumulated drift.
+  getRotationY: () => number;
+}
+
+// Camera and DefaultLight are completely static — same props forever.
+// React.memo ensures they are NEVER re-rendered when rotationY changes,
+// which prevents DefaultLight from re-initialising the IBL KTX buffer while
+// the Filament render thread is still using it (the crash root cause).
+const StaticSceneParts = React.memo(function StaticSceneParts() {
   return (
-    <FilamentView style={styles.filamentView}>
+    <>
       {/*
        * Camera tuning — full-body framing.
        *
@@ -46,21 +75,11 @@ function SceneContent() {
        *   transformToUnitCube scales by 2.0 / maxExtent, so the model's
        *   dominant axis spans ±1 unit (2 units total), NOT ±0.5.
        *
-       * At Z=3.5 / 55 mm the horizontal visible half-width was only
-       *   3.5 × (18/55) = 1.145 units
-       * leaving just 0.145 units clearance around arms at ±1.0 — so any
-       * pose with arms near full extension clips immediately.
-       *
        *   cameraPosition  [0, 0, 4.5]
        *     → horizontal half-width = 4.5 × (18/50) = 1.62 units
        *       → 0.62 units clearance around arms at ±1.0  (62% margin)
-       *     → vertical half-height (aspect ≈ 0.85)
-       *          = 4.5 × (18 / (50 × 0.85)) = 1.91 units
+       *     → vertical half-height (aspect ≈ 0.85) = 1.91 units
        *       → 0.91 units clearance above head at +1.0  (91% margin)
-       *
-       *   cameraTarget    [0, 0, 0]   — centre of the normalised cube
-       *   focalLength     50 mm       — natural portrait lens; going wider
-       *                                 would distort the figure
        */}
       <Camera
         cameraPosition={[0, 0, 4.5]}
@@ -68,18 +87,92 @@ function SceneContent() {
         focalLengthInMillimeters={50}
       />
       <DefaultLight />
+    </>
+  );
+});
+
+// SceneContent owns rotationY state and exposes it imperatively.
+// StaticSceneParts (Camera + DefaultLight) is memo-guarded — never re-renders.
+// Only Model gets new rotate prop on each drag frame; no other prop changes.
+const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref) {
+  const [rotationY, setRotationY] = useState(0);
+
+  // Ref mirror so getRotationY() returns the live value before React flushes.
+  const rotationYRef = useRef(0);
+
+  useImperativeHandle(ref, () => ({
+    setRotationY(deg) {
+      rotationYRef.current = deg;
+      setRotationY(deg);
+    },
+    getRotationY() {
+      return rotationYRef.current;
+    },
+  }), []);
+
+  return (
+    <FilamentView style={styles.filamentView}>
+      <StaticSceneParts />
       {/*
        * transformToUnitCube normalises the model to a 1×1×1 cube at the
-       * origin regardless of the GLB's original scale units.  This makes
-       * the camera settings above reliable for any human-figure GLB.
+       * origin regardless of the GLB's original scale units.
+       *
+       * rotate=[0, rotationY, 0] — Y-axis only; avatar stays perfectly upright.
+       *
+       * No scale prop: changing any prop other than rotate while rotate is
+       * unchanged causes useApplyTransformations to re-run transformToUnitCube
+       * (resetting rotation) without re-applying rotate (areFloat3Equal guard
+       * skips it) → snap back to front. Keeping rotate as the only changing
+       * prop avoids this entirely.
        */}
-      <Model source={AVATAR_MODEL} transformToUnitCube />
+      <Model
+        source={AVATAR_MODEL}
+        transformToUnitCube
+        rotate={[0, rotationY, 0]}
+      />
     </FilamentView>
   );
-}
+});
+
+// AvatarStage wraps FilamentScene + SceneContent in a memo boundary so that
+// any future re-renders of Avatar3DScreen (e.g. insets change) cannot cascade
+// into the Filament engine. sceneRef is a stable object → memo never invalidates.
+const AvatarStage = React.memo(function AvatarStage(
+  {sceneRef}: Readonly<{sceneRef: React.RefObject<SceneHandle | null>}>,
+) {
+  return (
+    <FilamentScene>
+      <SceneContent ref={sceneRef} />
+    </FilamentScene>
+  );
+});
 
 export default function Avatar3DScreen() {
   const insets = useSafeAreaInsets();
+
+  // SceneContent is driven entirely via imperative handle — no rotation state here.
+  const sceneRef = useRef<SceneHandle>(null);
+  // Snapshot of rotationY taken at gesture start (read from scene, not a local
+  // accumulator, so inertia position is always the anchor for the next drag).
+  const baseAtGestureStart = useRef(0);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // Claim horizontal moves; pass vertical scrolls to the parent.
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > Math.abs(gs.dy),
+      onPanResponderGrant: () => {
+        // Anchor from the exact persisted angle so no snap occurs between drags.
+        baseAtGestureStart.current = sceneRef.current?.getRotationY() ?? 0;
+      },
+      onPanResponderMove: (_, gs) => {
+        const nextY = baseAtGestureStart.current + gs.dx * ROTATION_SENSITIVITY;
+        sceneRef.current?.setRotationY(nextY);
+      },
+      // No onRelease / onTerminate: nothing changes on release, so Model is
+      // never re-rendered, transformToUnitCube is never re-run, and the final
+      // rotation angle is preserved exactly where the finger stopped.
+    }),
+  ).current;
 
   return (
     <View style={styles.root}>
@@ -120,10 +213,8 @@ export default function Avatar3DScreen() {
       <View style={styles.stageWrapper}>
         <View style={styles.stageCard}>
           {/* FilamentScene does not accept a style prop — sized via View */}
-          <View style={styles.sceneContainer}>
-            <FilamentScene>
-              <SceneContent />
-            </FilamentScene>
+          <View style={styles.sceneContainer} {...panResponder.panHandlers}>
+            <AvatarStage sceneRef={sceneRef} />
           </View>
         </View>
       </View>
