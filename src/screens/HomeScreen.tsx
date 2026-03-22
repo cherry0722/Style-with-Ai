@@ -21,7 +21,9 @@ import { useNavigation } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../store/settings';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
+
 import { listLaundry } from '../api/wardrobe';
 import { fetchForecast, ForecastDay } from '../api/weather';
 
@@ -195,6 +197,8 @@ export default function HomeScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user, token } = useAuth();
+  const settings = useSettings();
+
 
   const [data, setData]             = useState<HomeTodayResponse | null>(null);
   const [loading, setLoading]       = useState(true);
@@ -215,6 +219,10 @@ export default function HomeScreen() {
 
   // ── Data fetching (untouched) ─────────────────────────────────────────────
   const loadLocation = useCallback(async () => {
+    if (!settings.locationEnabled) {
+      setLocationDenied(true);
+      return;
+    }
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
@@ -225,7 +233,7 @@ export default function HomeScreen() {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
       if (loc?.coords) setLocationCoords({ lat: loc.coords.latitude, lon: loc.coords.longitude });
     } catch { /* no-op */ }
-  }, []);
+  }, [settings.locationEnabled]);
 
   const loadHomeToday = useCallback(async () => {
     if (!token) { setLoading(false); setData(null); return; }

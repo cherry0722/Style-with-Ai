@@ -145,6 +145,15 @@ export interface AppSettings {
   locationPermissionGranted: boolean;
   lastWeatherUpdate?: string;
   preferredLocation?: string;
+  // Permissions (app-level toggles)
+  cameraEnabled?: boolean;
+  photosEnabled?: boolean;
+  locationEnabled?: boolean;
+  microphoneEnabled?: boolean;
+  // Accessibility
+  textSize?: 'small' | 'medium' | 'large';
+  // Activity tracking — cumulative ms the app has been in foreground
+  totalTimeSpentMs?: number;
 }
 
 /** Outfit Preferences (Phase 5B) */

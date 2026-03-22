@@ -42,3 +42,20 @@ export const updateUserPrivacy = async (privacy: UserPrivacyPayload) => {
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   return client.post("/api/users/change-password", { currentPassword, newPassword });
 };
+
+export interface UserPermissionsPayload {
+  camera?: boolean;
+  photos?: boolean;
+  location?: boolean;
+  notifications?: boolean;
+  microphone?: boolean;
+}
+
+export const getUserPermissions = async (): Promise<UserPermissionsPayload> => {
+  const res = await client.get<{ permissions: UserPermissionsPayload }>("/api/users/permissions");
+  return res.data.permissions;
+};
+
+export const updateUserPermissions = async (permissions: UserPermissionsPayload) => {
+  return client.patch("/api/users/permissions", permissions);
+};

@@ -1,10 +1,13 @@
 import axios, { AxiosError } from 'axios';
-
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL?.trim() || 'http://localhost:5001';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getTokenFromAuthSync } from './tokenGetter';
 import { callOn401 } from './on401';
+
+const _base = process.env.EXPO_PUBLIC_API_URL?.trim();
+if (!_base) {
+  throw new Error('EXPO_PUBLIC_API_URL is not set. Pass it when starting Expo.');
+}
+export const API_BASE_URL: string = _base;
 
 async function getToken(): Promise<string | undefined> {
   try {

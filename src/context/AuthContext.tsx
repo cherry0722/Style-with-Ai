@@ -110,6 +110,17 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
                     : prev.notificationsEnabled,
               }));
             }
+            const p = (me as any).permissions;
+            if (p && typeof p === "object") {
+              useSettings.setState((prev) => ({
+                ...prev,
+                cameraEnabled: typeof p.camera === "boolean" ? p.camera : prev.cameraEnabled,
+                photosEnabled: typeof p.photos === "boolean" ? p.photos : prev.photosEnabled,
+                locationEnabled: typeof p.location === "boolean" ? p.location : prev.locationEnabled,
+                microphoneEnabled: typeof p.microphone === "boolean" ? p.microphone : prev.microphoneEnabled,
+                notificationsEnabled: typeof p.notifications === "boolean" ? p.notifications : prev.notificationsEnabled,
+              }));
+            }
           } catch (_) {
             if (!cancelled && storedUser) {
               try {
@@ -241,6 +252,17 @@ setUser(userData);
             typeof s.notificationsEnabled === "boolean"
               ? s.notificationsEnabled
               : prev.notificationsEnabled,
+        }));
+      }
+      const p = (me as any).permissions;
+      if (p && typeof p === "object") {
+        useSettings.setState((prev) => ({
+          ...prev,
+          cameraEnabled: typeof p.camera === "boolean" ? p.camera : prev.cameraEnabled,
+          photosEnabled: typeof p.photos === "boolean" ? p.photos : prev.photosEnabled,
+          locationEnabled: typeof p.location === "boolean" ? p.location : prev.locationEnabled,
+          microphoneEnabled: typeof p.microphone === "boolean" ? p.microphone : prev.microphoneEnabled,
+          notificationsEnabled: typeof p.notifications === "boolean" ? p.notifications : prev.notificationsEnabled,
         }));
       }
     } catch (_) {}

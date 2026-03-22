@@ -2,13 +2,11 @@
 import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 import type { NotificationTriggerInput } from "expo-notifications";
-
-// Ensure expo-device is installed: npm install expo-device
+import { useSettings } from "../store/settings";
 
 // Configure how notifications behave when received
 Notifications.setNotificationHandler({
   handleNotification: async (): Promise<Notifications.NotificationBehavior> => {
-    // return object explicitly (fixes TS type error)
     return {
       shouldShowAlert: true,
       shouldPlaySound: true,
@@ -55,7 +53,20 @@ export async function scheduleNotification({
   body: string;
   trigger: NotificationTriggerInput;
 }): Promise<string | undefined> {
+  const { notificationsEnabled } = useSettings.getState();
+  if (!notificationsEnabled) {
+    console.log("Notification skipped - app level toggle is OFF");
+    return undefined;
+  }
+
   try {
+    // Also check OS status real-time
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') {
+      console.log("Notification skipped - OS permission not granted");
+      return undefined;
+    }
+
     return await Notifications.scheduleNotificationAsync({
       content: { title, body },
       trigger,
@@ -89,18 +100,11 @@ export async function sendWeatherAlert(condition: string) {
  * Schedule daily outfit suggestion at 8:00 AM
  */
 export async function scheduleDailyOutfitSuggestion() {
-  try {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "👕 Outfit Suggestion",
-        body: "Check your wardrobe for today's recommended outfit!",
-      },
-      trigger: { hour: 8, minute: 0, type: Notifications.SchedulableTriggerInputTypes.DAILY },
-    });
-    console.log("✅ Daily outfit suggestion scheduled");
-  } catch (error) {
-    console.error("Error scheduling daily outfit reminder:", error);
-  }
+  await scheduleNotification({
+    title: "👕 Outfit Suggestion",
+    body: "Check your wardrobe for today's recommended outfit!",
+    trigger: { hour: 8, minute: 0, type: Notifications.SchedulableTriggerInputTypes.DAILY },
+  });
 }
 
 /**

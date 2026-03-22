@@ -124,7 +124,10 @@ export default function Tabs() {
       try {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Permission", "Camera permission is needed.");
+          Alert.alert(
+            "Camera Permission Required",
+            "Please enable Camera access in Settings → Information & Permissions, then try again."
+          );
           return;
         }
         const r = await ImagePicker.launchCameraAsync({
@@ -150,7 +153,10 @@ export default function Tabs() {
       try {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== "granted") {
-          Alert.alert("Permission", "Library access is needed.");
+          Alert.alert(
+            "Photo Library Permission Required",
+            "Please enable Photo Library access in Settings → Information & Permissions, then try again."
+          );
           return;
         }
         const r = await ImagePicker.launchImageLibraryAsync({

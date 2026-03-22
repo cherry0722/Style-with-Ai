@@ -19,6 +19,11 @@ import LaundryScreen from "../screens/LaundryScreen";
 import ComingSoonScreen from "../screens/ComingSoonScreen";
 import PasswordAndSecurityScreen from "../screens/PasswordAndSecurityScreen";
 import AccountPrivacyScreen from "../screens/AccountPrivacyScreen";
+import InformationPermissionsScreen from "../screens/InformationPermissionsScreen";
+import ActivityScreen from "../screens/ActivityScreen";
+import AccessibilityScreen from "../screens/AccessibilityScreen";
+import HelpScreen from "../screens/HelpScreen";
+import AboutScreen from "../screens/AboutScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -39,6 +44,7 @@ export type RootStackParamList = {
   Saved: undefined;
   Favorites: undefined;
   Activity: undefined;
+  Accessibility: undefined;
   Help: undefined;
   About: undefined;
 };
@@ -76,12 +82,13 @@ export default function RootNavigator() {
           <Stack.Screen name="Laundry" component={LaundryScreen} />
           <Stack.Screen name="PasswordAndSecurity" component={PasswordAndSecurityScreen} />
           <Stack.Screen name="AccountPrivacy" component={AccountPrivacyScreen} />
-          <Stack.Screen name="InformationPermissions" component={ComingSoonScreen} />
+          <Stack.Screen name="InformationPermissions" component={InformationPermissionsScreen} />
           <Stack.Screen name="Saved" component={ComingSoonScreen} />
           <Stack.Screen name="Favorites" component={ComingSoonScreen} />
-          <Stack.Screen name="Activity" component={ComingSoonScreen} />
-          <Stack.Screen name="Help" component={ComingSoonScreen} />
-          <Stack.Screen name="About" component={ComingSoonScreen} />
+          <Stack.Screen name="Activity" component={ActivityScreen} />
+          <Stack.Screen name="Accessibility" component={AccessibilityScreen} />
+          <Stack.Screen name="Help" component={HelpScreen} />
+          <Stack.Screen name="About" component={AboutScreen} />
         </>
       ) : (
         <>
