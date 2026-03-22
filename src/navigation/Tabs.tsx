@@ -12,7 +12,7 @@
  */
 import React, { useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import ComingSoonScreen from '../screens/ComingSoonScreen';
+import Avatar3DScreen from '../screens/Avatar3DScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ClosetScreen from '../screens/ClosetScreen';
@@ -233,7 +233,7 @@ export default function Tabs() {
           tabBarButton: () => <AddItemTabButton onPress={handleAddItem} />,
         }}
       />
-      <Tab.Screen name="Avatar"   component={ComingSoonScreen} />
+      <Tab.Screen name="Avatar"   component={Avatar3DScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
