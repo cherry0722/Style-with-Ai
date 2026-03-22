@@ -62,7 +62,7 @@ export function recommend(closet: Garment[], context: OutfitTemplate["context"],
   
   // When AI is enabled, this function could call the Python backend
   // For now, fall back to local logic until AI integration is complete
-  // TODO: Implement AI backend call when EXPO_PUBLIC_ENABLE_AI=true
+  // TODO: Implement AI backend call when ENABLE_AI=true
   return localRuleBasedRecommend(closet, context, topK);
 }
 

@@ -186,7 +186,6 @@ export default function SettingsScreen() {
             onPress={() => {
               // Reuse existing navigation patterns (HomeScreen.goTo)
               // Route is registered on the Root stack.
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("PasswordAndSecurity");
             }}
           />
@@ -237,7 +236,6 @@ export default function SettingsScreen() {
             icon="document-text-outline"
             label="Information & Permissions"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("InformationPermissions");
             }}
           />
@@ -245,7 +243,6 @@ export default function SettingsScreen() {
             icon="shield-outline"
             label="Account Privacy"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("AccountPrivacy");
             }}
             last
@@ -259,7 +256,6 @@ export default function SettingsScreen() {
             icon="bookmark-outline"
             label="Saved"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("Saved");
             }}
           />
@@ -267,7 +263,6 @@ export default function SettingsScreen() {
             icon="heart-outline"
             label="Favorites"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("Favorites");
             }}
           />
@@ -275,7 +270,6 @@ export default function SettingsScreen() {
             icon="bar-chart-outline"
             label="Your Activity"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("Activity");
             }}
           />
@@ -338,7 +332,6 @@ export default function SettingsScreen() {
             icon="help-circle-outline"
             label="Help"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("Help");
             }}
           />
@@ -346,7 +339,6 @@ export default function SettingsScreen() {
             icon="information-circle-outline"
             label="About"
             onPress={() => {
-              // @ts-expect-error string-based navigation for mixed stack/tab routes
               (navigation as any).navigate("About");
             }}
           />

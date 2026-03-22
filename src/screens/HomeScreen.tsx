@@ -1,6 +1,9 @@
 /**
  * Home tab — GET /api/home/today.
  * Warm beige palette, CSS-drawn avatar, pressable CTA, 3 info cards, weather popup.
+ *
+ * MyraNative migration: expo-location → react-native-geolocation-service.
+ * Only loadLocation() changed; all other logic, layout, and styles are verbatim.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -18,7 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import * as Location from 'expo-location';
+import Geolocation from 'react-native-geolocation-service';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
@@ -213,20 +216,38 @@ export default function HomeScreen() {
   const infoCardW   = (containerW - GRID_GAP * 2) / 3;
   const bottomPad   = BOTTOM_RESERVE + (insets?.bottom ?? 0);
 
-  // ── Data fetching (untouched) ─────────────────────────────────────────────
-  const loadLocation = useCallback(async () => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationDenied(true);
-        return;
-      }
-      setLocationDenied(false);
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
-      if (loc?.coords) setLocationCoords({ lat: loc.coords.latitude, lon: loc.coords.longitude });
-    } catch { /* no-op */ }
+  // ── Location (react-native-geolocation-service, replaces expo-location) ────
+  const loadLocation = useCallback(() => {
+    const doGetPosition = () => {
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          setLocationDenied(false);
+          setLocationCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        },
+        () => {
+          setLocationDenied(true);
+        },
+        { enableHighAccuracy: false, timeout: 10000, maximumAge: 30000 },
+      );
+    };
+
+    if (Platform.OS === 'ios') {
+      Geolocation.requestAuthorization('whenInUse')
+        .then((auth) => {
+          if (auth === 'granted') {
+            doGetPosition();
+          } else {
+            setLocationDenied(true);
+          }
+        })
+        .catch(() => setLocationDenied(true));
+    } else {
+      // Android: ACCESS_FINE_LOCATION must be declared in AndroidManifest.xml
+      doGetPosition();
+    }
   }, []);
 
+  // ── Data fetching (unchanged from Expo app) ───────────────────────────────
   const loadHomeToday = useCallback(async () => {
     if (!token) { setLoading(false); setData(null); return; }
     try {
@@ -446,7 +467,7 @@ export default function HomeScreen() {
                     <ActivityIndicator size="small" color={P.accent} />
                   </View>
                 ) : forecastDays.length > 0 ? (
-                  forecastDays.map((day, idx) => (
+                  forecastDays.map((day) => (
                     <View key={day.dateISO} style={styles.weatherRow}>
                       <Text style={styles.weatherDay}>{day.label}</Text>
                       <Ionicons name={iconForCondition(day.summary)} size={18} color={P.secondaryText} />

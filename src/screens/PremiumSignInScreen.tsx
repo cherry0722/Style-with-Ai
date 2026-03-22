@@ -24,7 +24,7 @@ interface PremiumSignInScreenProps {
 export default function PremiumSignInScreen({ navigation: navigationProp }: PremiumSignInScreenProps = {}) {
   const theme = useTheme();
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Use navigation hook as fallback if prop is not provided
   const navigationHook = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const navigation = navigationProp || navigationHook;
@@ -44,12 +44,12 @@ export default function PremiumSignInScreen({ navigation: navigationProp }: Prem
 
   return (
     <View style={styles.container}>
-      <StatusBar 
-        barStyle={theme.isDark ? "light-content" : "dark-content"} 
-        backgroundColor="transparent" 
-        translucent 
+      <StatusBar
+        barStyle={theme.isDark ? "light-content" : "dark-content"}
+        backgroundColor="transparent"
+        translucent
       />
-      
+
       {/* Main Content */}
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
@@ -131,7 +131,6 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: theme.colors.textPrimary,
     letterSpacing: 3,
     marginBottom: theme.spacing.sm,
-    fontFamily: 'Didot',
     textAlign: 'center',
   },
   brandTagline: {

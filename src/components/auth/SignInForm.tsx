@@ -56,7 +56,7 @@ export default function SignInForm({ onSignInSuccess, isLoading, onLoadingChange
     try {
       onLoadingChange(true);
       hapticFeedback.light();
-      
+
       await login(email.trim(), password);
       // Don't call onLoadingChange(false) here - let the navigation happen
       // The loading state will be reset when the screen unmounts
