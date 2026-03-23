@@ -28,7 +28,17 @@
  */
 
 import React, {useImperativeHandle, useRef, useState} from 'react';
-import {PanResponder, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  PanResponder,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Ionicons} from '@expo/vector-icons';
 import {
@@ -38,6 +48,7 @@ import {
   FilamentView,
   Model,
 } from 'react-native-filament';
+import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AVATAR_MODEL = require('../../assets/models/avatar.glb');
@@ -51,6 +62,14 @@ const ROTATION_SENSITIVITY = 0.4;  // deg/px  (225 px swipe ≈ 90°, full 360°
 // stays the same, transformToUnitCube resets the matrix but rotate is skipped
 // (areFloat3Equal guard), causing a snap back to front. Keeping rotate as the
 // ONLY changing prop avoids that entirely.
+
+// ── Occasion options ───────────────────────────────────────────────────────────
+const OCCASIONS = [
+  {label: 'Casual',  value: 'casual'},
+  {label: 'College', value: 'college'},
+  {label: 'Party',   value: 'party'},
+  {label: 'Date',    value: 'date'},
+] as const;
 
 // ── Imperative handle exposed by SceneContent ─────────────────────────────────
 // Methods reference only refs/stable setters → no stale closures.
@@ -156,6 +175,59 @@ export default function Avatar3DScreen() {
   // accumulator, so inertia position is always the anchor for the next drag).
   const baseAtGestureStart = useRef(0);
 
+  // ── Occasion state ───────────────────────────────────────────────────────────
+  const [occasionIndex, setOccasionIndex] = useState(0);
+
+  // ── Suggestion state ─────────────────────────────────────────────────────────
+  const [suggestions, setSuggestions] = useState<ReasonedOutfitEntry[]>([]);
+  const [outfitIndex, setOutfitIndex] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [hasGenerated, setHasGenerated] = useState(false);
+
+  // ── Occasion selector ────────────────────────────────────────────────────────
+  const handleSelectOccasion = () => {
+    const sheetOptions = ['Cancel', ...OCCASIONS.map(o => o.label)];
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {options: sheetOptions, cancelButtonIndex: 0},
+        (i) => { if (i > 0) { setOccasionIndex(i - 1); } },
+      );
+    } else {
+      Alert.alert(
+        'Select Occasion',
+        undefined,
+        OCCASIONS.map((o, i) => ({text: o.label, onPress: () => setOccasionIndex(i)})),
+        {cancelable: true},
+      );
+    }
+  };
+
+  // ── Generate handler ─────────────────────────────────────────────────────────
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setGenerateError(null);
+    try {
+      const res = await getReasonedOutfits({occasion: OCCASIONS[occasionIndex].value});
+      setSuggestions(res.outfits.slice(0, 3));
+      setOutfitIndex(0);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to generate. Please try again.';
+      setGenerateError(message);
+    } finally {
+      setIsGenerating(false);
+      setHasGenerated(true);
+    }
+  };
+
+  // ── Arrow navigation ─────────────────────────────────────────────────────────
+  const goToPrev = () => {
+    setOutfitIndex(i => (i - 1 + suggestions.length) % suggestions.length);
+  };
+  const goToNext = () => {
+    setOutfitIndex(i => (i + 1) % suggestions.length);
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       // Claim horizontal moves; pass vertical scrolls to the parent.
@@ -174,6 +246,82 @@ export default function Avatar3DScreen() {
     }),
   ).current;
 
+  // ── Suggestion strip rendering ───────────────────────────────────────────────
+  const renderSuggestionStrip = () => {
+    if (!hasGenerated && !isGenerating) { return null; }
+
+    if (isGenerating) {
+      return (
+        <View style={styles.suggestionStrip}>
+          <ActivityIndicator color={TITLE_COLOR} size="small" />
+          <Text style={styles.generatingText}>Generating outfit…</Text>
+        </View>
+      );
+    }
+
+    if (generateError) {
+      return (
+        <View style={styles.suggestionStrip}>
+          <Text style={styles.errorText} numberOfLines={2}>{generateError}</Text>
+        </View>
+      );
+    }
+
+    if (suggestions.length === 0) {
+      return (
+        <View style={styles.suggestionStrip}>
+          <Text style={styles.emptyTitle}>No outfit suggestions yet</Text>
+          <Text style={styles.emptySub}>Add more clothes to your closet and try again</Text>
+        </View>
+      );
+    }
+
+    const canNavigate = suggestions.length > 1;
+    const current = suggestions[outfitIndex];
+    const firstReason = current?.reasons?.[0] ?? null;
+
+    return (
+      <View style={styles.suggestionStrip}>
+        <View style={styles.suggestionRow}>
+          <TouchableOpacity
+            style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
+            onPress={goToPrev}
+            disabled={!canNavigate}
+            accessibilityRole="button"
+            accessibilityLabel="Previous outfit">
+            <Ionicons
+              name="chevron-back"
+              size={18}
+              color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
+            />
+          </TouchableOpacity>
+
+          <View style={styles.suggestionInfo}>
+            <Text style={styles.outfitCount}>
+              Outfit {outfitIndex + 1} of {suggestions.length}
+            </Text>
+            {firstReason ? (
+              <Text style={styles.outfitReason} numberOfLines={1}>{firstReason}</Text>
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
+            onPress={goToNext}
+            disabled={!canNavigate}
+            accessibilityRole="button"
+            accessibilityLabel="Next outfit">
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.root}>
 
@@ -189,22 +337,30 @@ export default function Avatar3DScreen() {
         <TouchableOpacity
           style={styles.occasionRow}
           activeOpacity={0.7}
+          onPress={handleSelectOccasion}
           accessibilityRole="button"
           accessibilityLabel="Select occasion">
-          <Text style={styles.occasionText}>Select the occasion</Text>
+          <Text style={styles.occasionText}>{OCCASIONS[occasionIndex].label}</Text>
           <Ionicons name="chevron-down" size={18} color={CHEVRON_COLOR} />
         </TouchableOpacity>
 
         {/* Generate button */}
         <TouchableOpacity
-          style={styles.generateBtn}
+          style={[styles.generateBtn, isGenerating && styles.generateBtnDisabled]}
           activeOpacity={0.85}
+          onPress={() => { void handleGenerate(); }}
+          disabled={isGenerating}
           accessibilityRole="button"
           accessibilityLabel="Generate outfit">
-          <Text style={styles.generateText}>Generate</Text>
+          <Text style={styles.generateText}>
+            {isGenerating ? 'Generating…' : 'Generate'}
+          </Text>
         </TouchableOpacity>
 
       </View>
+
+      {/* ── Compact suggestion strip ──────────────────────────────── */}
+      {renderSuggestionStrip()}
 
       {/* ── 3D Stage card — ~60 % of remaining vertical space ───────
            flex: 3 vs the actionRow's implicit fixed height keeps the
@@ -263,6 +419,7 @@ const CONTROL_BG    = '#27201A';                      // slightly lighter than p
 const CONTROL_BORDER= 'rgba(196, 168, 130, 0.18)';
 const CHEVRON_COLOR = 'rgba(196, 168, 130, 0.55)';
 const ACTION_BG     = 'rgba(255, 255, 255, 0.07)';   // subtle glass
+const DISABLED_COLOR = 'rgba(196, 168, 130, 0.25)';  // muted gold for disabled arrows
 
 const styles = StyleSheet.create({
   root: {
@@ -285,7 +442,7 @@ const styles = StyleSheet.create({
   // ── Top controls ───────────────────────────────────────────────
   controls: {
     paddingHorizontal: 16,
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 10,
   },
   occasionRow: {
@@ -301,7 +458,7 @@ const styles = StyleSheet.create({
   },
   occasionText: {
     fontSize: 15,
-    color: 'rgba(196, 168, 130, 0.55)',
+    color: TITLE_COLOR,
     fontWeight: '400',
   },
   generateBtn: {
@@ -311,11 +468,82 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 44,
   },
+  generateBtnDisabled: {
+    opacity: 0.6,
+  },
   generateText: {
     fontSize: 15,
     fontWeight: '600',
     color: STAGE_BG,                // dark text on gold — readable
     letterSpacing: 0.4,
+  },
+
+  // ── Suggestion strip ───────────────────────────────────────────
+  suggestionStrip: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: CONTROL_BG,
+    borderWidth: 1,
+    borderColor: CONTROL_BORDER,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  suggestionInfo: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  outfitCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: TITLE_COLOR,
+    letterSpacing: 0.3,
+  },
+  outfitReason: {
+    fontSize: 11,
+    color: CHEVRON_COLOR,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  arrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(196, 168, 130, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrowBtnDisabled: {
+    opacity: 0.4,
+  },
+  generatingText: {
+    fontSize: 13,
+    color: CHEVRON_COLOR,
+    marginTop: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: 'rgba(220, 100, 100, 0.85)',
+    textAlign: 'center',
+  },
+  emptyTitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: TITLE_COLOR,
+    textAlign: 'center',
+  },
+  emptySub: {
+    fontSize: 11,
+    color: CHEVRON_COLOR,
+    textAlign: 'center',
+    marginTop: 3,
   },
 
   // ── Stage card ─────────────────────────────────────────────────
