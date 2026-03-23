@@ -29,11 +29,9 @@
 
 import React, {useImperativeHandle, useRef, useState} from 'react';
 import {
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
   PanResponder,
-  Platform,
+  Pressable,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -177,6 +175,9 @@ export default function Avatar3DScreen() {
 
   // ── Occasion state ───────────────────────────────────────────────────────────
   const [occasionIndex, setOccasionIndex] = useState(0);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  // Measured height of the occasion row so the dropdown can position itself flush below it.
+  const [occasionRowHeight, setOccasionRowHeight] = useState(0);
 
   // ── Suggestion state ─────────────────────────────────────────────────────────
   const [suggestions, setSuggestions] = useState<ReasonedOutfitEntry[]>([]);
@@ -185,22 +186,12 @@ export default function Avatar3DScreen() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [hasGenerated, setHasGenerated] = useState(false);
 
-  // ── Occasion selector ────────────────────────────────────────────────────────
-  const handleSelectOccasion = () => {
-    const sheetOptions = ['Cancel', ...OCCASIONS.map(o => o.label)];
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {options: sheetOptions, cancelButtonIndex: 0},
-        (i) => { if (i > 0) { setOccasionIndex(i - 1); } },
-      );
-    } else {
-      Alert.alert(
-        'Select Occasion',
-        undefined,
-        OCCASIONS.map((o, i) => ({text: o.label, onPress: () => setOccasionIndex(i)})),
-        {cancelable: true},
-      );
-    }
+  // ── Dropdown handlers ────────────────────────────────────────────────────────
+  const toggleDropdown  = () => setDropdownOpen(prev => !prev);
+  const closeDropdown   = () => setDropdownOpen(false);
+  const selectOccasion  = (index: number) => {
+    setOccasionIndex(index);
+    setDropdownOpen(false);
   };
 
   // ── Generate handler ─────────────────────────────────────────────────────────
@@ -246,43 +237,56 @@ export default function Avatar3DScreen() {
     }),
   ).current;
 
-  // ── Suggestion strip rendering ───────────────────────────────────────────────
-  const renderSuggestionStrip = () => {
-    if (!hasGenerated && !isGenerating) { return null; }
+  // ── Suggestion panel ─────────────────────────────────────────────────────────
+  // Always rendered — makes the panel a persistent section, not a popup banner.
+  // States: idle → loading → (error | empty | outfits)
+  const renderSuggestionPanel = () => {
+    // ── Decide header right-side content ────────────────────────────────────
+    const headerRight = (hasGenerated && !isGenerating && !generateError && suggestions.length > 0)
+      ? <Text style={styles.outfitCounter}>{outfitIndex + 1} / {suggestions.length}</Text>
+      : null;
+
+    // ── Decide body ──────────────────────────────────────────────────────────
+    let body: React.ReactNode;
 
     if (isGenerating) {
-      return (
-        <View style={styles.suggestionStrip}>
+      // Loading
+      body = (
+        <View style={styles.panelLoadingRow}>
           <ActivityIndicator color={TITLE_COLOR} size="small" />
-          <Text style={styles.generatingText}>Generating outfit…</Text>
+          <Text style={styles.panelMeta}>Generating suggestions…</Text>
         </View>
       );
-    }
-
-    if (generateError) {
-      return (
-        <View style={styles.suggestionStrip}>
-          <Text style={styles.errorText} numberOfLines={2}>{generateError}</Text>
-        </View>
+    } else if (generateError) {
+      // Error
+      body = (
+        <>
+          <Text style={styles.panelPrimary}>Couldn't load suggestions</Text>
+          <Text style={styles.panelMeta}>Tap Generate to try again</Text>
+        </>
       );
-    }
-
-    if (suggestions.length === 0) {
-      return (
-        <View style={styles.suggestionStrip}>
-          <Text style={styles.emptyTitle}>No outfit suggestions yet</Text>
-          <Text style={styles.emptySub}>Add more clothes to your closet and try again</Text>
-        </View>
+    } else if (!hasGenerated) {
+      // Idle — before any generate attempt
+      body = (
+        <Text style={styles.panelMeta}>Select an occasion above and tap Generate</Text>
       );
-    }
+    } else if (suggestions.length === 0) {
+      // Empty
+      body = (
+        <>
+          <Text style={styles.panelPrimary}>No outfit suggestions yet</Text>
+          <Text style={styles.panelMeta}>Add more clothes to your closet and try again</Text>
+        </>
+      );
+    } else {
+      // Outfits available
+      const canNavigate = suggestions.length > 1;
+      const current = suggestions[outfitIndex];
+      const firstReason = current?.reasons?.[0] ?? null;
 
-    const canNavigate = suggestions.length > 1;
-    const current = suggestions[outfitIndex];
-    const firstReason = current?.reasons?.[0] ?? null;
-
-    return (
-      <View style={styles.suggestionStrip}>
-        <View style={styles.suggestionRow}>
+      body = (
+        <View style={styles.outfitRow}>
+          {/* Left arrow */}
           <TouchableOpacity
             style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
             onPress={goToPrev}
@@ -296,15 +300,24 @@ export default function Avatar3DScreen() {
             />
           </TouchableOpacity>
 
-          <View style={styles.suggestionInfo}>
-            <Text style={styles.outfitCount}>
-              Outfit {outfitIndex + 1} of {suggestions.length}
+          {/* Centre: reason + position dots */}
+          <View style={styles.outfitBody}>
+            <Text style={styles.panelPrimary} numberOfLines={2}>
+              {firstReason ?? `${suggestions.length} outfit${suggestions.length > 1 ? 's' : ''} ready`}
             </Text>
-            {firstReason ? (
-              <Text style={styles.outfitReason} numberOfLines={1}>{firstReason}</Text>
-            ) : null}
+            {canNavigate && (
+              <View style={styles.dotsRow}>
+                {suggestions.map((s, i) => (
+                  <View
+                    key={s.outfitId ?? `dot-${i}`}
+                    style={[styles.dot, i === outfitIndex && styles.dotActive]}
+                  />
+                ))}
+              </View>
+            )}
           </View>
 
+          {/* Right arrow */}
           <TouchableOpacity
             style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
             onPress={goToNext}
@@ -318,6 +331,21 @@ export default function Avatar3DScreen() {
             />
           </TouchableOpacity>
         </View>
+      );
+    }
+
+    return (
+      <View style={styles.suggestionPanel}>
+        {/* Consistent header across all states */}
+        <View style={styles.panelHeader}>
+          <Text style={styles.panelLabel}>OUTFIT SUGGESTIONS</Text>
+          {headerRight}
+        </View>
+        <View style={styles.panelDivider} />
+        {/* State-specific body */}
+        <View style={styles.panelBody}>
+          {body}
+        </View>
       </View>
     );
   };
@@ -325,24 +353,70 @@ export default function Avatar3DScreen() {
   return (
     <View style={styles.root}>
 
+      {/* ── Dropdown backdrop — transparent full-screen tap target ── */}
+      {dropdownOpen && (
+        <Pressable style={styles.dropdownBackdrop} onPress={closeDropdown} />
+      )}
+
       {/* ── Header ───────────────────────────────────────────────── */}
       <View style={[styles.header, {paddingTop: insets.top + 8}]}>
         <Text style={styles.title}>My Avatar</Text>
       </View>
 
       {/* ── Top controls: occasion selector + generate button ─────── */}
-      <View style={styles.controls}>
+      {/*   zIndex elevation lets the dropdown overlay the content below */}
+      <View style={[styles.controls, dropdownOpen && styles.controlsElevated]}>
 
-        {/* Occasion selector row */}
-        <TouchableOpacity
-          style={styles.occasionRow}
-          activeOpacity={0.7}
-          onPress={handleSelectOccasion}
-          accessibilityRole="button"
-          accessibilityLabel="Select occasion">
-          <Text style={styles.occasionText}>{OCCASIONS[occasionIndex].label}</Text>
-          <Ionicons name="chevron-down" size={18} color={CHEVRON_COLOR} />
-        </TouchableOpacity>
+        {/* Occasion selector — wrapper measured so dropdown sits flush below */}
+        <View
+          onLayout={e => setOccasionRowHeight(e.nativeEvent.layout.height)}
+          style={styles.occasionWrapper}>
+
+          <TouchableOpacity
+            style={styles.occasionRow}
+            activeOpacity={0.7}
+            onPress={toggleDropdown}
+            accessibilityRole="button"
+            accessibilityLabel="Select occasion">
+            <Text style={styles.occasionText}>{OCCASIONS[occasionIndex].label}</Text>
+            <Ionicons
+              name={dropdownOpen ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={CHEVRON_COLOR}
+            />
+          </TouchableOpacity>
+
+          {/* Custom in-page dropdown — absolute, flush below the occasion row */}
+          {dropdownOpen && (
+            <View style={[styles.dropdown, {top: occasionRowHeight + 4}]}>
+              {OCCASIONS.map((o, i) => (
+                <React.Fragment key={o.value}>
+                  {i > 0 && <View style={styles.dropdownDivider} />}
+                  <TouchableOpacity
+                    style={[
+                      styles.dropdownItem,
+                      i === occasionIndex && styles.dropdownItemActive,
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() => selectOccasion(i)}
+                    accessibilityRole="button"
+                    accessibilityLabel={o.label}>
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        i === occasionIndex && styles.dropdownItemTextActive,
+                      ]}>
+                      {o.label}
+                    </Text>
+                    {i === occasionIndex && (
+                      <Ionicons name="checkmark" size={14} color={TITLE_COLOR} />
+                    )}
+                  </TouchableOpacity>
+                </React.Fragment>
+              ))}
+            </View>
+          )}
+        </View>
 
         {/* Generate button */}
         <TouchableOpacity
@@ -359,8 +433,8 @@ export default function Avatar3DScreen() {
 
       </View>
 
-      {/* ── Compact suggestion strip ──────────────────────────────── */}
-      {renderSuggestionStrip()}
+      {/* ── Outfit suggestion panel ───────────────────────────────── */}
+      {renderSuggestionPanel()}
 
       {/* ── 3D Stage card — ~60 % of remaining vertical space ───────
            flex: 3 vs the actionRow's implicit fixed height keeps the
@@ -445,6 +519,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     gap: 10,
   },
+  // Raised above the dropdown backdrop when open so the dropdown is interactive.
+  controlsElevated: {
+    zIndex: 20,
+  },
+  // Wrapper around the occasion row — measured so dropdown can be placed flush below.
+  occasionWrapper: {
+    // position:relative is the RN default; no additional props needed here.
+  },
   occasionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -460,6 +542,55 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: TITLE_COLOR,
     fontWeight: '400',
+  },
+  // ── Custom in-page dropdown ─────────────────────────────────────
+  dropdownBackdrop: {
+    // Full-screen transparent Pressable rendered below the controls (zIndex: 10)
+    // so tapping anywhere outside the dropdown closes it.
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    zIndex: 10,
+  },
+  dropdown: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    // `top` is set dynamically in JSX: occasionRowHeight + 4
+    backgroundColor: CONTROL_BG,
+    borderWidth: 1,
+    borderColor: CONTROL_BORDER,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
+    elevation: 12,
+    zIndex: 30,
+  },
+  dropdownDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: CONTROL_BORDER,
+    marginHorizontal: 12,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  dropdownItemActive: {
+    backgroundColor: 'rgba(196, 168, 130, 0.10)',
+  },
+  dropdownItemText: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: CHEVRON_COLOR,
+  },
+  dropdownItemTextActive: {
+    color: TITLE_COLOR,
+    fontWeight: '500',
   },
   generateBtn: {
     alignSelf: 'center',
@@ -478,72 +609,106 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  // ── Suggestion strip ───────────────────────────────────────────
-  suggestionStrip: {
+  // ── Suggestion panel ───────────────────────────────────────────
+  // Permanent section — visible in all states (idle, loading, error, empty, outfits).
+  suggestionPanel: {
     marginHorizontal: 16,
     marginBottom: 8,
     backgroundColor: CONTROL_BG,
     borderWidth: 1,
     borderColor: CONTROL_BORDER,
     borderRadius: 12,
-    paddingVertical: 10,
+    overflow: 'hidden',
+  },
+  // Header: label left, optional counter right — consistent across all states
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 7,
+  },
+  panelLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    color: DISABLED_COLOR,
+  },
+  outfitCounter: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: CHEVRON_COLOR,
+    letterSpacing: 0.3,
+  },
+  panelDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: CONTROL_BORDER,
+    marginHorizontal: 12,
+  },
+  // Body: state-specific content
+  panelBody: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
     alignItems: 'center',
   },
-  suggestionRow: {
+  // Shared text styles used across states
+  panelPrimary: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: TITLE_COLOR,
+    textAlign: 'center',
+  },
+  panelMeta: {
+    fontSize: 11,
+    color: CHEVRON_COLOR,
+    textAlign: 'center',
+    marginTop: 3,
+  },
+  // Loading row: spinner + text side by side
+  panelLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  // Outfit row: arrows flanking centre content
+  outfitRow: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
   },
-  suggestionInfo: {
+  outfitBody: {
     flex: 1,
     alignItems: 'center',
     paddingHorizontal: 8,
   },
-  outfitCount: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: TITLE_COLOR,
-    letterSpacing: 0.3,
+  dotsRow: {
+    flexDirection: 'row',
+    gap: 5,
+    marginTop: 6,
   },
-  outfitReason: {
-    fontSize: 11,
-    color: CHEVRON_COLOR,
-    marginTop: 2,
-    textAlign: 'center',
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: DISABLED_COLOR,
+  },
+  dotActive: {
+    backgroundColor: TITLE_COLOR,
   },
   arrowBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: 'rgba(196, 168, 130, 0.08)',
+    borderWidth: 1,
+    borderColor: CONTROL_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
   },
   arrowBtnDisabled: {
     opacity: 0.4,
-  },
-  generatingText: {
-    fontSize: 13,
-    color: CHEVRON_COLOR,
-    marginTop: 4,
-  },
-  errorText: {
-    fontSize: 12,
-    color: 'rgba(220, 100, 100, 0.85)',
-    textAlign: 'center',
-  },
-  emptyTitle: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: TITLE_COLOR,
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontSize: 11,
-    color: CHEVRON_COLOR,
-    textAlign: 'center',
-    marginTop: 3,
   },
 
   // ── Stage card ─────────────────────────────────────────────────
