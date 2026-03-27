@@ -8,7 +8,11 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
-    "postinstall": "node scripts/fix-calendar-assets.js"
+    "postinstall": "node scripts/fix-calendar-assets.js",
+    "pods": "bundle exec pod install --project-directory=ios",
+    "clean": "rm -rf node_modules ios/Pods ios/build ~/Library/Developer/Xcode/DerivedData/MyraNative-* && npm install && bundle exec pod install --project-directory=ios",
+    "backend": "cd backend && node index.js",
+    "ai": "cd backend && source .venv/bin/activate && uvicorn app:app --host 0.0.0.0 --port 5002 --reload"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
