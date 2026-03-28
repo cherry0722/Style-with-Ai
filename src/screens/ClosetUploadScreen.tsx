@@ -206,8 +206,24 @@ export default function ClosetUploadScreen() {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Please try again.';
-      Alert.alert('Upload failed', msg);
+      const status = err?.response?.status;
+      const errorCode = err?.response?.data?.error?.code;
+      const serverMsg: string =
+        err?.response?.data?.message ||
+        err?.response?.data?.error?.message ||
+        '';
+      const isSizeError =
+        status === 413 ||
+        errorCode === 'FILE_TOO_LARGE' ||
+        /exceeds|too large|5\s*mb|file size/i.test(serverMsg) ||
+        /exceeds|too large/i.test(err?.message || '');
+
+      const title = isSizeError ? 'Photo Too Large' : 'Upload failed';
+      const msg = isSizeError
+        ? 'This photo is too large to upload. Please choose a smaller image or retake the photo.'
+        : serverMsg || err?.message || 'Please try again.';
+
+      Alert.alert(title, msg);
     } finally {
       setUploading(false);
     }
