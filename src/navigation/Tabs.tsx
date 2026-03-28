@@ -12,6 +12,8 @@
  */
 import React, { useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar3DScreen from '../screens/Avatar3DScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -22,14 +24,12 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  Platform,
-  ActionSheetIOS,
   Alert,
 } from 'react-native';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { uploadWardrobeItem } from '../api/wardrobe';
+import type { RootStackParamList } from './RootNavigator';
+
 
 export type TabParamList = {
   Home: undefined;
@@ -122,74 +122,15 @@ const tabStyles = StyleSheet.create({
 export default function Tabs() {
   const theme = useTheme();
   const { user } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const handleAddItem = useCallback(() => {
     if (!user) {
       Alert.alert('Sign in required', 'Please sign in to add items.');
       return;
     }
-
-    // Uses react-native-image-picker (not expo-image-picker).
-    // Permissions are handled by the OS prompt automatically;
-    // NSCameraUsageDescription and NSPhotoLibraryUsageDescription must be set in Info.plist.
-    const pickFromCamera = async () => {
-      try {
-        const r = await launchCamera({ mediaType: 'photo', quality: 0.9 });
-        if (r.didCancel || r.errorCode) {
-          if (r.errorCode === 'camera_unavailable') {
-            Alert.alert('Error', 'Camera is unavailable on this device.');
-          }
-          return;
-        }
-        if (r.assets?.[0]?.uri) {
-          try {
-            await uploadWardrobeItem(r.assets[0].uri);
-            Alert.alert('Success', 'Item added to your closet!');
-          } catch (err: any) {
-            Alert.alert('Upload failed', err?.message || 'Please try again.');
-          }
-        }
-      } catch {
-        Alert.alert('Error', 'Failed to open camera.');
-      }
-    };
-
-    const pickFromLibrary = async () => {
-      try {
-        const r = await launchImageLibrary({ mediaType: 'photo', quality: 0.9 });
-        if (r.didCancel || r.errorCode) { return; }
-        if (r.assets?.[0]?.uri) {
-          try {
-            await uploadWardrobeItem(r.assets[0].uri);
-            Alert.alert('Success', 'Item added to your closet!');
-          } catch (err: any) {
-            Alert.alert('Upload failed', err?.message || 'Please try again.');
-          }
-        }
-      } catch {
-        Alert.alert('Error', 'Failed to open library.');
-      }
-    };
-
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: ['Cancel', 'Take photo', 'Choose from library'],
-          cancelButtonIndex: 0,
-        },
-        (i) => {
-          if (i === 1) void pickFromCamera();
-          else if (i === 2) void pickFromLibrary();
-        },
-      );
-    } else {
-      Alert.alert('Add Item', 'Choose source', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Take photo',          onPress: () => void pickFromCamera() },
-        { text: 'Choose from library', onPress: () => void pickFromLibrary() },
-      ]);
-    }
-  }, [user]);
+    navigation.navigate('ClosetUpload');
+  }, [user, navigation]);
 
   return (
     <Tab.Navigator

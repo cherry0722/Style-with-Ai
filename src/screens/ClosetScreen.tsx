@@ -68,7 +68,31 @@ const WARDROBE_CATEGORIES = [
 type CategoryKey = typeof WARDROBE_CATEGORIES[number]['key'];
 type CategoryDef = typeof WARDROBE_CATEGORIES[number];
 
+/** Maps user-selected clothingType values to ClosetScreen category keys. */
+const CLOTHING_TYPE_TO_CATEGORY: Record<string, string> = {
+  shirt:  'top',
+  tshirt: 'top',
+  hoodie: 'top',
+  pant:   'outerwear',
+};
+
+const CLOTHING_TYPE_DISPLAY: Record<string, string> = {
+  shirt:  'Shirt',
+  tshirt: 'T-Shirt',
+  hoodie: 'Hoodie',
+  pant:   'Pant',
+};
+
+/**
+ * Returns the wardrobe category key for an item.
+ * Priority: user-selected clothingType → AI profile.category → item.category
+ * This ensures user intent always wins over AI inference for grouping.
+ */
 function getItemCategory(item: WardrobeItemResponse): string {
+  const ct = item.clothingType?.toLowerCase();
+  if (ct && CLOTHING_TYPE_TO_CATEGORY[ct]) {
+    return CLOTHING_TYPE_TO_CATEGORY[ct];
+  }
   return (item.profile?.category ?? item.category ?? '').toLowerCase();
 }
 
@@ -110,7 +134,9 @@ function ItemRowCard({
 }>) {
   const itemId        = item.id ?? item._id ?? '';
   const isUnavailable = item.v2?.availability?.status === 'unavailable';
-  const itemName      = item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
+  const ct            = item.clothingType?.toLowerCase();
+  const itemName      = (ct ? (CLOTHING_TYPE_DISPLAY[ct] ?? item.clothingType) : null)
+    ?? item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
 
   return (
     <View style={[styles.itemRow, isUnavailable && styles.itemRowUnavailable]}>

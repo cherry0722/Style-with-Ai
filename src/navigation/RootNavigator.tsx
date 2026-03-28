@@ -23,6 +23,7 @@ import LaundryScreen from '../screens/LaundryScreen';
 import CalendarScreen from '../screens/CalendarScreen';
 import PasswordAndSecurityScreen from '../screens/PasswordAndSecurityScreen';
 import AccountPrivacyScreen from '../screens/AccountPrivacyScreen';
+import ClosetUploadScreen from '../screens/ClosetUploadScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -39,6 +40,7 @@ export type RootStackParamList = {
   Laundry: undefined;
   PasswordAndSecurity: undefined;
   AccountPrivacy: undefined;
+  ClosetUpload: undefined;
   InformationPermissions: undefined;
   Saved: undefined;
   Favorites: undefined;
@@ -82,6 +84,7 @@ export default function RootNavigator() {
             component={PasswordAndSecurityScreen}
           />
           <Stack.Screen name="AccountPrivacy" component={AccountPrivacyScreen} />
+          <Stack.Screen name="ClosetUpload" component={ClosetUploadScreen} />
           <Stack.Screen
             name="InformationPermissions"
             component={ComingSoonScreen}

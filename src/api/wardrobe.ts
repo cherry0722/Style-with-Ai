@@ -24,7 +24,10 @@ export interface WardrobeItemResponse {
   userId?: string;
   imageUrl: string;
   cleanImageUrl?: string;
+  backImageUrl?: string | null;
   category: string;
+  /** User-selected clothing type from upload flow. Acts as primary category source. */
+  clothingType?: string | null;
   colors?: string[];
   notes?: string;
   isFavorite?: boolean;
@@ -107,6 +110,33 @@ export async function uploadWardrobeItem(uri: string): Promise<WardrobeItemV1Res
   } as any);
   const res = await client.post<WardrobeItemV1Response>('/api/wardrobe/items', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}
+
+/** v2 upload: front + back images + user-selected clothing type */
+export async function uploadWardrobeItemFrontBack(
+  frontUri: string,
+  backUri: string,
+  clothingType: string,
+): Promise<WardrobeItemV1Response> {
+  const formData = new FormData();
+  formData.append('frontImage', {
+    uri: frontUri,
+    name: inferFileNameFromUri(frontUri),
+    type: inferMimeTypeFromUri(frontUri),
+  } as any);
+  formData.append('backImage', {
+    uri: backUri,
+    name: inferFileNameFromUri(backUri),
+    type: inferMimeTypeFromUri(backUri),
+  } as any);
+  formData.append('clothingType', clothingType);
+  // AI pipeline (R2 upload + Python background removal + DB write) routinely takes >15s.
+  // Override the global 15s client timeout for this call only.
+  const res = await client.post<WardrobeItemV1Response>('/api/wardrobe/items/front-back', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000, // 2 min
   });
   return res.data;
 }

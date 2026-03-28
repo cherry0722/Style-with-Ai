@@ -16,6 +16,10 @@ const WardrobeSchema = new mongoose.Schema(
       default: null,
     },
 
+    // front/back image support
+    backImageUrl: { type: String, default: null },
+    clothingType:  { type: String, default: null }, // user-selected: shirt, tshirt, hoodie, pant
+
     // v1 source of truth: locked ItemProfile from Python
     profile: {
       type: mongoose.Schema.Types.Mixed,
