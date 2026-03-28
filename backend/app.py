@@ -22,11 +22,16 @@ from schemas.models import (
     GenerateOutfitsRequest,
     GenerateOutfitsResponse,
     GenerateOutfitsOutfit,
+    AvatarMappingRequest,
+    AvatarMappingResult,
+    AvatarPalette,
+    AvatarRenderHints,
 )
 from ai.agent import MyraAgent
 from db.mongo import get_db
 from services.process_item import process_item, remove_bg_only, VisionFailedError
 from services.generate_outfits import generate_outfits
+from services.avatar_mapping import map_item_to_avatar, map_item_profile_to_avatar
 
 app = FastAPI(title="MYRA AI Backend", version="0.1.0")
 
@@ -108,6 +113,69 @@ def generate_outfits_endpoint(req: GenerateOutfitsRequest):
     )
     return GenerateOutfitsResponse(
         outfits=[GenerateOutfitsOutfit(**o) for o in outfits],
+    )
+
+
+@app.post("/avatar-mapping", response_model=AvatarMappingResult)
+def avatar_mapping_endpoint(req: AvatarMappingRequest):
+    """
+    V1 Avatar Fabric/Material Mapping.
+
+    Accepts wardrobe item attributes (category, type, colors, pattern, material,
+    fit, keyDetails) and returns a structured avatar asset-mapping result.
+
+    Supports top and bottom garments only in V1.
+    Accepts either individual fields OR a full ItemProfile dict via `profile`.
+    Individual fields take precedence over profile values when both are provided.
+    """
+    # Merge profile dict with top-level fields (individual fields win)
+    base: dict = {}
+    if req.profile:
+        base = dict(req.profile)
+
+    category   = req.category   or base.get("category")
+    type_      = req.type       or base.get("type")
+    # Primary color: check all known field names in priority order.
+    # Bug that caused palette.primary=null: endpoint only checked req.primaryColor
+    # and base["primaryColor"], but curl callers and the Node wardrobe model send
+    # the field as "color" or "color_name" — both silently dropped by Pydantic.
+    # Resolution order: primaryColor (Vision) > color (Node flat) >
+    #                   profile.primaryColor > profile.color > profile.color_name
+    primary    = (req.primaryColor
+                  or req.color
+                  or base.get("primaryColor")
+                  or base.get("color")
+                  or base.get("color_name"))
+    secondary  = req.secondaryColor or base.get("secondaryColor")
+    pattern    = req.pattern    or base.get("pattern")
+    material   = req.material   or base.get("material") or base.get("fabric")
+    fit        = req.fit        or base.get("fit")
+    key_details = req.keyDetails or base.get("keyDetails") or []
+
+    result = map_item_to_avatar(
+        category=category,
+        type_=type_,
+        primary_color=primary,
+        secondary_color=secondary,
+        pattern=pattern,
+        material=material,
+        fit=fit,
+        key_details=key_details,
+    )
+
+    return AvatarMappingResult(
+        avatarCategory=result["avatarCategory"],
+        avatarAssetFamily=result["avatarAssetFamily"],
+        materialPreset=result["materialPreset"],
+        patternPreset=result["patternPreset"],
+        palette=AvatarPalette(
+            primary=result["palette"]["primary"],
+            secondary=result["palette"]["secondary"],
+        ),
+        fitPreset=result["fitPreset"],
+        renderHints=AvatarRenderHints(**result["renderHints"]),
+        inputCategory=result["inputCategory"],
+        inputType=result["inputType"],
     )
 
 
