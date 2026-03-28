@@ -32,11 +32,21 @@ const TYPE_LABELS: Record<ClothingType, string> = {
   pant:   'Pant',
 };
 
+// Compression options applied at the native picker layer.
+// Caps dimensions to 1200px and quality to 0.82 to stay well under the 5MB backend limit
+// while keeping enough resolution for rembg background removal and OpenAI Vision.
+const PICKER_OPTIONS = {
+  mediaType: 'photo' as const,
+  maxWidth: 1200,
+  maxHeight: 1200,
+  quality: 0.8 as const,
+};
+
 async function pickFromCamera(
   onPicked: (uri: string) => void,
 ): Promise<void> {
   try {
-    const r = await launchCamera({ mediaType: 'photo', quality: 0.9 });
+    const r = await launchCamera(PICKER_OPTIONS);
     if (r.errorCode === 'camera_unavailable') {
       Alert.alert('Error', 'Camera is unavailable on this device.');
       return;
@@ -53,7 +63,7 @@ async function pickFromLibrary(
   onPicked: (uri: string) => void,
 ): Promise<void> {
   try {
-    const r = await launchImageLibrary({ mediaType: 'photo', quality: 0.9 });
+    const r = await launchImageLibrary(PICKER_OPTIONS);
     if (!r.didCancel && !r.errorCode && r.assets?.[0]?.uri) {
       onPicked(r.assets[0].uri);
     }
