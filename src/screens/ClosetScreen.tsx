@@ -369,9 +369,11 @@ export default function ClosetScreen() {
           const name = (ct ? (CLOTHING_TYPE_DISPLAY[ct] ?? item.clothingType) : null)
             ?? item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? 'Item';
           navigation.navigate('ClosetItemDetail', {
+            itemId:        item.id ?? item._id ?? '',
             frontImageUrl: item.cleanImageUrl || item.imageUrl,
             backImageUrl:  item.backImageUrl ?? null,
             itemName:      name,
+            isFavorite:    item.isFavorite ?? false,
           });
         }}
       />

@@ -42,7 +42,7 @@ export type RootStackParamList = {
   PasswordAndSecurity: undefined;
   AccountPrivacy: undefined;
   ClosetUpload: undefined;
-  ClosetItemDetail: { frontImageUrl: string; backImageUrl?: string | null; itemName: string };
+  ClosetItemDetail: { itemId: string; frontImageUrl: string; backImageUrl?: string | null; itemName: string; isFavorite: boolean };
   InformationPermissions: undefined;
   Saved: undefined;
   Favorites: undefined;

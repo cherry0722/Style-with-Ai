@@ -1,10 +1,10 @@
 /**
  * ClosetItemDetailScreen — full-screen front/back image viewer.
- * Receives frontImageUrl, backImageUrl (optional), and itemName via route params.
- * Swipe left/right to toggle front ↔ back (disabled if no back image).
+ * Actions: favorite toggle (top bar) + delete with confirmation (bottom bar).
  */
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
+  Alert,
   View,
   Image,
   ScrollView,
@@ -13,10 +13,12 @@ import {
   Dimensions,
   Text,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { toggleFavorite, deleteWardrobeItem } from '../api/wardrobe';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type DetailRoute = RouteProp<RootStackParamList, 'ClosetItemDetail'>;
@@ -28,7 +30,7 @@ const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Geor
 export default function ClosetItemDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute<DetailRoute>();
-  const { frontImageUrl, backImageUrl, itemName } = route.params;
+  const { itemId, frontImageUrl, backImageUrl, itemName, isFavorite: initialFavorite } = route.params;
 
   const hasBack = !!backImageUrl;
   const images: string[] = hasBack ? [frontImageUrl, backImageUrl!] : [frontImageUrl];
@@ -37,10 +39,59 @@ export default function ClosetItemDetailScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
+  // ── Favorite state (optimistic) ────────────────────────────
+  const [isFav, setIsFav] = useState(initialFavorite);
+  const [favLoading, setFavLoading] = useState(false);
+
+  // ── Delete state ───────────────────────────────────────────
+  const [deleting, setDeleting] = useState(false);
+
   const handleMomentumScrollEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
     setActiveIndex(idx);
   };
+
+  // ── Favorite toggle ────────────────────────────────────────
+  const handleFavoriteToggle = useCallback(async () => {
+    if (favLoading || deleting) return;
+    const next = !isFav;
+    setIsFav(next);           // optimistic
+    setFavLoading(true);
+    try {
+      await toggleFavorite(itemId, next);
+    } catch (err: any) {
+      setIsFav(!next);        // revert on failure
+      Alert.alert('Error', err?.message || 'Could not update favorite. Please try again.');
+    } finally {
+      setFavLoading(false);
+    }
+  }, [favLoading, deleting, isFav, itemId]);
+
+  // ── Delete with two-step confirmation ─────────────────────
+  const handleDelete = useCallback(() => {
+    if (deleting) return;
+    Alert.alert(
+      'Remove from Closet',
+      'This item will be permanently removed. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteWardrobeItem(itemId);
+              navigation.goBack();
+            } catch (err: any) {
+              setDeleting(false);
+              Alert.alert('Error', err?.message || 'Could not delete item. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  }, [deleting, itemId, navigation]);
 
   return (
     <View style={styles.container}>
@@ -48,9 +99,32 @@ export default function ClosetItemDetailScreen() {
       <SafeAreaView edges={['top']} style={styles.topSafe}>
         <View style={styles.topBar}>
           <Text style={styles.itemNameText} numberOfLines={1}>{itemName}</Text>
+
+          {/* Favorite button */}
           <Pressable
-            style={styles.closeBtn}
+            style={[styles.iconBtn, isFav && styles.iconBtnActive]}
+            onPress={handleFavoriteToggle}
+            disabled={favLoading || deleting}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={isFav ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            {favLoading ? (
+              <ActivityIndicator size="small" color="#C4A882" />
+            ) : (
+              <Ionicons
+                name={isFav ? 'heart' : 'heart-outline'}
+                size={20}
+                color={isFav ? '#C4A882' : '#F5F0E8'}
+              />
+            )}
+          </Pressable>
+
+          {/* Close button */}
+          <Pressable
+            style={styles.iconBtn}
             onPress={() => navigation.goBack()}
+            disabled={deleting}
             hitSlop={12}
             accessibilityRole="button"
             accessibilityLabel="Close"
@@ -66,7 +140,7 @@ export default function ClosetItemDetailScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        scrollEnabled={hasBack}
+        scrollEnabled={hasBack && !deleting}
         onMomentumScrollEnd={handleMomentumScrollEnd}
         bounces={false}
         style={styles.pager}
@@ -82,7 +156,7 @@ export default function ClosetItemDetailScreen() {
         ))}
       </ScrollView>
 
-      {/* ── Bottom indicator ────────────────────────────────── */}
+      {/* ── Bottom bar ──────────────────────────────────────── */}
       <SafeAreaView edges={['bottom']} style={styles.bottomSafe}>
         <View style={styles.bottomBar}>
           {/* Label pill */}
@@ -106,6 +180,24 @@ export default function ClosetItemDetailScreen() {
           {hasBack && activeIndex === 0 && (
             <Text style={styles.swipeHint}>Swipe to see back</Text>
           )}
+
+          {/* Delete button */}
+          <Pressable
+            style={[styles.deleteBtn, deleting && styles.deleteBtnDisabled]}
+            onPress={handleDelete}
+            disabled={deleting}
+            accessibilityRole="button"
+            accessibilityLabel="Delete item"
+          >
+            {deleting ? (
+              <ActivityIndicator size="small" color="#C8706A" />
+            ) : (
+              <>
+                <Ionicons name="trash-outline" size={15} color="#C8706A" />
+                <Text style={styles.deleteBtnText}>Remove</Text>
+              </>
+            )}
+          </Pressable>
         </View>
       </SafeAreaView>
     </View>
@@ -132,6 +224,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 12,
+    gap: 8,
     backgroundColor: 'rgba(26, 22, 17, 0.85)',
   },
   itemNameText: {
@@ -141,15 +234,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#F5F0E8',
     letterSpacing: -0.3,
-    marginRight: 12,
   },
-  closeBtn: {
+  iconBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.12)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  iconBtnActive: {
+    backgroundColor: 'rgba(196, 168, 130, 0.22)',
   },
 
   // ── Pager ─────────────────────────────────────────────────
@@ -215,5 +310,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(245, 240, 232, 0.50)',
     letterSpacing: 0.3,
+  },
+
+  // ── Delete button ─────────────────────────────────────────
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(200, 112, 106, 0.40)',
+    backgroundColor: 'rgba(200, 112, 106, 0.12)',
+  },
+  deleteBtnDisabled: {
+    opacity: 0.5,
+  },
+  deleteBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#C8706A',
+    letterSpacing: 0.4,
   },
 });
