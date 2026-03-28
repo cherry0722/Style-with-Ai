@@ -173,6 +173,179 @@ router.post('/upload', auth, upload.single('image'), async (req, res, next) => {
   }
 });
 
+// Maps user-selected clothingType values → wardrobe category keys used by ClosetScreen.
+// 'outerwear' is the category key that ClosetScreen labels as PANTS.
+const CLOTHING_TYPE_TO_CATEGORY = {
+  shirt:  'top',
+  tshirt: 'top',
+  hoodie: 'top',
+  pant:   'outerwear',
+};
+
+// POST /api/wardrobe/items/front-back — front + back images + user-selected clothingType
+// Front image goes through the full AI pipeline. Back image is stored as-is (raw R2 key).
+router.post('/items/front-back', auth, upload.fields([
+  { name: 'frontImage', maxCount: 1 },
+  { name: 'backImage',  maxCount: 1 },
+]), async (req, res) => {
+  let frontRawKey = null;
+  let backRawKey  = null;
+  try {
+    const frontFile = req.files?.frontImage?.[0];
+    if (!frontFile) {
+      return res.status(400).json({ message: 'No front image provided' });
+    }
+
+    const userId =
+      req.user?.userId ||
+      req.user?._id?.toString() ||
+      req.user?.id ||
+      req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ message: 'Invalid auth payload' });
+    }
+
+    const clothingType = (req.body?.clothingType || '').trim() || null;
+    console.log('[FrontBack] start', { userId: userId.slice(0, 8), clothingType, frontBytes: frontFile.size });
+
+    // a) Upload front RAW to R2
+    const { key: fKey } = generateRawKey(userId, frontFile.mimetype);
+    frontRawKey = fKey;
+    await uploadBufferToR2({ key: fKey, buffer: frontFile.buffer, contentType: frontFile.mimetype });
+    console.log('[FrontBack] front uploaded to R2');
+
+    const config = getConfig();
+    const frontRawUrl = config ? `${config.publicBaseUrl}/${fKey}` : null;
+
+    // b) Upload back image to R2 (best-effort; no AI processing)
+    let backImageUrl = null;
+    const backFile = req.files?.backImage?.[0];
+    if (backFile) {
+      try {
+        const { key: bKey } = generateRawKey(userId, backFile.mimetype);
+        backRawKey = bKey;
+        await uploadBufferToR2({ key: bKey, buffer: backFile.buffer, contentType: backFile.mimetype });
+        backImageUrl = config ? `${config.publicBaseUrl}/${bKey}` : null;
+        console.log('[FrontBack] back uploaded to R2');
+      } catch (err) {
+        console.warn('[FrontBack] back image upload failed (non-fatal):', err?.message);
+      }
+    }
+
+    // c) Call Python /process-item for front AND /remove-bg for back in parallel.
+    //    Back removal is best-effort — it never blocks or fails the main upload.
+    console.log('[FrontBack] calling Python /process-item (+ /remove-bg for back)');
+
+    const frontProcessPromise = aiService.post('/process-item', {
+      userId, rawKey: frontRawKey, rawUrl: frontRawUrl, clothingType: clothingType || null,
+    });
+
+    const backBgPromise = (backFile && backRawKey && backImageUrl)
+      ? aiService.post('/remove-bg', { userId, rawUrl: backImageUrl }).catch((e) => {
+          console.warn('[FrontBack] back /remove-bg failed (non-fatal):', e?.message);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    let pyResponse;
+    try {
+      pyResponse = await frontProcessPromise;
+    } catch (err) {
+      console.error('[FrontBack] Python /process-item failed:', err?.code, err?.response?.status);
+      await deleteFromR2({ key: frontRawKey });
+      if (backRawKey) { try { await deleteFromR2({ key: backRawKey }); } catch (_) {} }
+      return res.status(503).json({
+        message: 'AI service temporarily unavailable. Please try again.',
+        failReason: 'Could not reach the image processing service.',
+      });
+    }
+
+    const { status, cleanKey, cleanUrl, profile, failReason } = pyResponse.data || {};
+    console.log('[FrontBack] Python responded', { status, hasCleanUrl: !!cleanUrl });
+
+    if (status === 'failed') {
+      await deleteFromR2({ key: frontRawKey });
+      return res.status(502).json({ message: 'Processing failed', failReason: failReason || 'Unknown error' });
+    }
+    if (status !== 'ready' || !cleanUrl) {
+      await deleteFromR2({ key: frontRawKey });
+      return res.status(502).json({ message: 'Invalid response from AI service', failReason: failReason || 'Missing cleanUrl' });
+    }
+
+    // Non-apparel gate: Vision returns confidence ~10 for non-clothing images.
+    // Reject anything below the threshold before writing to DB.
+    const APPAREL_CONFIDENCE_THRESHOLD = 30;
+    const confidence = (profile && typeof profile.confidence === 'number') ? profile.confidence : null;
+    if (confidence !== null && confidence < APPAREL_CONFIDENCE_THRESHOLD) {
+      console.log('[FrontBack] rejecting non-apparel image', { confidence });
+      deleteFromR2({ key: frontRawKey }).catch(() => {});
+      if (backRawKey) deleteFromR2({ key: backRawKey }).catch(() => {});
+      if (cleanKey)   deleteFromR2({ key: cleanKey   }).catch(() => {});
+      return res.status(422).json({
+        message: 'This image does not appear to be a clothing item. Please upload a photo of clothing or an accessory.',
+        failReason: 'non_apparel',
+        confidence,
+      });
+    }
+
+    // d) Resolve back image bg removal (ran in parallel — already settled by now)
+    const backBgResponse = await backBgPromise;
+    let finalBackUrl = backImageUrl; // default: raw back URL (backward compat)
+    if (backBgResponse?.data?.status === 'ready' && backBgResponse.data.cleanUrl) {
+      finalBackUrl = backBgResponse.data.cleanUrl;
+      console.log('[FrontBack] back image cleaned via /remove-bg');
+      if (backRawKey) {
+        deleteFromR2({ key: backRawKey }).catch((e) =>
+          console.warn('[FrontBack] back raw R2 delete failed (non-fatal):', e?.message)
+        );
+        backRawKey = null; // prevent double-delete in catch block
+      }
+    } else {
+      console.log('[FrontBack] back image kept as raw (remove-bg not run or failed)');
+    }
+
+    // e) Save to MongoDB
+    console.log('[FrontBack] saving to DB');
+    const p = profile && typeof profile === 'object' ? profile : {};
+
+    // clothingType is the user's explicit selection — it is the primary source of truth
+    // for category. AI profile is preserved intact for future use but does not override it.
+    const resolvedClothingType = clothingType || null;
+    const categoryFromType = resolvedClothingType ? CLOTHING_TYPE_TO_CATEGORY[resolvedClothingType] : null;
+    const resolvedCategory = categoryFromType || p.category || p.type || 'top';
+
+    if (!categoryFromType && resolvedClothingType) {
+      console.warn('[FrontBack] unknown clothingType, falling back to AI category', { clothingType: resolvedClothingType });
+    }
+    console.log('[FrontBack] resolved category', { clothingType: resolvedClothingType, categoryFromType, resolvedCategory });
+
+    const item = await Wardrobe.create({
+      userId,
+      imageUrl:      cleanUrl,
+      cleanImageUrl: cleanUrl,
+      backImageUrl:  finalBackUrl,
+      clothingType:  resolvedClothingType,
+      profile: p,
+      category:     resolvedCategory,
+      type:         resolvedClothingType || p.type || undefined,
+      primaryColor: p.primaryColor || undefined,
+    });
+    console.log('[FrontBack] DB saved', { itemId: item._id });
+
+    // e) Delete RAW (best-effort — do not let this block or fail the response)
+    deleteFromR2({ key: frontRawKey }).catch((e) =>
+      console.warn('[FrontBack] front R2 delete failed (non-fatal):', e?.message)
+    );
+
+    return res.status(201).json(item);
+  } catch (err) {
+    if (frontRawKey) { deleteFromR2({ key: frontRawKey }).catch(() => {}); }
+    if (backRawKey)  { deleteFromR2({ key: backRawKey  }).catch(() => {}); }
+    console.error('[FrontBack] unhandled error:', err?.message || err);
+    return res.status(500).json({ message: err?.message || 'Failed to process item' });
+  }
+});
+
 // POST /api/wardrobe/items — v1 pipeline: upload RAW → Python process-item → create wardrobe → delete RAW
 // JWT required. Server-to-server only: Node calls Python; do not expose AI_SERVICE_URL to client.
 // Rate-limit: consider adding express-rate-limit for this endpoint.
@@ -425,6 +598,8 @@ router.get('/', auth, async (req, res, next) => {
     const normalized = items.map((item) => ({
       id: item._id.toString(),
       cleanImageUrl: item.cleanImageUrl ?? item.imageUrl ?? null,
+      backImageUrl: item.backImageUrl ?? null,
+      clothingType: item.clothingType ?? null,
       profile: item.profile ?? null,
       category: item.category ?? null,
       type: item.type ?? null,

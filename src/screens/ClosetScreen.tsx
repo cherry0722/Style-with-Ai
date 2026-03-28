@@ -57,19 +57,95 @@ const CARD_SHADOW = {
 };
 
 const WARDROBE_CATEGORIES = [
-  { key: 'top',       label: 'T-SHIRTS',     emoji: '👕' },
-  { key: 'dress',     label: 'SKIRTS',       emoji: '👗' },
-  { key: 'bottom',    label: 'DRESSES',      emoji: '👘' },
-  { key: 'outerwear', label: 'PANTS',        emoji: '👖' },
-  { key: 'shoes',     label: 'SHOES',        emoji: '👟' },
-  { key: 'accessory', label: 'ACCESSORIES',  emoji: '🎒' },
+  { key: 'tshirt',    label: 'T-SHIRTS',    emoji: '👕' },
+  { key: 'shirt',     label: 'SHIRTS',      emoji: '👔' },
+  { key: 'hoodie',    label: 'HOODIES',     emoji: '🧥' },
+  { key: 'pant',      label: 'PANTS',       emoji: '👖' },
+  { key: 'shoes',     label: 'SHOES',       emoji: '👟' },
+  { key: 'accessory', label: 'ACCESSORIES', emoji: '🎒' },
 ] as const;
 
 type CategoryKey = typeof WARDROBE_CATEGORIES[number]['key'];
 type CategoryDef = typeof WARDROBE_CATEGORIES[number];
 
+/** Maps user-selected clothingType values to ClosetScreen category keys (1-to-1 for Phase 1). */
+const CLOTHING_TYPE_TO_CATEGORY: Record<string, string> = {
+  shirt:  'shirt',
+  tshirt: 'tshirt',
+  hoodie: 'hoodie',
+  pant:   'pant',
+};
+
+/**
+ * Maps legacy AI-inferred category values to Phase 1 display category keys.
+ * Used for items uploaded before the v2 pipeline (no clothingType set).
+ * Keeps older items visible without requiring a DB migration.
+ */
+const LEGACY_CATEGORY_MAP: Record<string, string> = {
+  top:             'tshirt',    // generic top → T-Shirts tile
+  bottom:          'pant',      // generic bottom → Pants tile
+  outerwear:       'hoodie',    // legacy outerwear → Hoodies tile (closest match)
+  shoes:           'shoes',
+  accessory:       'accessory',
+  dress:           'tshirt',    // edge case: map to T-Shirts
+  traditional_set: 'shirt',     // edge case: map to Shirts
+};
+
+const CLOTHING_TYPE_DISPLAY: Record<string, string> = {
+  shirt:  'Shirt',
+  tshirt: 'T-Shirt',
+  hoodie: 'Hoodie',
+  pant:   'Pant',
+};
+
+/**
+ * Returns the wardrobe category key for an item.
+ * Priority: user-selected clothingType → legacy AI category fallback
+ * Phase 1 clothingType values map 1-to-1 to their own tile.
+ * Legacy items (no clothingType) are remapped via LEGACY_CATEGORY_MAP so
+ * they still appear somewhere sensible without a DB migration.
+ */
 function getItemCategory(item: WardrobeItemResponse): string {
-  return (item.profile?.category ?? item.category ?? '').toLowerCase();
+  const ct = item.clothingType?.toLowerCase();
+  if (ct && CLOTHING_TYPE_TO_CATEGORY[ct]) {
+    return CLOTHING_TYPE_TO_CATEGORY[ct];
+  }
+  const aiCat = (item.profile?.category ?? item.category ?? '').toLowerCase();
+  return LEGACY_CATEGORY_MAP[aiCat] ?? aiCat;
+}
+
+/**
+ * Derives a human-readable display name from item data.
+ * Priority: user clothingType → AI profile.type → AI profile.category → "Item"
+ * Color prefix (AI profile.primaryColor) prepended when available.
+ * Examples: "Blue T-Shirt", "Black Hoodie", "White Shirt", "Hoodie"
+ */
+function getItemDisplayName(item: WardrobeItemResponse): string {
+  const ct = item.clothingType?.toLowerCase();
+
+  // 1. Determine type label
+  let typeLabel: string;
+  if (ct && CLOTHING_TYPE_DISPLAY[ct]) {
+    typeLabel = CLOTHING_TYPE_DISPLAY[ct];
+  } else {
+    const aiType = typeof item.profile?.type === 'string' ? item.profile.type : '';
+    if (aiType && aiType.toLowerCase() !== 'unknown') {
+      typeLabel = aiType.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    } else {
+      const aiCat = typeof item.profile?.category === 'string' ? item.profile.category : (item.category ?? '');
+      typeLabel = aiCat && aiCat.toLowerCase() !== 'unknown'
+        ? aiCat.charAt(0).toUpperCase() + aiCat.slice(1)
+        : 'Item';
+    }
+  }
+
+  // 2. Color prefix from AI primaryColor
+  const rawColor = item.profile?.primaryColor;
+  const color = typeof rawColor === 'string' && rawColor.trim() && rawColor.toLowerCase() !== 'unknown'
+    ? rawColor.trim()
+    : '';
+
+  return color ? `${color} ${typeLabel}` : typeLabel;
 }
 
 function countLabel(n: number): string {
@@ -104,16 +180,21 @@ function CategoryCard({
 function ItemRowCard({
   item,
   onSetAvailability,
+  onPress,
 }: Readonly<{
   item: WardrobeItemResponse;
   onSetAvailability: (id: string, unavailable: boolean) => void;
+  onPress: () => void;
 }>) {
   const itemId        = item.id ?? item._id ?? '';
   const isUnavailable = item.v2?.availability?.status === 'unavailable';
-  const itemName      = item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
+  const itemName      = getItemDisplayName(item);
 
   return (
-    <View style={[styles.itemRow, isUnavailable && styles.itemRowUnavailable]}>
+    <Pressable
+      style={({ pressed }) => [styles.itemRow, isUnavailable && styles.itemRowUnavailable, pressed && styles.itemRowPressed]}
+      onPress={onPress}
+    >
       {/* Thumbnail */}
       <View style={styles.itemThumbWrap}>
         {(item.cleanImageUrl || item.imageUrl) ? (
@@ -147,7 +228,7 @@ function ItemRowCard({
       >
         <Text style={styles.laundryBtnEmoji}>🧺</Text>
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -162,6 +243,7 @@ function ClosetDetailView({
   onToggleUnavailable,
   onBack,
   onSetAvailability,
+  onPressItem,
 }: Readonly<{
   catDef: CategoryDef;
   filteredItems: WardrobeItemResponse[];
@@ -172,12 +254,13 @@ function ClosetDetailView({
   onToggleUnavailable: () => void;
   onBack: () => void;
   onSetAvailability: (id: string, unavailable: boolean) => void;
+  onPressItem: (item: WardrobeItemResponse) => void;
 }>) {
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<WardrobeItemResponse>) => (
-      <ItemRowCard item={item} onSetAvailability={onSetAvailability} />
+      <ItemRowCard item={item} onSetAvailability={onSetAvailability} onPress={() => onPressItem(item)} />
     ),
-    [onSetAvailability],
+    [onSetAvailability, onPressItem],
   );
 
   let bodyContent: React.ReactNode;
@@ -331,6 +414,15 @@ export default function ClosetScreen() {
         onToggleUnavailable={() => setShowUnavailable((v) => !v)}
         onBack={() => setSelectedCategory(null)}
         onSetAvailability={(id, u) => void setAvailability(id, u)}
+        onPressItem={(item) => {
+          navigation.navigate('ClosetItemDetail', {
+            itemId:        item.id ?? item._id ?? '',
+            frontImageUrl: item.cleanImageUrl || item.imageUrl,
+            backImageUrl:  item.backImageUrl ?? null,
+            itemName:      getItemDisplayName(item),
+            isFavorite:    item.isFavorite ?? false,
+          });
+        }}
       />
     );
   }
@@ -505,6 +597,7 @@ const styles = StyleSheet.create({
     ...CARD_SHADOW,
   },
   itemRowUnavailable: { opacity: 0.5 },
+  itemRowPressed:     { opacity: 0.75 },
 
   itemThumbWrap: {
     width: 50,

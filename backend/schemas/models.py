@@ -94,6 +94,7 @@ class ProcessItemRequest(BaseModel):
     userId: str
     rawKey: str
     rawUrl: str
+    clothingType: Optional[str] = None  # user-selected type passed from Node for type-aware prompting
 
 
 # LOCKED v1 ItemProfile schema (strict JSON from Vision)
@@ -214,6 +215,20 @@ class ProcessItemResponse(BaseModel):
     cleanKey: Optional[str] = None
     cleanUrl: Optional[str] = None
     profile: Optional[Dict[str, Any]] = None
+    failReason: Optional[str] = None
+
+
+# --- Remove-bg (back image processing): background removal only, no Vision ---
+
+
+class RemoveBgRequest(BaseModel):
+    userId: str
+    rawUrl: str
+
+
+class RemoveBgResponse(BaseModel):
+    status: str  # "ready" | "failed"
+    cleanUrl: Optional[str] = None
     failReason: Optional[str] = None
 
 
