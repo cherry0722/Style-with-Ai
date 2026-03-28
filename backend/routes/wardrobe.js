@@ -553,6 +553,8 @@ router.get('/', auth, async (req, res, next) => {
     const normalized = items.map((item) => ({
       id: item._id.toString(),
       cleanImageUrl: item.cleanImageUrl ?? item.imageUrl ?? null,
+      backImageUrl: item.backImageUrl ?? null,
+      clothingType: item.clothingType ?? null,
       profile: item.profile ?? null,
       category: item.category ?? null,
       type: item.type ?? null,

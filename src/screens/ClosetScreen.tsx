@@ -128,9 +128,11 @@ function CategoryCard({
 function ItemRowCard({
   item,
   onSetAvailability,
+  onPress,
 }: Readonly<{
   item: WardrobeItemResponse;
   onSetAvailability: (id: string, unavailable: boolean) => void;
+  onPress: () => void;
 }>) {
   const itemId        = item.id ?? item._id ?? '';
   const isUnavailable = item.v2?.availability?.status === 'unavailable';
@@ -139,7 +141,10 @@ function ItemRowCard({
     ?? item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
 
   return (
-    <View style={[styles.itemRow, isUnavailable && styles.itemRowUnavailable]}>
+    <Pressable
+      style={({ pressed }) => [styles.itemRow, isUnavailable && styles.itemRowUnavailable, pressed && styles.itemRowPressed]}
+      onPress={onPress}
+    >
       {/* Thumbnail */}
       <View style={styles.itemThumbWrap}>
         {(item.cleanImageUrl || item.imageUrl) ? (
@@ -173,7 +178,7 @@ function ItemRowCard({
       >
         <Text style={styles.laundryBtnEmoji}>🧺</Text>
       </Pressable>
-    </View>
+    </Pressable>
   );
 }
 
@@ -188,6 +193,7 @@ function ClosetDetailView({
   onToggleUnavailable,
   onBack,
   onSetAvailability,
+  onPressItem,
 }: Readonly<{
   catDef: CategoryDef;
   filteredItems: WardrobeItemResponse[];
@@ -198,12 +204,13 @@ function ClosetDetailView({
   onToggleUnavailable: () => void;
   onBack: () => void;
   onSetAvailability: (id: string, unavailable: boolean) => void;
+  onPressItem: (item: WardrobeItemResponse) => void;
 }>) {
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<WardrobeItemResponse>) => (
-      <ItemRowCard item={item} onSetAvailability={onSetAvailability} />
+      <ItemRowCard item={item} onSetAvailability={onSetAvailability} onPress={() => onPressItem(item)} />
     ),
-    [onSetAvailability],
+    [onSetAvailability, onPressItem],
   );
 
   let bodyContent: React.ReactNode;
@@ -357,6 +364,16 @@ export default function ClosetScreen() {
         onToggleUnavailable={() => setShowUnavailable((v) => !v)}
         onBack={() => setSelectedCategory(null)}
         onSetAvailability={(id, u) => void setAvailability(id, u)}
+        onPressItem={(item) => {
+          const ct = item.clothingType?.toLowerCase();
+          const name = (ct ? (CLOTHING_TYPE_DISPLAY[ct] ?? item.clothingType) : null)
+            ?? item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? 'Item';
+          navigation.navigate('ClosetItemDetail', {
+            frontImageUrl: item.cleanImageUrl || item.imageUrl,
+            backImageUrl:  item.backImageUrl ?? null,
+            itemName:      name,
+          });
+        }}
       />
     );
   }
@@ -531,6 +548,7 @@ const styles = StyleSheet.create({
     ...CARD_SHADOW,
   },
   itemRowUnavailable: { opacity: 0.5 },
+  itemRowPressed:     { opacity: 0.75 },
 
   itemThumbWrap: {
     width: 50,

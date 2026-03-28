@@ -24,6 +24,7 @@ import CalendarScreen from '../screens/CalendarScreen';
 import PasswordAndSecurityScreen from '../screens/PasswordAndSecurityScreen';
 import AccountPrivacyScreen from '../screens/AccountPrivacyScreen';
 import ClosetUploadScreen from '../screens/ClosetUploadScreen';
+import ClosetItemDetailScreen from '../screens/ClosetItemDetailScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -41,6 +42,7 @@ export type RootStackParamList = {
   PasswordAndSecurity: undefined;
   AccountPrivacy: undefined;
   ClosetUpload: undefined;
+  ClosetItemDetail: { frontImageUrl: string; backImageUrl?: string | null; itemName: string };
   InformationPermissions: undefined;
   Saved: undefined;
   Favorites: undefined;
@@ -85,6 +87,7 @@ export default function RootNavigator() {
           />
           <Stack.Screen name="AccountPrivacy" component={AccountPrivacyScreen} />
           <Stack.Screen name="ClosetUpload" component={ClosetUploadScreen} />
+          <Stack.Screen name="ClosetItemDetail" component={ClosetItemDetailScreen} />
           <Stack.Screen
             name="InformationPermissions"
             component={ComingSoonScreen}
