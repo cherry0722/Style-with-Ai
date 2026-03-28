@@ -96,6 +96,40 @@ function getItemCategory(item: WardrobeItemResponse): string {
   return (item.profile?.category ?? item.category ?? '').toLowerCase();
 }
 
+/**
+ * Derives a human-readable display name from item data.
+ * Priority: user clothingType → AI profile.type → AI profile.category → "Item"
+ * Color prefix (AI profile.primaryColor) prepended when available.
+ * Examples: "Blue T-Shirt", "Black Hoodie", "White Shirt", "Hoodie"
+ */
+function getItemDisplayName(item: WardrobeItemResponse): string {
+  const ct = item.clothingType?.toLowerCase();
+
+  // 1. Determine type label
+  let typeLabel: string;
+  if (ct && CLOTHING_TYPE_DISPLAY[ct]) {
+    typeLabel = CLOTHING_TYPE_DISPLAY[ct];
+  } else {
+    const aiType = typeof item.profile?.type === 'string' ? item.profile.type : '';
+    if (aiType && aiType.toLowerCase() !== 'unknown') {
+      typeLabel = aiType.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    } else {
+      const aiCat = typeof item.profile?.category === 'string' ? item.profile.category : (item.category ?? '');
+      typeLabel = aiCat && aiCat.toLowerCase() !== 'unknown'
+        ? aiCat.charAt(0).toUpperCase() + aiCat.slice(1)
+        : 'Item';
+    }
+  }
+
+  // 2. Color prefix from AI primaryColor
+  const rawColor = item.profile?.primaryColor;
+  const color = typeof rawColor === 'string' && rawColor.trim() && rawColor.toLowerCase() !== 'unknown'
+    ? rawColor.trim()
+    : '';
+
+  return color ? `${color} ${typeLabel}` : typeLabel;
+}
+
 function countLabel(n: number): string {
   return n === 1 ? '1 item' : `${n} items`;
 }
@@ -136,9 +170,7 @@ function ItemRowCard({
 }>) {
   const itemId        = item.id ?? item._id ?? '';
   const isUnavailable = item.v2?.availability?.status === 'unavailable';
-  const ct            = item.clothingType?.toLowerCase();
-  const itemName      = (ct ? (CLOTHING_TYPE_DISPLAY[ct] ?? item.clothingType) : null)
-    ?? item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? '—';
+  const itemName      = getItemDisplayName(item);
 
   return (
     <Pressable
@@ -365,14 +397,11 @@ export default function ClosetScreen() {
         onBack={() => setSelectedCategory(null)}
         onSetAvailability={(id, u) => void setAvailability(id, u)}
         onPressItem={(item) => {
-          const ct = item.clothingType?.toLowerCase();
-          const name = (ct ? (CLOTHING_TYPE_DISPLAY[ct] ?? item.clothingType) : null)
-            ?? item.profile?.type ?? item.type ?? item.profile?.category ?? item.category ?? 'Item';
           navigation.navigate('ClosetItemDetail', {
             itemId:        item.id ?? item._id ?? '',
             frontImageUrl: item.cleanImageUrl || item.imageUrl,
             backImageUrl:  item.backImageUrl ?? null,
-            itemName:      name,
+            itemName:      getItemDisplayName(item),
             isFavorite:    item.isFavorite ?? false,
           });
         }}

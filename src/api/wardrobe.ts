@@ -34,7 +34,7 @@ export interface WardrobeItemResponse {
   tags?: string[];
   metadata?: FashionMetadata;
   styleVibe?: string[];
-  profile?: { category?: string; type?: string; confidence?: number; [key: string]: unknown } | null;
+  profile?: { category?: string; type?: string; primaryColor?: string; confidence?: number; [key: string]: unknown } | null;
   type?: string | null;
   primaryColor?: string | null;
   createdAt?: string;

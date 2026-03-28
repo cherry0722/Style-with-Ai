@@ -254,7 +254,7 @@ export default function ClosetUploadScreen() {
         </View>
 
         {/* Clothing type */}
-        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>TYPE</Text>
+        <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>CLOTHING TYPE</Text>
         <View style={styles.typeRow}>
           {CLOTHING_TYPES.map((t) => {
             const selected = clothingType === t;
@@ -285,6 +285,9 @@ export default function ClosetUploadScreen() {
             );
           })}
         </View>
+        <Text style={[styles.comingSoonNote, { color: colors.textSecondary }]}>
+          Shoes, dresses &amp; accessories coming soon
+        </Text>
       </ScrollView>
 
       {/* Upload button */}
@@ -364,6 +367,12 @@ const styles = StyleSheet.create({
   typeChipText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  comingSoonNote: {
+    marginTop: 14,
+    fontSize: 12,
+    fontWeight: '400',
+    letterSpacing: 0.2,
   },
   footer: {
     padding: 16,
