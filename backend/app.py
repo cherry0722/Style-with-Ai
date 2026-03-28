@@ -17,13 +17,15 @@ from schemas.models import (
     RecommendResponse,
     ProcessItemRequest,
     ProcessItemResponse,
+    RemoveBgRequest,
+    RemoveBgResponse,
     GenerateOutfitsRequest,
     GenerateOutfitsResponse,
     GenerateOutfitsOutfit,
 )
 from ai.agent import MyraAgent
 from db.mongo import get_db
-from services.process_item import process_item, VisionFailedError
+from services.process_item import process_item, remove_bg_only, VisionFailedError
 from services.generate_outfits import generate_outfits
 
 app = FastAPI(title="MYRA AI Backend", version="0.1.0")
@@ -107,6 +109,22 @@ def generate_outfits_endpoint(req: GenerateOutfitsRequest):
     return GenerateOutfitsResponse(
         outfits=[GenerateOutfitsOutfit(**o) for o in outfits],
     )
+
+
+@app.post("/remove-bg", response_model=RemoveBgResponse, dependencies=[Depends(_require_internal_token)])
+def remove_bg_endpoint(req: RemoveBgRequest):
+    """
+    Lightweight background-removal only. No Vision AI.
+    Used for back images: fetch RAW → rembg → upload CLEAN → return cleanUrl.
+    Called by Node only (server-to-server).
+    """
+    print(f"[API] remove-bg for userId={req.userId}")
+    try:
+        result = remove_bg_only(req.userId, req.rawUrl)
+        return RemoveBgResponse(**result)
+    except Exception as e:
+        print(f"[API] remove-bg error: {e}")
+        return RemoveBgResponse(status="failed", cleanUrl=None, failReason=str(e))
 
 
 @app.post("/process-item", response_model=ProcessItemResponse, dependencies=[Depends(_require_internal_token)])

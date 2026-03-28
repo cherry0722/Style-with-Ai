@@ -218,6 +218,20 @@ class ProcessItemResponse(BaseModel):
     failReason: Optional[str] = None
 
 
+# --- Remove-bg (back image processing): background removal only, no Vision ---
+
+
+class RemoveBgRequest(BaseModel):
+    userId: str
+    rawUrl: str
+
+
+class RemoveBgResponse(BaseModel):
+    status: str  # "ready" | "failed"
+    cleanUrl: Optional[str] = None
+    failReason: Optional[str] = None
+
+
 # --- Generate-outfits (Phase 3C): text-only outfit generation ---
 
 

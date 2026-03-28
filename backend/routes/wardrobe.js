@@ -232,11 +232,24 @@ router.post('/items/front-back', auth, upload.fields([
       }
     }
 
-    // c) Call Python /process-item for front image
-    console.log('[FrontBack] calling Python /process-item');
+    // c) Call Python /process-item for front AND /remove-bg for back in parallel.
+    //    Back removal is best-effort — it never blocks or fails the main upload.
+    console.log('[FrontBack] calling Python /process-item (+ /remove-bg for back)');
+
+    const frontProcessPromise = aiService.post('/process-item', {
+      userId, rawKey: frontRawKey, rawUrl: frontRawUrl, clothingType: clothingType || null,
+    });
+
+    const backBgPromise = (backFile && backRawKey && backImageUrl)
+      ? aiService.post('/remove-bg', { userId, rawUrl: backImageUrl }).catch((e) => {
+          console.warn('[FrontBack] back /remove-bg failed (non-fatal):', e?.message);
+          return null;
+        })
+      : Promise.resolve(null);
+
     let pyResponse;
     try {
-      pyResponse = await aiService.post('/process-item', { userId, rawKey: frontRawKey, rawUrl: frontRawUrl, clothingType: clothingType || null });
+      pyResponse = await frontProcessPromise;
     } catch (err) {
       console.error('[FrontBack] Python /process-item failed:', err?.code, err?.response?.status);
       await deleteFromR2({ key: frontRawKey });
@@ -275,7 +288,23 @@ router.post('/items/front-back', auth, upload.fields([
       });
     }
 
-    // d) Save to MongoDB
+    // d) Resolve back image bg removal (ran in parallel — already settled by now)
+    const backBgResponse = await backBgPromise;
+    let finalBackUrl = backImageUrl; // default: raw back URL (backward compat)
+    if (backBgResponse?.data?.status === 'ready' && backBgResponse.data.cleanUrl) {
+      finalBackUrl = backBgResponse.data.cleanUrl;
+      console.log('[FrontBack] back image cleaned via /remove-bg');
+      if (backRawKey) {
+        deleteFromR2({ key: backRawKey }).catch((e) =>
+          console.warn('[FrontBack] back raw R2 delete failed (non-fatal):', e?.message)
+        );
+        backRawKey = null; // prevent double-delete in catch block
+      }
+    } else {
+      console.log('[FrontBack] back image kept as raw (remove-bg not run or failed)');
+    }
+
+    // e) Save to MongoDB
     console.log('[FrontBack] saving to DB');
     const p = profile && typeof profile === 'object' ? profile : {};
 
@@ -294,7 +323,7 @@ router.post('/items/front-back', auth, upload.fields([
       userId,
       imageUrl:      cleanUrl,
       cleanImageUrl: cleanUrl,
-      backImageUrl,
+      backImageUrl:  finalBackUrl,
       clothingType:  resolvedClothingType,
       profile: p,
       category:     resolvedCategory,

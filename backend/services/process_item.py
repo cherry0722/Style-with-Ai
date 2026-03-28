@@ -288,6 +288,32 @@ def generate_item_profile_from_vision(
         return None, str(e)
 
 
+def remove_bg_only(user_id: str, raw_url: str) -> dict:
+    """
+    Lightweight pipeline: fetch → rembg → upload clean → return cleanUrl.
+    No Vision AI. Used for back images where metadata is not needed.
+    """
+    # a) Fetch
+    raw_bytes, content_type, err = fetch_raw(raw_url)
+    if err:
+        return {"status": "failed", "cleanUrl": None, "failReason": f"Fetch failed: {err}"}
+
+    # b) rembg
+    png_bytes, err = run_rembg(raw_bytes, content_type)
+    if err:
+        return {"status": "failed", "cleanUrl": None, "failReason": f"Background removal failed: {err}"}
+
+    # c) Upload clean to R2
+    clean_key, err = upload_clean_to_r2(png_bytes, user_id)
+    if err:
+        return {"status": "failed", "cleanUrl": None, "failReason": f"R2 upload failed: {err}"}
+
+    public_base = (os.getenv("R2_PUBLIC_BASE_URL") or "").rstrip("/")
+    clean_url = f"{public_base}/{clean_key}"
+
+    return {"status": "ready", "cleanUrl": clean_url, "failReason": None}
+
+
 def process_item(user_id: str, raw_key: str, raw_url: str, clothing_type: Optional[str] = None) -> dict:
     """
     Full pipeline: fetch → rembg → upload clean → vision → return result.
