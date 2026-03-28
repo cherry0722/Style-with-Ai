@@ -274,3 +274,88 @@ class GenerateOutfitsOutfit(BaseModel):
 class GenerateOutfitsResponse(BaseModel):
     """Response: exactly 3 outfits when possible, each with why + notes."""
     outfits: List[GenerateOutfitsOutfit] = Field(default_factory=list)
+
+
+# --- Avatar Fabric / Material Mapping (V1) ---
+
+
+class AvatarMappingRequest(BaseModel):
+    """
+    Request to map a wardrobe item's visual attributes to avatar asset data.
+
+    Accepts individual fields OR a full ItemProfile dict via `profile`.
+    When `profile` is provided, individual fields take precedence if also set.
+    V1 supports top and bottom categories only.
+    """
+    # Individual fields (mirror ItemProfile — all optional for flexibility)
+    category: Optional[str] = Field(None, description="'top' or 'bottom'")
+    type: Optional[str] = Field(None, description="Item subtype, e.g. 't-shirt', 'jeans'")
+    # Primary color accepts two names:
+    #   primaryColor — Vision/ItemProfile field name
+    #   color        — Node wardrobe model field name (JS model stores it as 'color')
+    # Both map to palette.primary. primaryColor wins if both are supplied.
+    primaryColor: Optional[str] = Field(None, description="Primary color, e.g. 'Navy Blue' (Vision field name)")
+    color: Optional[str] = Field(None, description="Primary color alias used by Node wardrobe model")
+    secondaryColor: Optional[str] = Field(None, description="e.g. 'White'")
+    pattern: Optional[str] = Field(None, description="e.g. 'solid', 'striped'")
+    material: Optional[str] = Field(None, description="e.g. 'cotton', 'denim'")
+    fit: Optional[str] = Field(None, description="e.g. 'slim fit', 'regular fit'")
+    keyDetails: Optional[List[str]] = Field(default_factory=list)
+    # Alternatively pass a full ItemProfile dict
+    profile: Optional[Dict[str, Any]] = Field(None, description="Full ItemProfile dict from Vision")
+
+
+class AvatarPalette(BaseModel):
+    """Hex color palette for avatar material tinting."""
+    primary: Optional[str] = Field(None, description="Hex color, e.g. '#1A1A1A'")
+    secondary: Optional[str] = Field(None, description="Hex color or null")
+
+
+class AvatarRenderHints(BaseModel):
+    """Hints that drive .glb renderer material/shader configuration."""
+    usePatternTexture: bool = Field(False, description="Apply tiling pattern texture")
+    useSecondaryColor: bool = Field(False, description="Blend secondary color into material slot")
+    surfaceFinish: str = Field("matte", description="'matte' | 'glossy' | 'textured'")
+    # Reserved for Phase 2 (front/back texture projection — not implemented in V1)
+    frontTextureRef: Optional[str] = Field(None, description="Future: R2 URL of front texture")
+    backTextureRef: Optional[str] = Field(None, description="Future: R2 URL of back texture")
+
+
+class AvatarMappingResult(BaseModel):
+    """
+    Structured avatar asset-mapping result for a single wardrobe item.
+    Consumed by the .glb renderer to select asset families and configure materials.
+    """
+    avatarCategory: str = Field(..., description="'top' or 'bottom'")
+    avatarAssetFamily: str = Field(
+        ...,
+        description=(
+            "Top families: tshirt, shirt, dress_shirt, hoodie, zip_hoodie, "
+            "sweater, blazer, tank, polo, crop_top. "
+            "Bottom families: jeans, trousers, chinos, sweatpants, joggers, "
+            "cargo_pants, shorts, leggings, skirt."
+        ),
+    )
+    materialPreset: str = Field(
+        ...,
+        description=(
+            "cotton | denim | knit | fleece | linen | wool | leather | "
+            "athletic | textured_cotton | formal_fabric"
+        ),
+    )
+    patternPreset: str = Field(
+        ...,
+        description=(
+            "solid | striped | plaid | floral | graphic | camo | "
+            "houndstooth | argyle | paisley | tie_dye | geometric | animal_print"
+        ),
+    )
+    palette: AvatarPalette
+    fitPreset: str = Field(
+        ...,
+        description="regular | slim | relaxed | oversized | straight | wide | tapered | cropped",
+    )
+    renderHints: AvatarRenderHints
+    # Raw input echo — useful for debugging / frontend override logic
+    inputCategory: Optional[str] = None
+    inputType: Optional[str] = None
