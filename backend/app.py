@@ -116,9 +116,9 @@ def process_item_endpoint(req: ProcessItemRequest):
     Called by Node only (server-to-server).
     """
     # Avoid logging full rawUrl (may contain tokens in some setups)
-    print(f"[API] process-item for userId={req.userId}, rawKey={req.rawKey[:50]}...")
+    print(f"[API] process-item for userId={req.userId}, rawKey={req.rawKey[:50]}..., clothingType={req.clothingType}")
     try:
-        result = process_item(req.userId, req.rawKey, req.rawUrl)
+        result = process_item(req.userId, req.rawKey, req.rawUrl, clothing_type=req.clothingType)
         return ProcessItemResponse(**result)
     except VisionFailedError as e:
         print(f"[API] process-item Vision failed: {e}")

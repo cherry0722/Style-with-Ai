@@ -236,7 +236,7 @@ router.post('/items/front-back', auth, upload.fields([
     console.log('[FrontBack] calling Python /process-item');
     let pyResponse;
     try {
-      pyResponse = await aiService.post('/process-item', { userId, rawKey: frontRawKey, rawUrl: frontRawUrl });
+      pyResponse = await aiService.post('/process-item', { userId, rawKey: frontRawKey, rawUrl: frontRawUrl, clothingType: clothingType || null });
     } catch (err) {
       console.error('[FrontBack] Python /process-item failed:', err?.code, err?.response?.status);
       await deleteFromR2({ key: frontRawKey });

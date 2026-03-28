@@ -122,30 +122,119 @@ def upload_clean_to_r2(
         return None, str(e)
 
 
-VISION_SCHEMA_SPEC = '''
-{
-  "type": "string or empty",
+VISION_SCHEMA_SPEC = '''{
+  "type": "concise clothing name, 1-3 words, e.g. 't-shirt', 'jeans', 'pullover hoodie'",
   "category": "one of: top, bottom, shoes, outerwear, accessory, dress, traditional_set",
-  "primaryColor": "string or empty",
-  "secondaryColor": "string or empty",
-  "colorUndertone": "warm | cool | neutral",
-  "pattern": "string or empty",
-  "material": "string or empty",
-  "fit": "string or empty",
-  "formality": 0-10 number,
+  "primaryColor": "standard color name, e.g. 'Black', 'Navy Blue', 'Heather Grey', 'Off White'",
+  "secondaryColor": "standard color name or null",
+  "colorUndertone": "warm | cool | neutral | null",
+  "pattern": "e.g. 'solid', 'striped', 'plaid', 'floral', 'graphic' or null",
+  "material": "e.g. 'cotton', 'denim', 'polyester', 'linen', 'fleece' or null",
+  "fit": "e.g. 'slim fit', 'regular fit', 'relaxed fit', 'oversized', 'straight leg' or null",
+  "formality": "0-10 number (0=athletic, 5=casual, 8=smart-casual, 10=formal)",
   "season": "one of: spring, summer, fall, winter, all",
-  "styleTags": ["string"],
-  "keyDetails": ["string"],
-  "pairingHints": ["string"],
-  "confidence": 0-100 number
+  "styleTags": ["e.g. 'streetwear', 'minimalist', 'preppy', 'casual'"],
+  "keyDetails": ["specific observable details, e.g. 'crew neck', 'long sleeve', 'kangaroo pocket', 'straight leg'"],
+  "pairingHints": ["e.g. 'pairs well with chinos', 'wear with white sneakers'"],
+  "confidence": "0-100 integer (80-100 for clear clothing, 10 for non-clothing)"
+}'''
+
+# Per-type extraction guidance for Phase 1 supported categories
+_TYPE_HINTS: dict = {
+    "shirt": {
+        "category": "top",
+        "type_examples": '"dress shirt", "casual shirt", "button-up shirt", "Oxford shirt", "flannel shirt", "linen shirt", "chambray shirt"',
+        "key_details_hint": (
+            "collar style (e.g. 'spread collar', 'button-down collar', 'mandarin collar'), "
+            "sleeve length ('long-sleeve' or 'short-sleeve'), "
+            "closure ('button-front'), and notable surface details"
+        ),
+        "fit_hint": '"slim fit", "regular fit", "relaxed fit", "oversized"',
+    },
+    "tshirt": {
+        "category": "top",
+        "type_examples": '"t-shirt", "graphic tee", "polo shirt", "baseball tee", "henley", "pocket tee"',
+        "key_details_hint": (
+            "neckline ('crew neck', 'v-neck', 'scoop neck', 'polo collar'), "
+            "sleeve length ('short-sleeve', 'long-sleeve', 'sleeveless'), "
+            "and any visible graphic, logo, or print"
+        ),
+        "fit_hint": '"slim fit", "regular fit", "oversized", "cropped"',
+    },
+    "hoodie": {
+        "category": "top",
+        "type_examples": '"pullover hoodie", "zip-up hoodie", "oversized hoodie", "cropped hoodie"',
+        "key_details_hint": (
+            "closure style ('pullover' or 'zip-up'), "
+            "pocket style ('kangaroo pocket' or 'no pocket'), "
+            "drawstring presence, and any visible graphic or embroidery"
+        ),
+        "fit_hint": '"regular fit", "oversized", "slim fit", "cropped"',
+    },
+    "pant": {
+        "category": "bottom",
+        "type_examples": '"jeans", "chinos", "sweatpants", "trousers", "cargo pants", "joggers", "shorts", "leggings"',
+        "key_details_hint": (
+            "leg fit ('straight leg', 'slim leg', 'wide leg', 'tapered', 'flared'), "
+            "rise ('high-rise', 'mid-rise', 'low-rise'), "
+            "length ('full-length', 'ankle-length', 'cropped', 'shorts'), "
+            "and visible hardware or pockets"
+        ),
+        "fit_hint": '"straight fit", "slim fit", "relaxed fit", "wide leg", "tapered"',
+    },
 }
-'''
 
 
-def generate_item_profile_from_vision(clean_url: str) -> Tuple[Optional[dict], Optional[str]]:
+def _build_vision_prompts(clothing_type: Optional[str]) -> Tuple[str, str]:
+    """
+    Build (system_prompt, user_prompt) for Vision call.
+    When clothing_type is provided, injects type-aware guidance so the model
+    knows the category up-front and returns concrete, specific field values.
+    """
+    hint = _TYPE_HINTS.get(clothing_type or "")
+
+    # Base rules applied to every call
+    base_rules = (
+        "You are a fashion metadata extractor. "
+        "Return ONLY a valid JSON object matching the exact schema below. "
+        "No markdown, no prose, no explanation.\n\n"
+        "Rules:\n"
+        "- Use null for unknown or not-visible fields (not empty string).\n"
+        "- Arrays use [] when empty.\n"
+        '- "type": must be a specific, concise clothing name (1-3 words). Never return "unknown" for a real garment.\n'
+        '- "primaryColor": use a standard color name (e.g. "Black", "Navy Blue", "Off White", "Heather Grey"). Never return "unknown".\n'
+        '- "confidence": 80-100 for clear clothing; 10 for non-clothing images.\n'
+        "- Non-clothing image: set category \"top\", type \"unknown\", confidence 10, null colors.\n"
+    )
+
+    if hint:
+        type_section = (
+            f'\nThis item has been identified by the user as a "{clothing_type}". '
+            f'Use these type-specific guidelines:\n'
+            f'- "category" MUST be "{hint["category"]}"\n'
+            f'- "type" must be one of: {hint["type_examples"]}\n'
+            f'- "fit" examples: {hint["fit_hint"]}\n'
+            f'- "keyDetails" MUST include: {hint["key_details_hint"]}\n'
+        )
+        label_map = {"shirt": "shirt", "tshirt": "t-shirt", "hoodie": "hoodie", "pant": "pants"}
+        user_label = label_map.get(clothing_type or "", clothing_type or "clothing item")
+        user_prompt = f"This is a {user_label}. Return a JSON object with the exact schema for this image:"
+    else:
+        type_section = ""
+        user_prompt = "Return a JSON object with the exact schema above for this image:"
+
+    system_prompt = base_rules + type_section + "\nSchema (exact keys):\n" + VISION_SCHEMA_SPEC
+    return system_prompt, user_prompt
+
+
+def generate_item_profile_from_vision(
+    clean_url: str,
+    clothing_type: Optional[str] = None,
+) -> Tuple[Optional[dict], Optional[str]]:
     """
     Call OpenAI Vision to generate ItemProfile. Returns (profile_dict, error_msg).
     Uses response_format=json_object for strict JSON. Non-clothing images get low confidence + safe defaults.
+    clothing_type (optional): user-selected type ("shirt", "tshirt", "hoodie", "pant") used for type-aware prompting.
     """
     try:
         from openai import OpenAI
@@ -158,13 +247,7 @@ def generate_item_profile_from_vision(clean_url: str) -> Tuple[Optional[dict], O
 
     client = OpenAI(api_key=api_key)
 
-    system_prompt = """You are a fashion metadata extractor. Return ONLY a JSON object. No markdown, no explanations, no prose.
-If the image is not a clothing item, use category "top", type "unknown", confidence 10, and empty strings for colors.
-Use empty string "" or null for unknown fields. Arrays use [] when empty.
-Schema (exact keys):
-""" + VISION_SCHEMA_SPEC.strip()
-
-    user_prompt = "Return a JSON object with the exact schema above for this image:"
+    system_prompt, user_prompt = _build_vision_prompts(clothing_type)
 
     try:
         resp = client.chat.completions.create(
@@ -179,7 +262,7 @@ Schema (exact keys):
                     ],
                 },
             ],
-            max_tokens=500,
+            max_tokens=600,
             response_format={"type": "json_object"},
         )
         text = (resp.choices[0].message.content or "").strip()
@@ -205,9 +288,10 @@ Schema (exact keys):
         return None, str(e)
 
 
-def process_item(user_id: str, raw_key: str, raw_url: str) -> dict:
+def process_item(user_id: str, raw_key: str, raw_url: str, clothing_type: Optional[str] = None) -> dict:
     """
     Full pipeline: fetch → rembg → upload clean → vision → return result.
+    clothing_type: user-selected type ("shirt", "tshirt", "hoodie", "pant") forwarded to Vision for type-aware prompting.
     """
     # a) Fetch
     raw_bytes, content_type, err = fetch_raw(raw_url)
@@ -245,8 +329,8 @@ def process_item(user_id: str, raw_key: str, raw_url: str) -> dict:
     public_base = (os.getenv("R2_PUBLIC_BASE_URL") or "").rstrip("/")
     clean_url = f"{public_base}/{clean_key}"
 
-    # d) Vision
-    profile_dict, err = generate_item_profile_from_vision(clean_url)
+    # d) Vision (type-aware when clothing_type is provided)
+    profile_dict, err = generate_item_profile_from_vision(clean_url, clothing_type=clothing_type)
     if err:
         raise VisionFailedError(f"Vision failed: {err}")
 

@@ -94,6 +94,7 @@ class ProcessItemRequest(BaseModel):
     userId: str
     rawKey: str
     rawUrl: str
+    clothingType: Optional[str] = None  # user-selected type passed from Node for type-aware prompting
 
 
 # LOCKED v1 ItemProfile schema (strict JSON from Vision)
