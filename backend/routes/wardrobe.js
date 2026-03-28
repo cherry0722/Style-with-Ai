@@ -247,7 +247,7 @@ router.post('/items/front-back', auth, upload.fields([
       });
     }
 
-    const { status, cleanUrl, profile, failReason } = pyResponse.data || {};
+    const { status, cleanKey, cleanUrl, profile, failReason } = pyResponse.data || {};
     console.log('[FrontBack] Python responded', { status, hasCleanUrl: !!cleanUrl });
 
     if (status === 'failed') {
@@ -257,6 +257,22 @@ router.post('/items/front-back', auth, upload.fields([
     if (status !== 'ready' || !cleanUrl) {
       await deleteFromR2({ key: frontRawKey });
       return res.status(502).json({ message: 'Invalid response from AI service', failReason: failReason || 'Missing cleanUrl' });
+    }
+
+    // Non-apparel gate: Vision returns confidence ~10 for non-clothing images.
+    // Reject anything below the threshold before writing to DB.
+    const APPAREL_CONFIDENCE_THRESHOLD = 30;
+    const confidence = (profile && typeof profile.confidence === 'number') ? profile.confidence : null;
+    if (confidence !== null && confidence < APPAREL_CONFIDENCE_THRESHOLD) {
+      console.log('[FrontBack] rejecting non-apparel image', { confidence });
+      deleteFromR2({ key: frontRawKey }).catch(() => {});
+      if (backRawKey) deleteFromR2({ key: backRawKey }).catch(() => {});
+      if (cleanKey)   deleteFromR2({ key: cleanKey   }).catch(() => {});
+      return res.status(422).json({
+        message: 'This image does not appear to be a clothing item. Please upload a photo of clothing or an accessory.',
+        failReason: 'non_apparel',
+        confidence,
+      });
     }
 
     // d) Save to MongoDB

@@ -206,7 +206,8 @@ export default function ClosetUploadScreen() {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
-      Alert.alert('Upload failed', err?.message || 'Please try again.');
+      const msg = err?.response?.data?.message || err?.message || 'Please try again.';
+      Alert.alert('Upload failed', msg);
     } finally {
       setUploading(false);
     }
