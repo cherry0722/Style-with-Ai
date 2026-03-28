@@ -1,17 +1,18 @@
 # services/generate_outfits.py
-# Phase 3C+: Text-only outfit generation with structured fashion reasoning.
-# Uses ONLY request.items[].profile and context (occasion, location, weather).
+# Phase 3C+ v2: Text-only outfit generation with scoring, variety ranking, and metadata use.
 #
 # Pipeline:
 #   1. _weather_pre_filter      — remove weather-inappropriate items before LLM
 #   2. _call_openai_text        — LLM reasons in slotted schema (top/bottom/footwear/layer)
-#                                 with explicit formal + color rules in system prompt;
+#                                 with rules for formal, color, pattern, material, and variety;
 #                                 maps back to the existing itemIds/why/notes contract
-#   3. _deterministic_outfits   — fallback with occasion-compatibility + color-harmony scoring
+#   3. _deterministic_outfits   — fallback: generates ALL candidate combos, scores each with
+#                                 _score_outfit_combo, then selects via _select_diverse_outfits
+#                                 for quality + variety across the 3 results
 
 import os
 import json
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 
 # ---------------------------------------------------------------------------
 # Color-harmony constants
@@ -74,6 +75,42 @@ FORMAL_OCCASIONS = {
     "cocktail", "dinner party", "work", "office", "business",
 }
 
+# ---------------------------------------------------------------------------
+# Pattern compatibility constants (v2)
+# ---------------------------------------------------------------------------
+
+# Visually loud / busy patterns — two of these together often clash
+LOUD_PATTERNS = {
+    "striped", "plaid", "floral", "graphic", "checked", "houndstooth",
+    "paisley", "animal print", "camouflage", "camo", "tie-dye", "argyle",
+    "abstract", "geometric", "print",
+}
+
+# ---------------------------------------------------------------------------
+# Material / weather-suitability constants (v2)
+# ---------------------------------------------------------------------------
+
+# Lightweight, breathable materials — preferred in hot weather (>= 80 °F)
+BREATHABLE_MATERIALS = {
+    "cotton", "linen", "chambray", "jersey", "modal", "rayon", "bamboo",
+    "seersucker", "voile", "gauze",
+}
+
+# Warm, insulating materials — preferred in cold weather (<= 50 °F)
+WARM_MATERIALS = {
+    "wool", "fleece", "flannel", "knit", "cashmere", "corduroy", "denim",
+    "tweed", "sherpa", "thermal", "down",
+}
+
+# ---------------------------------------------------------------------------
+# Variety-selection tuning (v2)
+# ---------------------------------------------------------------------------
+
+# Score deducted per reused core (top/bottom/dress) item when selecting diverse outfits.
+# Set high enough to prefer a different top/bottom when alternatives exist,
+# but not so high that a forced repeat is deprioritized over a clashing combo.
+CORE_VARIETY_PENALTY = 4
+
 
 # ---------------------------------------------------------------------------
 # Color-harmony helpers
@@ -89,22 +126,16 @@ def _is_neutral(color: Optional[str]) -> bool:
 
 def _colors_clash(color_a: Optional[str], color_b: Optional[str]) -> bool:
     """
-    Stronger clash detection than before.
-    Clashes detected:
-    - Two bold warm hues together (red+orange, orange+yellow, red+pink, etc.)
-    - One side being neutral always prevents a clash.
-
-    This catches the red+orange and orange+yellow cases that were missed.
+    Stronger clash detection: two bold warm hues together (red+orange,
+    orange+yellow, red+pink, etc.). Neutrals never clash.
     """
     if not color_a or not color_b:
         return False
     a, b = color_a.lower(), color_b.lower()
-    # Neutrals pair with everything — no clash possible
     if _is_neutral(a) or _is_neutral(b):
         return False
     a_warm = any(w in a for w in WARM_COLORS)
     b_warm = any(w in b for w in WARM_COLORS)
-    # Two bold warm colors = likely clash (e.g. red+orange, orange+yellow, red+pink)
     return a_warm and b_warm
 
 
@@ -114,15 +145,12 @@ def _color_pair_score(color_top: Optional[str], color_bottom: Optional[str]) -> 
       +2  → neutral base (safe pairing)
        0  → no clash but no neutral either (acceptable)
       -2  → strong clash (penalize heavily so it sinks to the bottom of the sort)
-
-    Using -2 instead of the previous -1 makes the penalty strong enough to
-    consistently avoid clashing combos when neutral alternatives exist.
     """
     if _colors_clash(color_top, color_bottom):
-        return -2   # strong penalty — avoids clash when better option exists
+        return -2
     if _is_neutral(color_top) or _is_neutral(color_bottom):
-        return 2    # neutral base is always safe
-    return 0        # non-neutral, non-clashing — acceptable but not preferred
+        return 2
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -140,57 +168,83 @@ def _is_formal_occasion(occasion: Optional[str]) -> bool:
 def _formal_compatibility_score(item: Dict[str, Any]) -> int:
     """
     Score an item's compatibility with a formal occasion.
-    Used to re-rank tops, bottoms, and shoes before combo generation so that
-    dress shirts and trousers float to the top and t-shirts/sneakers sink.
-
       +2  → clearly formal (dress shirt, trousers, loafers, blazer)
        0  → neutral / unknown
       -2  → clearly casual (t-shirt, sneakers, sweatpants)
-
-    Items with a high Vision formality score (>= 7) get a bonus; low (<= 3) get a penalty.
-    The -2 penalty is strong enough to de-rank casual items without hiding them
-    entirely — they remain as a last-resort fallback if no formal options exist.
+    Plus ±1 tiebreaker from Vision formality field (>= 7 / <= 3).
     """
     profile = item.get("profile") or {}
     item_type = (profile.get("type") or "").lower()
-    formality_val = profile.get("formality")  # 0–10 int from Vision
+    formality_val = profile.get("formality")
 
     score = 0
-
-    # --- Top compatibility ---
     if any(kw in item_type for kw in FORMAL_TOP_KEYWORDS):
         score += 2
     elif any(kw in item_type for kw in CASUAL_TOP_KEYWORDS):
         score -= 2
-
-    # --- Bottom compatibility ---
     if any(kw in item_type for kw in FORMAL_BOTTOM_KEYWORDS):
         score += 2
     elif any(kw in item_type for kw in CASUAL_BOTTOM_KEYWORDS):
         score -= 2
-
-    # --- Shoe compatibility ---
     if any(kw in item_type for kw in FORMAL_SHOE_KEYWORDS):
         score += 2
     elif any(kw in item_type for kw in CASUAL_SHOE_KEYWORDS):
         score -= 2
-
-    # --- Outerwear/layer compatibility ---
     if any(kw in item_type for kw in FORMAL_LAYER_KEYWORDS):
         score += 2
-
-    # --- Vision formality field: use as a tiebreaker ---
     if formality_val is not None:
         try:
             f = int(formality_val)
             if f >= 7:
-                score += 1   # Vision agrees this is formal
+                score += 1
             elif f <= 3:
-                score -= 1   # Vision agrees this is casual
+                score -= 1
         except (ValueError, TypeError):
             pass
-
     return score
+
+
+# ---------------------------------------------------------------------------
+# Pattern helpers (v2)
+# ---------------------------------------------------------------------------
+
+def _is_loud_pattern(pattern: Optional[str]) -> bool:
+    """Return True if the pattern is visually loud (non-solid/non-minimal)."""
+    if not pattern:
+        return False
+    p = pattern.lower()
+    return any(loud in p for loud in LOUD_PATTERNS)
+
+
+# ---------------------------------------------------------------------------
+# Material / weather suitability helpers (v2)
+# ---------------------------------------------------------------------------
+
+def _material_weather_score(material: Optional[str], temp_f: Optional[float]) -> int:
+    """
+    +1 if the material suits the current temperature.
+    -1 if it is inappropriate (e.g., heavy wool in 90 °F heat).
+     0 if temperature is unknown or the material is weather-neutral.
+
+    Used to surface seasonally appropriate items — linen rises in summer,
+    fleece/wool rise in winter.
+    """
+    if not material or temp_f is None:
+        return 0
+    m = material.lower()
+    is_breathable = any(bm in m for bm in BREATHABLE_MATERIALS)
+    is_warm = any(wm in m for wm in WARM_MATERIALS)
+    if temp_f >= 80:
+        if is_breathable:
+            return 1
+        if is_warm:
+            return -1
+    elif temp_f <= 50:
+        if is_warm:
+            return 1
+        if is_breathable and not is_warm:
+            return -1
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +271,207 @@ def _normalize_category(profile: Optional[Dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# PairingHints cross-reference bonus (v2)
+# ---------------------------------------------------------------------------
+
+def _pairing_hints_bonus(combo_items: List[Dict[str, Any]]) -> int:
+    """
+    Reward outfits where items explicitly suggest each other via pairingHints.
+
+    If item A's pairingHints mentions the type of item B in the same combo
+    (e.g., 'pairs well with chinos' and B is chinos), add +1. This turns
+    pairingHints from passive display text into an active ranking signal.
+    Capped at +3 to prevent dominating the total score.
+    """
+    type_words: Set[str] = set()
+    for it in combo_items:
+        profile = it.get("profile") or {}
+        for word in (profile.get("type") or "").lower().split():
+            if len(word) > 3:
+                type_words.add(word)
+
+    bonus = 0
+    for it in combo_items:
+        profile = it.get("profile") or {}
+        for hint in (profile.get("pairingHints") or []):
+            hint_lower = hint.lower()
+            for word in type_words:
+                if word in hint_lower:
+                    bonus += 1
+                    break  # max 1 bonus per hint
+    return min(bonus, 3)
+
+
+# ---------------------------------------------------------------------------
+# Outfit completeness scoring (v2)
+# ---------------------------------------------------------------------------
+
+def _completeness_score(
+    cat_counts: Dict[str, int],
+    temp_f: Optional[float],
+    has_outerwear: bool,
+) -> int:
+    """
+    Score how structurally complete the outfit is.
+      +2  has top + bottom (or dress) — core requirement
+      +1  has shoes
+      -1  missing shoes on an otherwise complete outfit
+      +1  has outerwear/layer when cold (temp_f <= 54)
+    """
+    has_top_bottom = (cat_counts.get("top", 0) > 0 and cat_counts.get("bottom", 0) > 0)
+    has_dress = cat_counts.get("dress", 0) > 0
+    has_shoes = cat_counts.get("shoes", 0) > 0
+
+    score = 0
+    if has_top_bottom or has_dress:
+        score += 2
+    if has_shoes:
+        score += 1
+    elif has_top_bottom or has_dress:
+        score -= 1  # mild penalty for missing shoes on an otherwise complete outfit
+    if temp_f is not None and temp_f <= 54 and has_outerwear:
+        score += 1  # layered for cold = better
+    return score
+
+
+# ---------------------------------------------------------------------------
+# Master outfit combo scorer (v2)
+# ---------------------------------------------------------------------------
+
+def _score_outfit_combo(
+    combo_items: List[Dict[str, Any]],
+    occasion: Optional[str],
+    temp_f: Optional[float],
+) -> int:
+    """
+    Score a candidate outfit combination. Higher score = better outfit.
+
+    Scoring factors (each contributes independently):
+    1. Completeness        — top+bottom core, shoes, cold-weather layer
+    2. Color harmony       — neutral base reward, bold-warm-clash penalty
+    3. Pattern clash       — -2 for two loud patterns in the same outfit
+    4. Material/weather    — +1/-1 per item for seasonal appropriateness
+    5. Formal compatibility— +1/-1 per item when occasion is formal
+    6. PairingHints cross  — +1 per hint match (capped at +3)
+    """
+    if not combo_items:
+        return -99
+
+    profiles = [it.get("profile") or {} for it in combo_items]
+
+    # Category counts for completeness and color scoring
+    cats: Dict[str, int] = {}
+    for it in combo_items:
+        cat = _normalize_category(it.get("profile"))
+        cats[cat] = cats.get(cat, 0) + 1
+    has_outerwear = cats.get("outerwear", 0) > 0
+
+    score = 0
+
+    # 1. Completeness — rewards full, wearable outfits
+    score += _completeness_score(cats, temp_f, has_outerwear)
+
+    # 2. Color harmony — top vs bottom primary colors
+    top_color: Optional[str] = None
+    bottom_color: Optional[str] = None
+    for it in combo_items:
+        cat = _normalize_category(it.get("profile"))
+        c = (it.get("profile") or {}).get("primaryColor")
+        if cat == "top" and top_color is None:
+            top_color = c
+        elif cat in ("bottom", "dress") and bottom_color is None:
+            bottom_color = c
+    score += _color_pair_score(top_color, bottom_color)
+
+    # 3. Pattern clash — penalize two loud patterns in the same outfit
+    loud_count = sum(1 for p in profiles if _is_loud_pattern(p.get("pattern")))
+    if loud_count >= 2:
+        score -= 2  # two loud patterns rarely work together
+
+    # 4. Material / weather suitability — summed across all items
+    for p in profiles:
+        score += _material_weather_score(p.get("material"), temp_f)
+
+    # 5. Formal compatibility — when occasion is formal, reward formal items
+    if _is_formal_occasion(occasion):
+        for it in combo_items:
+            fc = _formal_compatibility_score(it)
+            score += max(-1, min(1, fc // 2))  # clamp contribution to ±1 per item
+
+    # 6. PairingHints cross-reference — reward items that suggest each other
+    score += _pairing_hints_bonus(combo_items)
+
+    return score
+
+
+# ---------------------------------------------------------------------------
+# Diversity-aware outfit selector (v2)
+# ---------------------------------------------------------------------------
+
+def _select_diverse_outfits(
+    scored_combos: List[Tuple[int, List[Dict[str, Any]], List[str], Dict[str, Any]]],
+    target: int = 3,
+) -> List[Dict[str, Any]]:
+    """
+    Greedy diversity-aware selection from scored outfit candidates.
+
+    Strategy:
+    - Start with the highest-scored outfit.
+    - For each subsequent pick, compute:
+        effective_score = raw_score - (core_overlap × CORE_VARIETY_PENALTY)
+      where core_overlap counts how many top/bottom/dress items from this
+      candidate are already present in a selected outfit.
+    - This discourages the same top or bottom appearing in all 3 outfits
+      when alternatives exist, producing meaningfully different silhouettes.
+    - Shoes and outerwear are NOT penalized for overlap — varying only shoes
+      while keeping the same core is still acceptable variety.
+    - When all candidates overlap heavily (small wardrobe), the penalty
+      still ensures we pick the best available remaining combo.
+    """
+    selected: List[Dict[str, Any]] = []
+    used_core_ids: Set[str] = set()   # tracks tops/bottoms/dresses already selected
+    used_id_sets: Set[frozenset] = set()
+
+    remaining = list(scored_combos)
+
+    while len(selected) < target and remaining:
+        best_idx = -1
+        best_eff_score = float("-inf")
+
+        for idx, (raw_score, combo_items, item_ids, _) in enumerate(remaining):
+            id_set = frozenset(item_ids)
+            if id_set in used_id_sets:
+                continue  # exact duplicate — skip entirely
+
+            # Count core item overlap (only tops/bottoms/dresses)
+            core_overlap = sum(
+                1
+                for it, iid in zip(combo_items, item_ids)
+                if _normalize_category(it.get("profile")) in ("top", "bottom", "dress")
+                and iid in used_core_ids
+            )
+            eff_score = raw_score - core_overlap * CORE_VARIETY_PENALTY
+
+            if eff_score > best_eff_score:
+                best_eff_score = eff_score
+                best_idx = idx
+
+        if best_idx == -1:
+            break
+
+        raw_score, combo_items, item_ids, outfit_dict = remaining.pop(best_idx)
+        selected.append(outfit_dict)
+        used_id_sets.add(frozenset(item_ids))
+
+        # Register core items as used for subsequent variety checks
+        for it, iid in zip(combo_items, item_ids):
+            if _normalize_category(it.get("profile")) in ("top", "bottom", "dress"):
+                used_core_ids.add(iid)
+
+    return selected
+
+
+# ---------------------------------------------------------------------------
 # Weather pre-filter
 # ---------------------------------------------------------------------------
 
@@ -226,9 +481,8 @@ def _weather_pre_filter(
 ) -> List[Dict[str, Any]]:
     """
     Remove weather-inappropriate items BEFORE the LLM call.
-    Rules:
     - Hot (>= 80 °F): exclude heavy outerwear (jackets, coats, hoodies, cardigans).
-    - Cold (<= 45 °F): keep everything; the LLM/fallback adds layers naturally.
+    - Cold (<= 45 °F): keep everything; LLM/fallback adds layers naturally.
     - No temperature: no filtering.
     Never returns an empty list — falls back to unfiltered if all items are removed.
     """
@@ -241,7 +495,6 @@ def _weather_pre_filter(
         item_type = (profile.get("type") or "").lower()
         category = _normalize_category(profile)
 
-        # Exclude heavy outer layers when it's hot
         if temp_f >= 80 and category == "outerwear":
             if any(kw in item_type for kw in HEAVY_LAYER_KEYWORDS | {"hoodie", "cardigan"}):
                 continue
@@ -254,9 +507,8 @@ def _weather_pre_filter(
 # ---------------------------------------------------------------------------
 # Internal LLM schema
 # ---------------------------------------------------------------------------
-# The LLM reasons in SLOTS (top / bottom / footwear / layer) to force thinking
-# about outfit completeness and compatibility.
-# Results map back to the existing itemIds/why/notes API contract.
+# The LLM reasons in SLOTS (top/bottom/footwear/layer) to force thinking about
+# outfit completeness and compatibility; results map back to itemIds/why/notes.
 
 _LLM_INTERNAL_SCHEMA = """{
   "outfits": [
@@ -269,7 +521,7 @@ _LLM_INTERNAL_SCHEMA = """{
         "footwear": "<id of the shoes item, or null>",
         "layer":    "<id of a jacket/blazer/outerwear item, or null if not needed>"
       },
-      "reasoning": "1-2 sentences: why this outfit works — color harmony, occasion fit, weather suitability."
+      "reasoning": "1-2 sentences: why this outfit works — color harmony, occasion fit, weather/material, pattern notes."
     }
   ]
 }"""
@@ -281,8 +533,8 @@ _LLM_INTERNAL_SCHEMA = """{
 
 def _build_item_summary(it: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Build a rich item summary for the LLM prompt.
-    Includes all profile fields relevant to outfit reasoning.
+    Build a rich item summary for the LLM prompt including all profile fields
+    relevant to outfit reasoning: pattern, material, fit, pairingHints, etc.
     """
     profile = it.get("profile") or {}
     return {
@@ -308,14 +560,12 @@ def _build_item_summary(it: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_system_prompt(occasion: Optional[str]) -> str:
     """
-    Build the LLM system prompt, injecting a stronger formal rule when
-    the occasion is formal. This is the primary fix for the 'dress shirt +
-    trousers + white sneakers' problem — the LLM now knows sneakers are
-    prohibited on formal occasions when alternatives exist.
+    Build the LLM system prompt with full quality rules.
+    v2 adds: pattern clash rule, material/weather rule, pairingHints guidance,
+    and a stronger variety rule requiring different tops/bottoms across outfits.
     """
     formal = _is_formal_occasion(occasion)
 
-    # --- Base quality rules (always present) ---
     base = (
         "You are a professional fashion stylist AI. "
         "Generate realistic, wearable, stylish outfits using ONLY the provided wardrobe items. "
@@ -323,23 +573,33 @@ def _build_system_prompt(occasion: Optional[str]) -> str:
         "Quality rules:\n"
         "1. OCCASION — match formality level to occasion. "
         "Casual = formality 0–5. Office/work = 6+. Date night = 7+. Formal/gala/wedding = 8+. Gym = athletic.\n"
-        "2. WEATHER — if tempF >= 80 °F, never assign a heavy jacket/coat/hoodie to the layer slot. "
-        "If tempF <= 50 °F, strongly prefer adding an outerwear layer when one is available.\n"
+        "2. WEATHER & MATERIALS — if tempF >= 80 °F, never assign a heavy jacket/coat/hoodie to the layer slot. "
+        "If tempF <= 50 °F, strongly prefer adding an outerwear layer when available. "
+        "In hot weather prefer breathable materials (cotton, linen, chambray, jersey). "
+        "In cold weather prefer warm materials (wool, fleece, flannel, knit, cashmere).\n"
         "3. COLOR HARMONY — prefer a neutral base (black, white, navy, grey, beige, charcoal) "
         "paired with at most one accent color. "
         "NEVER pair two bold warm colors together (e.g., red + orange, orange + yellow, red + pink). "
-        "If a neutral top exists, prefer it over a bold top that would clash with the available bottoms. "
-        "Use pairingHints from the item profile when available.\n"
-        "4. COMPLETENESS — a minimum viable outfit needs top + bottom OR a dress. "
+        "Use pairingHints from item profiles — if item A says 'pairs well with chinos' "
+        "and chinos are available, prioritize that pairing.\n"
+        "4. PATTERN RULE — avoid pairing two visually loud patterns in the same outfit "
+        "(e.g., striped shirt + plaid pants, floral top + graphic tee). "
+        "One loud pattern + one solid is always acceptable. "
+        "Two solids together is always safe.\n"
+        "5. COMPLETENESS — a minimum viable outfit needs top + bottom OR a dress. "
         "Footwear improves any look. A layer slot is optional.\n"
-        "5. VARIETY — the 3 outfits must each use a meaningfully different combination of items.\n"
+        "6. VARIETY (CRITICAL) — the 3 outfits MUST each use a meaningfully different combination. "
+        "Use a DIFFERENT top in each outfit when multiple tops are available. "
+        "Use a DIFFERENT bottom in each outfit when multiple bottoms are available. "
+        "If the same top must appear in more than one outfit due to limited wardrobe, "
+        "acknowledge this explicitly in the reasoning field. "
+        "NEVER return 3 outfits that resolve to the same itemIds.\n"
     )
 
-    # --- Injected formal rule (only when occasion is formal) ---
     formal_rule = ""
     if formal:
         formal_rule = (
-            "6. FORMAL OCCASIONS (CRITICAL) — The requested occasion is formal. "
+            "7. FORMAL OCCASIONS (CRITICAL) — The requested occasion is formal. "
             "You MUST follow these rules strictly:\n"
             "   a. Top slot: use dress shirts, button-up shirts, Oxford shirts, blouses, or turtlenecks. "
             "NEVER use t-shirts, hoodies, graphic tees, or polo shirts if a formal top is available.\n"
@@ -348,7 +608,7 @@ def _build_system_prompt(occasion: Optional[str]) -> str:
             "   c. Footwear slot: use loafers, derbies, Oxford shoes, heels, monk straps, or Chelsea boots. "
             "NEVER use sneakers, trainers, or canvas shoes if formal footwear is available.\n"
             "   d. Layer slot (if used): use a blazer, suit jacket, or sport coat — not a hoodie.\n"
-            "   e. If only casual items exist, use the least-casual option available and note the limitation.\n"
+            "   e. If only casual items exist, use the least-casual option and note the limitation.\n"
         )
 
     footer = (
@@ -373,14 +633,12 @@ def _call_openai_text(
     Call OpenAI with structured fashion-reasoning prompt.
 
     Flow:
-    1. Build rich item summaries (all styling-relevant profile fields).
-    2. Use slotted schema prompt — forces reasoning about completeness, formality,
-       and color compatibility rather than arbitrary ID picking.
+    1. Build rich item summaries (pattern, material, fit, pairingHints, etc.).
+    2. Slot-based schema prompt forces reasoning about completeness, formality,
+       color, patterns, materials, pairingHints, and variety.
     3. Validate all slot assignments reference real item IDs.
     4. Map structured response → existing API contract:
-         slot ids         → itemIds
-         reasoning        → why
-         name + occasion  → notes
+         slot ids → itemIds, reasoning → why, name + occasion → notes.
 
     Returns list of outfit dicts or None on any failure.
     """
@@ -442,7 +700,7 @@ def _call_openai_text(
                 if val and str(val) in valid_ids:
                     item_ids.append(str(val))
 
-            # Accept legacy flat itemIds format as fallback (backward compat)
+            # Accept legacy flat itemIds format as fallback
             if not item_ids:
                 legacy = o.get("itemIds") or []
                 item_ids = [str(i) for i in legacy if str(i) in valid_ids]
@@ -472,7 +730,7 @@ def _call_openai_text(
 
 
 # ---------------------------------------------------------------------------
-# Deterministic fallback
+# Deterministic fallback (v2: full scoring + diversity selection)
 # ---------------------------------------------------------------------------
 
 def _deterministic_outfits(
@@ -483,15 +741,14 @@ def _deterministic_outfits(
     """
     Fallback outfit builder when OpenAI is unavailable.
 
-    Improvements:
-    - Formal occasion compatibility: tops/bottoms/shoes are sorted by
-      _formal_compatibility_score so dress shirts and trousers float to the top
-      and t-shirts/sneakers sink — matching the LLM formal rule.
-    - Stronger color-harmony scoring: penalty is -2 (was -1), and WARM_COLORS
-      now includes pink/yellow so more clashes are caught.
-    - Duplicate handling: prefers unique combos; if wardrobe is too small for
-      3 unique combos, pads honestly with a "Limited wardrobe" note rather than
-      silently repeating or pretending the outfits are meaningfully different.
+    v2 improvements over v1:
+    - Generates ALL valid candidate combos (top+bottom+shoes+optional layer).
+    - Scores each with _score_outfit_combo (color, pattern, material, formality,
+      completeness, pairingHints) rather than just color-sorting the first 4×4 pairs.
+    - Selects final 3 using _select_diverse_outfits, which penalizes repeated
+      tops/bottoms so different silhouettes rise to the top.
+    - Previously took the first 3 non-duplicate hits; now picks the best 3 by quality
+      while maximizing variety across the results.
     """
     by_cat: Dict[str, List[Dict[str, Any]]] = {
         "top": [], "bottom": [], "shoes": [], "dress": [], "outerwear": [], "other": [],
@@ -513,7 +770,7 @@ def _deterministic_outfits(
     if weather and isinstance(weather.get("tempF"), (int, float)):
         temp_f = float(weather["tempF"])
 
-    # Hot weather: drop outerwear (mirrors LLM rule)
+    # Hot weather: drop outerwear entirely (mirrors LLM rule 2)
     if temp_f is not None and temp_f >= 80:
         outerwear = []
 
@@ -527,111 +784,101 @@ def _deterministic_outfits(
     else:
         weather_note = "Light and breathable for warm weather."
 
-    # --- Formal sorting ---
-    # When the occasion is formal, sort each category so formal-compatible items
-    # (dress shirts, trousers, loafers) appear first. Casual items (sneakers,
-    # t-shirts) sink to the bottom but remain available as a last resort.
+    # Formal sorting: dress shirts / trousers / loafers float to top of each list
     if is_formal:
         tops = sorted(tops, key=lambda x: -_formal_compatibility_score(x))
         bottoms = sorted(bottoms, key=lambda x: -_formal_compatibility_score(x))
         shoes = sorted(shoes, key=lambda x: -_formal_compatibility_score(x))
         outerwear = sorted(outerwear, key=lambda x: -_formal_compatibility_score(x))
 
-    # --- Color-harmony scoring for top+bottom pairs ---
-    # Sorted best-first: neutral-base pairs (+2) > acceptable pairs (0) > clashing pairs (-2).
-    # The stronger -2 penalty (vs previous -1) ensures clashing combos are consistently
-    # ranked below neutral alternatives when they exist.
-    def _pair_color_score(top_item: Dict, bottom_item: Dict) -> int:
-        tc = (top_item.get("profile") or {}).get("primaryColor")
-        bc = (bottom_item.get("profile") or {}).get("primaryColor")
-        return _color_pair_score(tc, bc)
+    # Add a layer to every combo when cold and outerwear is available
+    layer = outerwear[0] if (temp_f is not None and temp_f <= 54 and outerwear) else None
 
-    combos = sorted(
-        [(t, b) for t in tops[:4] for b in bottoms[:4]],
-        key=lambda tb: -_pair_color_score(tb[0], tb[1]),
-    )
+    # Shoe options: use up to 3 shoes; if none available, use [None] (no-shoe combo)
+    shoe_slots: List[Optional[Dict[str, Any]]] = shoes[:3] if shoes else [None]
 
-    outfits: List[Dict[str, Any]] = []
-    # Track unique item-set fingerprints (frozenset so order doesn't matter)
-    used_sets: Set[frozenset] = set()
+    # --- Generate all candidate combos ---
+    # Tuple layout: (score, combo_items, item_ids, outfit_dict)
+    all_candidates: List[Tuple[int, List[Dict], List[str], Dict]] = []
 
-    # 1) Full outfit: top + bottom + shoes (+ cold-weather layer)
-    for t, b in combos:
-        for s in shoes[:3]:
-            ids = [t["id"], b["id"], s["id"]]
-            layer_note = ""
+    def _build_outfit_dict(combo_items: List[Dict]) -> Dict:
+        """Build the outfit response dict (itemIds, why, notes) for a combo."""
+        ids = [it["id"] for it in combo_items]
+        top_item = next(
+            (it for it in combo_items if _normalize_category(it.get("profile")) == "top"), None
+        )
+        bot_item = next(
+            (it for it in combo_items
+             if _normalize_category(it.get("profile")) in ("bottom", "dress")), None
+        )
+        tc = (top_item.get("profile") or {}).get("primaryColor", "") if top_item else ""
+        bc = (bot_item.get("profile") or {}).get("primaryColor", "") if bot_item else ""
+        color_note = f"{tc} top with {bc} bottom. " if tc and bc else ""
+        layer_note = (
+            " Layered for warmth."
+            if layer and any(it["id"] == layer["id"] for it in combo_items)
+            else ""
+        )
+        why = (
+            f"{color_note}{'Formal' if is_formal else 'Complete'} outfit "
+            f"for {occasion_str}. {weather_note}{layer_note}"
+        ).strip()
+        notes = ["Formal combination." if is_formal else "Color-matched combination."]
+        return {"itemIds": ids, "why": why, "notes": notes}
 
-            if temp_f is not None and temp_f <= 54 and outerwear:
-                ids.append(outerwear[0]["id"])
-                layer_note = " Layered for warmth."
+    def _add_combo(combo_items: List[Dict]) -> None:
+        """Score and register a candidate combo."""
+        score = _score_outfit_combo(combo_items, occasion, temp_f)
+        ids = [it["id"] for it in combo_items]
+        outfit_dict = _build_outfit_dict(combo_items)
+        all_candidates.append((score, combo_items, ids, outfit_dict))
 
-            id_set = frozenset(ids)
-            if id_set in used_sets:
-                continue
-            used_sets.add(id_set)
+    # Top + bottom combos (up to 5×5 pairs × shoe_slots × optional layer)
+    for t in tops[:5]:
+        for b in bottoms[:5]:
+            for s in shoe_slots:
+                combo: List[Dict] = [t, b]
+                if s is not None:
+                    combo.append(s)
+                if layer is not None:
+                    combo.append(layer)
+                _add_combo(combo)
 
-            tc = (t.get("profile") or {}).get("primaryColor", "")
-            bc = (b.get("profile") or {}).get("primaryColor", "")
-            color_note = f"{tc} top with {bc} bottom. " if tc and bc else ""
+    # Dress combos
+    for d in dresses[:3]:
+        for s in shoe_slots:
+            combo = [d]
+            if s is not None:
+                combo.append(s)
+            if layer is not None:
+                combo.append(layer)
+            _add_combo(combo)
 
-            why = f"{color_note}Complete outfit for {occasion_str}. {weather_note}{layer_note}".strip()
-            notes = ["Formal combination." if is_formal else "Color-matched combination."]
-            outfits.append({"itemIds": ids, "why": why, "notes": notes})
+    # Sort all candidates by score descending, then select for variety
+    all_candidates.sort(key=lambda x: -x[0])
+    outfits = _select_diverse_outfits(all_candidates, target=3)
+
+    # Single-item fallback: if no top+bottom or dress combos were available
+    if not outfits:
+        used_single: Set[str] = set()
+        for it in items:
             if len(outfits) >= 3:
-                return outfits
-
-    # 2) Top + bottom (no shoes in wardrobe)
-    for t, b in combos:
-        ids = [t["id"], b["id"]]
-        id_set = frozenset(ids)
-        if id_set in used_sets:
-            continue
-        used_sets.add(id_set)
-        why = f"Top and bottom for {occasion_str}. Add shoes to complete. {weather_note}".strip()
-        outfits.append({"itemIds": ids, "why": why, "notes": ["Shoes missing."]})
-        if len(outfits) >= 3:
-            return outfits
-
-    # 3) Dress + shoes
-    for d in dresses[:2]:
-        for s in shoes[:2]:
-            ids = [d["id"], s["id"]]
-            id_set = frozenset(ids)
-            if id_set in used_sets:
+                break
+            pid = it.get("id")
+            if not pid or pid in used_single:
                 continue
-            used_sets.add(id_set)
-            why = f"Dress and shoes for {occasion_str}. {weather_note}".strip()
-            outfits.append({"itemIds": ids, "why": why, "notes": []})
-            if len(outfits) >= 3:
-                return outfits
-    for d in dresses[:2]:
-        ids = [d["id"]]
-        if frozenset(ids) not in used_sets:
-            used_sets.add(frozenset(ids))
+            used_single.add(pid)
+            profile = it.get("profile") or {}
+            color = (profile.get("primaryColor") or "neutral").strip()
+            why = f"Single item for {occasion_str}. {color} tone. {weather_note}".strip()
             outfits.append({
-                "itemIds": ids,
-                "why": f"Dress for {occasion_str}. Add shoes. {weather_note}".strip(),
-                "notes": ["Shoes missing."],
+                "itemIds": [pid],
+                "why": why,
+                "notes": ["Add more pieces to complete the look."],
             })
-            if len(outfits) >= 3:
-                return outfits
 
-    # 4) Single-item fallback
-    for it in items:
-        if len(outfits) >= 3:
-            break
-        pid = it.get("id")
-        if not pid or frozenset([pid]) in used_sets:
-            continue
-        used_sets.add(frozenset([pid]))
-        profile = it.get("profile") or {}
-        color = (profile.get("primaryColor") or "neutral").strip()
-        why = f"Single item for {occasion_str}. {color} tone. {weather_note}".strip()
-        outfits.append({"itemIds": [pid], "why": why, "notes": ["Add more pieces to complete the look."]})
-
-    # --- Duplicate padding ---
-    # If the wardrobe is too small to produce 3 unique combinations, pad honestly
-    # rather than silently omitting outfits or fabricating variety.
+    # Duplicate padding: honestly acknowledge limited wardrobe rather than
+    # silently repeating or fabricating variety.
     if outfits and len(outfits) < 3:
         base = outfits[0]
         while len(outfits) < 3:
@@ -653,22 +900,17 @@ def _mark_duplicates(outfits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Scan the final outfit list and overwrite notes (and why) for any entry
     whose itemIds set is identical to a previously seen outfit.
 
-    This catches two cases:
-    - LLM returns 3 outfits that map to the same items but uses different
-      slot names / titles to disguise the repetition ("Casual Comfort",
-      "Laid-back Look", "Chill Day Outfit" all with identical IDs).
-    - Deterministic padding already writes honest notes, but this acts as a
-      safety net for any future path.
-
-    Normal unique outfits are not affected — only true duplicates are touched.
+    Catches LLM-fabricated variety: the LLM may return 3 outfits with
+    identical IDs but different names ("Casual Comfort", "Laid-back Look")
+    to disguise repetition. This post-processor ensures honest messaging
+    regardless of which code path generated the outfits.
+    Normal unique outfits are not affected.
     """
     seen: Set[frozenset] = set()
     result = []
     for outfit in outfits:
         id_set = frozenset(outfit.get("itemIds") or [])
         if id_set and id_set in seen:
-            # Duplicate detected — replace notes with an honest message and
-            # strip the why so the response doesn't imply meaningful variety.
             result.append({
                 "itemIds": outfit["itemIds"],
                 "why": "Same combination repeated — limited wardrobe options available.",
@@ -697,13 +939,12 @@ def generate_outfits(
     1. Normalise location/weather to plain dicts.
     2. Pre-filter items for weather suitability (heavy coats out in heat).
     3. Try OpenAI TEXT model with structured slot-based fashion prompt
-       (formal rule injected when occasion is formal).
-    4. Fall back to deterministic category + formal-compatibility + color-harmony matching.
+       (formal, color, pattern, material, pairingHints, and variety rules).
+    4. Fall back to deterministic scoring + diversity selection.
     """
     if not items:
         return []
 
-    # Respect kill switches
     use_llm = True
     if os.getenv("AI_ENABLE", "").lower() in ("false", "0", "no"):
         use_llm = False
@@ -729,15 +970,14 @@ def generate_outfits(
     # Step 1: remove weather-inappropriate items before LLM sees them
     filtered_items = _weather_pre_filter(items, temp_f)
 
-    # Step 2: LLM with structured formal + color-harmony prompt.
-    # _mark_duplicates is applied so LLM-fabricated variety (same itemIds,
-    # different titles) is replaced with an honest limited-wardrobe message.
+    # Step 2: LLM with structured prompt (formal + color + pattern + material + variety).
+    # _mark_duplicates applied so LLM-fabricated variety (same itemIds, different titles)
+    # is replaced with an honest limited-wardrobe message.
     if use_llm and (os.getenv("OPENAI_API_KEY") or "").strip():
         out = _call_openai_text(filtered_items, occasion, loc_dict, weather_dict)
         if out:
             return _mark_duplicates(out)
 
-    # Step 3: deterministic fallback with formal + color-harmony scoring.
-    # _mark_duplicates acts as a safety net here too, even though the fallback
-    # already pads with honest notes — this keeps both paths consistent.
+    # Step 3: deterministic fallback with full scoring + diversity selection.
+    # _mark_duplicates acts as a safety net here too.
     return _mark_duplicates(_deterministic_outfits(filtered_items, occasion, weather_dict))
