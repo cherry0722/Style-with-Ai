@@ -111,6 +111,64 @@ WARM_MATERIALS = {
 # but not so high that a forced repeat is deprioritized over a clashing combo.
 CORE_VARIETY_PENALTY = 4
 
+# Score deducted per already-selected outfit that shares the same top-type GROUP
+# (e.g., a second different tshirt still costs 2 points vs a shirt or hoodie).
+# Weaker than CORE_VARIETY_PENALTY to remain a nudge, not a block.
+TOP_TYPE_GROUP_PENALTY = 2
+
+# Score deducted per already-selected outfit that shares the same top COLOR BUCKET.
+# Prevents "3 outfits, all dark tops" when lighter or accent options exist.
+COLOR_BUCKET_PENALTY = 1
+
+# ---------------------------------------------------------------------------
+# Near-duplicate detection: type-group + color-bucket lookup tables (v3)
+# ---------------------------------------------------------------------------
+# These maps are used by _outfit_fingerprint() to compute a "visual signature"
+# tuple that groups outfits by look, independent of which exact item is used.
+# Two outfits with the same fingerprint are near-duplicates.
+
+# Top-type grouping: group key → frozenset of type substrings that belong to it.
+_TOP_TYPE_GROUPS: Dict[str, Set[str]] = {
+    "tshirt":  {"t-shirt", "tshirt", "tee", "graphic tee", "baseball tee"},
+    "shirt":   {"dress shirt", "button-up", "button-down", "oxford shirt",
+                "linen shirt", "oxford", "chambray shirt", "formal shirt"},
+    "hoodie":  {"hoodie", "zip hoodie", "zip-up hoodie", "zip-up", "sweatshirt"},
+    "polo":    {"polo shirt", "polo"},
+    "blazer":  {"blazer", "sport coat", "sport jacket", "suit jacket"},
+    "tank":    {"tank top", "tank", "singlet"},
+    "sweater": {"sweater", "pullover", "knitwear", "jumper", "cardigan"},
+    "crop":    {"crop top", "crop"},
+}
+
+# Bottom-type grouping: group key → frozenset of type substrings.
+_BOTTOM_TYPE_GROUPS: Dict[str, Set[str]] = {
+    "jeans":      {"jeans", "denim"},
+    "trousers":   {"trousers", "dress pants", "slacks", "suit pants",
+                   "tailored pants", "pleated pants", "dress trousers"},
+    "chinos":     {"chinos", "chino"},
+    "shorts":     {"shorts"},
+    "sweatpants": {"sweatpants", "jogger", "joggers", "track pants"},
+    "skirt":      {"skirt"},
+    "cargo":      {"cargo pants", "cargo"},
+}
+
+# Color bucket grouping: bucket key → set of color substrings.
+# Substrings are checked with `in`, so "navy" matches "dark navy", etc.
+_COLOR_BUCKETS: Dict[str, Set[str]] = {
+    "dark_neutral":  {"black", "charcoal", "dark grey", "dark gray",
+                      "midnight", "very dark", "jet"},
+    "navy":          {"navy"},
+    "light_neutral": {"white", "cream", "off white", "ivory", "beige",
+                      "sand", "light grey", "light gray", "heather grey"},
+    "warm_accent":   {"red", "orange", "coral", "salmon", "yellow", "mustard",
+                      "gold", "burgundy", "wine", "maroon", "rust", "terracotta"},
+    "cool_accent":   {"blue", "sky blue", "cobalt", "teal", "green", "sage",
+                      "olive", "mint", "purple", "lavender", "violet", "indigo"},
+    "pink":          {"pink", "magenta", "fuchsia", "rose"},
+    "mid_neutral":   {"grey", "gray", "khaki", "tan", "camel", "stone",
+                      "taupe", "brown", "chocolate"},
+}
+
 
 # ---------------------------------------------------------------------------
 # Color-harmony helpers
@@ -271,6 +329,67 @@ def _normalize_category(profile: Optional[Dict[str, Any]]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Near-duplicate fingerprint helpers (v3)
+# ---------------------------------------------------------------------------
+
+def _top_type_group(item: Dict[str, Any]) -> str:
+    """Return the canonical top-type group key for this item, or 'other_top'."""
+    item_type = ((item.get("profile") or {}).get("type") or "").lower().strip()
+    for group, keywords in _TOP_TYPE_GROUPS.items():
+        if any(kw in item_type for kw in keywords):
+            return group
+    return "other_top"
+
+
+def _bottom_type_group(item: Dict[str, Any]) -> str:
+    """Return the canonical bottom-type group key, or 'other_bottom'."""
+    item_type = ((item.get("profile") or {}).get("type") or "").lower().strip()
+    for group, keywords in _BOTTOM_TYPE_GROUPS.items():
+        if any(kw in item_type for kw in keywords):
+            return group
+    return "other_bottom"
+
+
+def _color_bucket(color: Optional[str]) -> str:
+    """Map a color string to a broad bucket key, or 'other'."""
+    if not color:
+        return "unknown"
+    c = color.lower().strip()
+    for bucket, keywords in _COLOR_BUCKETS.items():
+        if any(kw in c for kw in keywords):
+            return bucket
+    return "other"
+
+
+def _outfit_fingerprint(combo_items: List[Dict[str, Any]]) -> Tuple[str, str, str, str]:
+    """
+    Compute a 4-tuple visual-similarity fingerprint:
+        (top_type_group, bottom_type_group, top_color_bucket, formality_tier)
+
+    Two outfits sharing all four dimensions are near-duplicates — they look
+    effectively the same regardless of which exact items were selected.
+    Used in _select_diverse_outfits and _near_duplicate_check.
+    """
+    top_item = next(
+        (it for it in combo_items if _normalize_category(it.get("profile")) == "top"),
+        None,
+    )
+    bot_item = next(
+        (it for it in combo_items
+         if _normalize_category(it.get("profile")) in ("bottom", "dress")),
+        None,
+    )
+    top_grp   = _top_type_group(top_item)    if top_item else "none"
+    bot_grp   = _bottom_type_group(bot_item) if bot_item else "none"
+    top_color = _color_bucket(
+        (top_item.get("profile") or {}).get("primaryColor")
+    ) if top_item else "unknown"
+    formality = (top_item.get("profile") or {}).get("formality", 5) if top_item else 5
+    tier = "casual" if formality <= 4 else ("formal" if formality >= 8 else "smart_casual")
+    return (top_grp, bot_grp, top_color, tier)
+
+
+# ---------------------------------------------------------------------------
 # PairingHints cross-reference bonus (v2)
 # ---------------------------------------------------------------------------
 
@@ -413,24 +532,27 @@ def _select_diverse_outfits(
     target: int = 3,
 ) -> List[Dict[str, Any]]:
     """
-    Greedy diversity-aware selection from scored outfit candidates.
+    Greedy diversity-aware selection from scored outfit candidates (v3).
 
-    Strategy:
-    - Start with the highest-scored outfit.
-    - For each subsequent pick, compute:
-        effective_score = raw_score - (core_overlap × CORE_VARIETY_PENALTY)
-      where core_overlap counts how many top/bottom/dress items from this
-      candidate are already present in a selected outfit.
-    - This discourages the same top or bottom appearing in all 3 outfits
-      when alternatives exist, producing meaningfully different silhouettes.
-    - Shoes and outerwear are NOT penalized for overlap — varying only shoes
-      while keeping the same core is still acceptable variety.
-    - When all candidates overlap heavily (small wardrobe), the penalty
-      still ensures we pick the best available remaining combo.
+    Penalty layers (cumulative, applied per candidate):
+      1. CORE_VARIETY_PENALTY   — per reused top/bottom/dress item ID.
+         Discourages the exact same item appearing in multiple outfits.
+      2. TOP_TYPE_GROUP_PENALTY — per already-selected outfit that shares the
+         same top TYPE GROUP (e.g., a second tshirt costs 2 pts vs a shirt).
+         Nudges selection toward categorical variety (tshirt → shirt → hoodie).
+      3. COLOR_BUCKET_PENALTY   — per already-selected outfit that shares the
+         same top COLOR BUCKET. Prevents "all 3 outfits have dark tops".
+
+    Shoes and outerwear are NOT penalized for overlap — varying only shoes
+    while keeping the same core is still acceptable variety.
+    When all candidates share the same group/color (small wardrobe), the
+    penalties still select the best available option without blocking.
     """
     selected: List[Dict[str, Any]] = []
-    used_core_ids: Set[str] = set()   # tracks tops/bottoms/dresses already selected
+    used_core_ids: Set[str] = set()
     used_id_sets: Set[frozenset] = set()
+    used_top_groups: List[str] = []   # ordered list, count() gives overlap
+    used_top_colors: List[str] = []   # ordered list, count() gives overlap
 
     remaining = list(scored_combos)
 
@@ -443,7 +565,7 @@ def _select_diverse_outfits(
             if id_set in used_id_sets:
                 continue  # exact duplicate — skip entirely
 
-            # Count core item overlap (only tops/bottoms/dresses)
+            # Layer 1: existing core-item penalty
             core_overlap = sum(
                 1
                 for it, iid in zip(combo_items, item_ids)
@@ -451,6 +573,13 @@ def _select_diverse_outfits(
                 and iid in used_core_ids
             )
             eff_score = raw_score - core_overlap * CORE_VARIETY_PENALTY
+
+            # Layer 2: top-type group penalty (same style category)
+            fp = _outfit_fingerprint(combo_items)
+            eff_score -= used_top_groups.count(fp[0]) * TOP_TYPE_GROUP_PENALTY
+
+            # Layer 3: top-color bucket penalty (same dominant color tone)
+            eff_score -= used_top_colors.count(fp[2]) * COLOR_BUCKET_PENALTY
 
             if eff_score > best_eff_score:
                 best_eff_score = eff_score
@@ -463,10 +592,13 @@ def _select_diverse_outfits(
         selected.append(outfit_dict)
         used_id_sets.add(frozenset(item_ids))
 
-        # Register core items as used for subsequent variety checks
+        # Register core items and fingerprint dimensions as used
         for it, iid in zip(combo_items, item_ids):
             if _normalize_category(it.get("profile")) in ("top", "bottom", "dress"):
                 used_core_ids.add(iid)
+        fp = _outfit_fingerprint(combo_items)
+        used_top_groups.append(fp[0])
+        used_top_colors.append(fp[2])
 
     return selected
 
@@ -588,12 +720,19 @@ def _build_system_prompt(occasion: Optional[str]) -> str:
         "Two solids together is always safe.\n"
         "5. COMPLETENESS — a minimum viable outfit needs top + bottom OR a dress. "
         "Footwear improves any look. A layer slot is optional.\n"
-        "6. VARIETY (CRITICAL) — the 3 outfits MUST each use a meaningfully different combination. "
-        "Use a DIFFERENT top in each outfit when multiple tops are available. "
-        "Use a DIFFERENT bottom in each outfit when multiple bottoms are available. "
-        "If the same top must appear in more than one outfit due to limited wardrobe, "
-        "acknowledge this explicitly in the reasoning field. "
-        "NEVER return 3 outfits that resolve to the same itemIds.\n"
+        "6. VARIETY (CRITICAL) — the 3 outfits MUST be meaningfully distinct:\n"
+        "   a. TOP ITEM: use a different top item in each outfit when multiple are available.\n"
+        "   b. BOTTOM ITEM: use a different bottom item in each outfit when multiple are available.\n"
+        "   c. COLOR STORY: vary the dominant color tone across outfits. Avoid returning 3 outfits "
+        "where all tops share the same color group (e.g., all dark/navy, all white, all neutral). "
+        "If one outfit uses a dark top, at least one other should try a lighter or accented top "
+        "when such items exist.\n"
+        "   d. VIBE/CATEGORY: vary the top category across outfits when possible "
+        "(e.g., not 3 different tshirts — try tshirt + button-up + hoodie if available). "
+        "Aim for at least one casual and one elevated/smart option when the wardrobe allows.\n"
+        "   e. NEVER return 3 outfits that resolve to the same itemIds set.\n"
+        "   f. If the wardrobe forces any repeat (item, color, or category), acknowledge this "
+        "explicitly in the reasoning field.\n"
     )
 
     formal_rule = ""
@@ -892,6 +1031,148 @@ def _deterministic_outfits(
 
 
 # ---------------------------------------------------------------------------
+# Near-duplicate post-processor (v3) — fires after LLM, before _mark_duplicates
+# ---------------------------------------------------------------------------
+
+def _near_duplicate_check(
+    outfits: List[Dict[str, Any]],
+    items: List[Dict[str, Any]],
+    occasion: Optional[str],
+    weather_dict: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Detect and resolve near-duplicate outfits returned by the LLM.
+
+    Two outfits are "near-duplicates" when they share the same
+    (top_type_group, top_color_bucket) visual key — meaning they look
+    effectively identical at a glance regardless of exact items used
+    (e.g., "white tshirt + black jeans" vs "white tshirt + dark jeans").
+
+    Strategy:
+      1. Walk through LLM outfits in order; compute fingerprint for each.
+      2. If an outfit's visual key matches an already-confirmed outfit,
+         it is a near-duplicate.
+      3. Run _deterministic_outfits() to obtain an alternative candidate
+         pool, then substitute the near-duplicate with the best candidate
+         whose visual key is new.
+      4. If no suitable substitute exists (tiny wardrobe), keep the outfit
+         unchanged but append a note so the user sees honest messaging.
+
+    This function is intentionally NOT called on the deterministic path —
+    _select_diverse_outfits already enforces fingerprint diversity there.
+    """
+    if len(outfits) <= 1:
+        return outfits
+
+    id_to_item: Dict[str, Dict[str, Any]] = {
+        str(it.get("id")): it for it in items
+    }
+
+    def _combo_for(outfit: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return [
+            id_to_item[iid]
+            for iid in (outfit.get("itemIds") or [])
+            if iid in id_to_item
+        ]
+
+    # First pass: identify near-duplicate indices
+    confirmed_vis_keys: List[Tuple[str, str]] = []
+    dup_indices: List[int] = []
+    result: List[Dict[str, Any]] = [dict(o) for o in outfits]
+
+    for i, outfit in enumerate(result):
+        fp = _outfit_fingerprint(_combo_for(outfit))
+        vis_key = (fp[0], fp[2])  # (top_type_group, top_color_bucket)
+        if vis_key in confirmed_vis_keys:
+            dup_indices.append(i)
+        else:
+            confirmed_vis_keys.append(vis_key)
+
+    if not dup_indices:
+        return result  # nothing to fix
+
+    # Build deterministic alternatives as substitute candidates
+    det_outfits = _deterministic_outfits(items, occasion, weather_dict)
+
+    confirmed_id_sets: Set[frozenset] = {
+        frozenset(result[i].get("itemIds") or [])
+        for i in range(len(result))
+        if i not in dup_indices
+    }
+
+    for dup_idx in dup_indices:
+        replaced = False
+        for candidate in det_outfits:
+            cand_ids = frozenset(candidate.get("itemIds") or [])
+            if cand_ids in confirmed_id_sets:
+                continue
+            cand_fp  = _outfit_fingerprint(_combo_for(candidate))
+            cand_vis = (cand_fp[0], cand_fp[2])
+            if cand_vis not in confirmed_vis_keys:
+                result[dup_idx] = dict(candidate)
+                confirmed_id_sets.add(cand_ids)
+                confirmed_vis_keys.append(cand_vis)
+                replaced = True
+                break
+
+        if not replaced:
+            # No visually distinct substitute available — annotate honestly
+            notes = list(result[dup_idx].get("notes") or [])
+            if not any("similar" in n.lower() or "limited" in n.lower() for n in notes):
+                notes.append("Similar style combination — limited wardrobe variety.")
+            result[dup_idx]["notes"] = notes
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Outfit completeness validator
+# ---------------------------------------------------------------------------
+
+def _is_complete_outfit(
+    item_ids: List[str],
+    id_to_item: Dict[str, Any],
+) -> bool:
+    """
+    Return True if the outfit has a valid wearable core:
+      - (top AND bottom) together, OR
+      - a dress alone (self-contained)
+
+    Outfits missing a top, missing a bottom (and having no dress), or containing
+    only shoes/outerwear/accessories are incomplete and must not be surfaced.
+    This catches bottom-only or top-only LLM slots and single-item fallbacks.
+    """
+    has_top = has_bottom = has_dress = False
+    for iid in item_ids:
+        item = id_to_item.get(iid)
+        if not item:
+            continue
+        cat = _normalize_category(item.get("profile"))
+        if cat == "top":
+            has_top = True
+        elif cat == "bottom":
+            has_bottom = True
+        elif cat == "dress":
+            has_dress = True
+    return has_dress or (has_top and has_bottom)
+
+
+def _filter_complete_outfits(
+    outfits: List[Dict[str, Any]],
+    items: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """
+    Remove outfits that are missing a required core piece (top or bottom).
+    Returns fewer outfits rather than surfacing incomplete suggestions.
+    """
+    id_to_item: Dict[str, Any] = {str(it.get("id")): it for it in items}
+    return [
+        o for o in outfits
+        if _is_complete_outfit(o.get("itemIds") or [], id_to_item)
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Duplicate-honesty post-processor
 # ---------------------------------------------------------------------------
 
@@ -976,8 +1257,19 @@ def generate_outfits(
     if use_llm and (os.getenv("OPENAI_API_KEY") or "").strip():
         out = _call_openai_text(filtered_items, occasion, loc_dict, weather_dict)
         if out:
+            # Near-duplicate check: detect visually identical LLM suggestions
+            # (same top-type group + same top-color bucket) and substitute with
+            # deterministic alternatives when available.
+            out = _near_duplicate_check(out, filtered_items, occasion, weather_dict)
+            # Completeness filter: remove any outfit missing a top or bottom.
+            # Returns fewer results rather than surfacing bottom-only/top-only slots.
+            out = _filter_complete_outfits(out, filtered_items)
             return _mark_duplicates(out)
 
     # Step 3: deterministic fallback with full scoring + diversity selection.
-    # _mark_duplicates acts as a safety net here too.
-    return _mark_duplicates(_deterministic_outfits(filtered_items, occasion, weather_dict))
+    # _select_diverse_outfits already enforces fingerprint diversity here;
+    # _mark_duplicates is a final safety net for exact-ID duplicates.
+    # Completeness filter applied here too — guards the single-item fallback path.
+    det = _deterministic_outfits(filtered_items, occasion, weather_dict)
+    det = _filter_complete_outfits(det, filtered_items)
+    return _mark_duplicates(det)
