@@ -54,9 +54,11 @@ import {fetchOutfitAvatarMappings} from '../api/avatar';
 import {
   AvatarRenderConfig,
   buildRenderConfig,
+  COMBINED_NODE_BODY,
   COMBINED_NODE_BOTTOM,
   COMBINED_NODE_TOP,
   EMPTY_RENDER_CONFIG,
+  MVP_SKIN_TONE_LINEAR,
   resolveCombinedAvatar,
 } from '../avatar/avatarClothingConfig';
 
@@ -74,6 +76,15 @@ const COMBINED_AVATAR_TRANSFORM = {
   rotateY: 0,
   rotateZ: 0,
 };
+
+// ── Body skin tone — combined avatar only ─────────────────────────────────────
+// Stable module-level constant: no useMemo needed, never recreated.
+// Applied to Male_body via EntitySelector when isUsingCombined is true.
+// Source hex and linear value defined in avatarClothingConfig.ts (MVP_SKIN_TONE_*).
+const BODY_MATERIAL_PARAMS = {
+  index: 0,
+  parameters: {baseColorFactor: MVP_SKIN_TONE_LINEAR},
+} as const;
 
 // ── Interaction constants ──────────────────────────────────────────────────────
 const ROTATION_SENSITIVITY = 0.4;  // rad/px  (rotate prop is radians — see TransformProps.ts)
@@ -284,17 +295,33 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
         source={avatarSource}
         transformToUnitCube
         rotate={modelRotation}>
-        {isUsingCombined && topMaterialParams && bottomMaterialParams && (
-          <TintBoundary>
-            <EntitySelector
-              byName={COMBINED_NODE_TOP}
-              materialParameters={topMaterialParams}
-            />
-            <EntitySelector
-              byName={COMBINED_NODE_BOTTOM}
-              materialParameters={bottomMaterialParams}
-            />
-          </TintBoundary>
+        {isUsingCombined && (
+          <>
+            {/*
+             * Body skin tone — always applied when the combined avatar is active.
+             * Separate TintBoundary so a node-name miss here cannot suppress
+             * the clothing tints below.
+             */}
+            <TintBoundary>
+              <EntitySelector
+                byName={COMBINED_NODE_BODY}
+                materialParameters={BODY_MATERIAL_PARAMS}
+              />
+            </TintBoundary>
+            {/* Clothing tints — conditional on colors being resolved. */}
+            {topMaterialParams && bottomMaterialParams && (
+              <TintBoundary>
+                <EntitySelector
+                  byName={COMBINED_NODE_TOP}
+                  materialParameters={topMaterialParams}
+                />
+                <EntitySelector
+                  byName={COMBINED_NODE_BOTTOM}
+                  materialParameters={bottomMaterialParams}
+                />
+              </TintBoundary>
+            )}
+          </>
         )}
       </Model>
     </FilamentView>

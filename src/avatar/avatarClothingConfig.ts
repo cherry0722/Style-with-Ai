@@ -70,13 +70,14 @@ const ASSET_COMBINED_TSHIRT_PANTS = require('../../assets/models/combined/avatar
  * Must match the Blender object names (case-sensitive) used during export.
  *
  * Known nodes in this GLB:
- *   Male_body  — skin / body mesh.  NOT tinted — excluded from EntitySelector targeting.
+ *   Male_body  — skin / body mesh.  Receives MVP_SKIN_TONE_LINEAR via COMBINED_NODE_BODY.
  *   Tshirts    — top clothing mesh. Receives topColor tint via COMBINED_NODE_TOP.
  *   Pants      — bottom clothing mesh. Receives bottomColor tint via COMBINED_NODE_BOTTOM.
  *
  * If tinting stops working after a GLB re-export, enable __DEV__ logging
  * (see the useEffect in SceneContent) to confirm the names at runtime.
  */
+export const COMBINED_NODE_BODY   = 'Male_body';
 export const COMBINED_NODE_TOP    = 'Tshirts';
 export const COMBINED_NODE_BOTTOM = 'Pants';
 
@@ -224,6 +225,30 @@ export function hexToLinearRGBA(
     1.0,
   ];
 }
+
+// ── MVP skin tone ──────────────────────────────────────────────────────────────
+//
+// Applied to Male_body in the combined avatar via EntitySelector.
+// One neutral warm tone for MVP; swap the hex to change it later.
+//
+// Chosen value: #C8956C — warm medium-tan.  Believable under typical PBR
+// lighting without being too saturated or ethnically specific.
+// To adjust: change MVP_SKIN_TONE_HEX and hot-reload — no other edits needed.
+
+/** Hex source so the skin tone is easy to read and change. */
+export const MVP_SKIN_TONE_HEX = '#C4957A';
+
+/**
+ * Pre-computed Filament linear RGBA for MVP_SKIN_TONE_HEX.
+ * Computed once at module load — stable reference, safe to use as a const
+ * prop without useMemo.
+ *
+ * sRGB #C4957A → linear ≈ [0.554, 0.299, 0.181, 1.0]
+ * Slightly cooler/pinker than the previous #C8956C — less orange cast
+ * under warm scene lighting while remaining a natural medium tan.
+ */
+export const MVP_SKIN_TONE_LINEAR: [number, number, number, number] =
+  hexToLinearRGBA(MVP_SKIN_TONE_HEX);
 
 /** Result when a combined dressed avatar matches the current outfit. */
 export interface CombinedAvatarResult {
