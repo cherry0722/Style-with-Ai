@@ -1,7 +1,7 @@
 /**
  * FilamentSpikeScreen — Milestone 1
  *
- * Minimal proof-of-concept: loads assets/models/avatar.glb and renders it
+ * Minimal proof-of-concept: loads assets/models/avatar/avatar_base_male.glb and renders it
  * using react-native-filament. No MYRA business logic.
  *
  * Architecture (confirmed from package source):
@@ -30,8 +30,8 @@ import {
 } from 'react-native-filament';
 
 // Metro resolves this via the 'glb' assetExt added in metro.config.js.
-// The file lives at assets/models/avatar.glb.
-const MODEL_SOURCE = require('../../assets/models/avatar.glb');
+// The file lives at assets/models/avatar/avatar_base_male.glb.
+const MODEL_SOURCE = require('../../assets/models/avatar/avatar_base_male.glb');
 
 /**
  * SceneContent must be a separate component from FilamentScene so that
