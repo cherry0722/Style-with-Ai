@@ -44,6 +44,7 @@ import {Ionicons} from '@expo/vector-icons';
 import {
   Camera,
   DefaultLight,
+  EntitySelector,
   FilamentScene,
   FilamentView,
   Model,
@@ -53,7 +54,11 @@ import {fetchOutfitAvatarMappings} from '../api/avatar';
 import {
   AvatarRenderConfig,
   buildRenderConfig,
+  COMBINED_NODE_BODY,
+  COMBINED_NODE_BOTTOM,
+  COMBINED_NODE_TOP,
   EMPTY_RENDER_CONFIG,
+  MVP_SKIN_TONE_LINEAR,
   resolveCombinedAvatar,
 } from '../avatar/avatarClothingConfig';
 
@@ -71,6 +76,15 @@ const COMBINED_AVATAR_TRANSFORM = {
   rotateY: 0,
   rotateZ: 0,
 };
+
+// ── Body skin tone — combined avatar only ─────────────────────────────────────
+// Stable module-level constant: no useMemo needed, never recreated.
+// Applied to Male_body via EntitySelector when isUsingCombined is true.
+// Source hex and linear value defined in avatarClothingConfig.ts (MVP_SKIN_TONE_*).
+const BODY_MATERIAL_PARAMS = {
+  index: 0,
+  parameters: {baseColorFactor: MVP_SKIN_TONE_LINEAR},
+} as const;
 
 // ── Interaction constants ──────────────────────────────────────────────────────
 const ROTATION_SENSITIVITY = 0.4;  // rad/px  (rotate prop is radians — see TransformProps.ts)
@@ -91,6 +105,23 @@ const OCCASIONS = [
   {label: 'Party',   value: 'party'},
   {label: 'Date',    value: 'date'},
 ] as const;
+
+// ── Error boundary for EntitySelector tinting ─────────────────────────────────
+// EntitySelector throws during render if a GLB node name is not found.
+// TintBoundary catches the throw so the avatar still renders — just untinted.
+class TintBoundary extends React.Component<
+  {children: React.ReactNode},
+  {hasError: boolean}
+> {
+  state = {hasError: false};
+  static getDerivedStateFromError() { return {hasError: true}; }
+  componentDidCatch(error: Error) {
+    if (__DEV__) {
+      console.warn('[Avatar] Tint failed (entity name mismatch?):', error.message);
+    }
+  }
+  render() { return this.state.hasError ? null : this.props.children; }
+}
 
 // ── Imperative handle exposed by SceneContent ─────────────────────────────────
 // Methods reference only refs/stable setters → no stale closures.
@@ -192,9 +223,21 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
     if (__DEV__) {
       const label = resolvedCombined?.debugName ?? 'avatar_base_male.glb';
       console.log(`[Avatar] Model: ${isUsingCombined ? 'COMBINED' : 'BASE'} → ${label}`);
+      if (resolvedCombined) {
+        const fmt = (c: readonly number[]) => c.map(v => v.toFixed(3)).join(',');
+        console.log(
+          `[Avatar] Tint: top=[${fmt(resolvedCombined.topColor)}]` +
+          ` bottom=[${fmt(resolvedCombined.bottomColor)}]`,
+        );
+        // Confirm exact node names being targeted. If EntitySelector silently
+        // falls through to TintBoundary, these lines confirm what name was used.
+        console.log(
+          `[Avatar] Targeting nodes: top="${COMBINED_NODE_TOP}" bottom="${COMBINED_NODE_BOTTOM}"` +
+          ` — Male_body excluded (untinted)`,
+        );
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatarSource]);
+  }, [resolvedCombined, isUsingCombined]);
 
   useImperativeHandle(ref, () => ({
     setRotationY(deg) {
@@ -215,6 +258,21 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
     },
   }), []);  // safe: all captured values (setRotationY, setClothingConfigState) are stable
 
+  // Material tint parameters — memoized on the resolved result to avoid
+  // unnecessary worklet re-runs during drag (where only modelRotation changes).
+  const topMaterialParams = useMemo(
+    () => resolvedCombined
+      ? {index: 0, parameters: {baseColorFactor: resolvedCombined.topColor}}
+      : null,
+    [resolvedCombined],
+  );
+  const bottomMaterialParams = useMemo(
+    () => resolvedCombined
+      ? {index: 0, parameters: {baseColorFactor: resolvedCombined.bottomColor}}
+      : null,
+    [resolvedCombined],
+  );
+
   return (
     <FilamentView style={styles.filamentView}>
       <StaticSceneParts />
@@ -226,13 +284,46 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
        * orientation-reset bug in useApplyTransformations.
        *
        * key={avatarSource} forces unmount+remount when source changes.
+       *
+       * EntitySelector children apply baseColorFactor tinting to the
+       * clothing mesh regions of the combined GLB.  TintBoundary catches
+       * throws from name mismatches so the avatar renders untinted rather
+       * than crashing.
        */}
       <Model
         key={avatarSource}
         source={avatarSource}
         transformToUnitCube
-        rotate={modelRotation}
-      />
+        rotate={modelRotation}>
+        {isUsingCombined && (
+          <>
+            {/*
+             * Body skin tone — always applied when the combined avatar is active.
+             * Separate TintBoundary so a node-name miss here cannot suppress
+             * the clothing tints below.
+             */}
+            <TintBoundary>
+              <EntitySelector
+                byName={COMBINED_NODE_BODY}
+                materialParameters={BODY_MATERIAL_PARAMS}
+              />
+            </TintBoundary>
+            {/* Clothing tints — conditional on colors being resolved. */}
+            {topMaterialParams && bottomMaterialParams && (
+              <TintBoundary>
+                <EntitySelector
+                  byName={COMBINED_NODE_TOP}
+                  materialParameters={topMaterialParams}
+                />
+                <EntitySelector
+                  byName={COMBINED_NODE_BOTTOM}
+                  materialParameters={bottomMaterialParams}
+                />
+              </TintBoundary>
+            )}
+          </>
+        )}
+      </Model>
     </FilamentView>
   );
 });
