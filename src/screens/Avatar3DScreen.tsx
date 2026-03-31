@@ -30,8 +30,10 @@
 import React, {useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Modal,
   PanResponder,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -269,6 +271,7 @@ export default function Avatar3DScreen() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [hasGenerated, setHasGenerated] = useState(false);
+  const [reasonModalVisible, setReasonModalVisible] = useState(false);
 
   // ── Dropdown handlers ────────────────────────────────────────────────────────
   const toggleDropdown  = () => setDropdownOpen(prev => !prev);
@@ -314,6 +317,7 @@ export default function Avatar3DScreen() {
       const outfits = res.outfits.slice(0, 3);
       setSuggestions(outfits);
       setOutfitIndex(0);
+      setReasonModalVisible(false);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to generate. Please try again.';
       setGenerateError(message);
@@ -326,9 +330,11 @@ export default function Avatar3DScreen() {
   // ── Arrow navigation ─────────────────────────────────────────────────────────
   const goToPrev = () => {
     setOutfitIndex(i => (i - 1 + suggestions.length) % suggestions.length);
+    setReasonModalVisible(false);
   };
   const goToNext = () => {
     setOutfitIndex(i => (i + 1) % suggestions.length);
+    setReasonModalVisible(false);
   };
 
   const panResponder = useRef(
@@ -366,28 +372,28 @@ export default function Avatar3DScreen() {
       body = (
         <View style={styles.panelLoadingRow}>
           <ActivityIndicator color={TITLE_COLOR} size="small" />
-          <Text style={styles.panelMeta}>Generating suggestions…</Text>
+          <Text style={styles.panelMeta} numberOfLines={1}>Generating suggestions…</Text>
         </View>
       );
     } else if (generateError) {
       // Error
       body = (
         <>
-          <Text style={styles.panelPrimary}>Couldn't load suggestions</Text>
-          <Text style={styles.panelMeta}>Tap Generate to try again</Text>
+          <Text style={styles.panelPrimary} numberOfLines={1}>Couldn't load suggestions</Text>
+          <Text style={styles.panelMeta} numberOfLines={2}>Tap Generate to try again</Text>
         </>
       );
     } else if (!hasGenerated) {
       // Idle — before any generate attempt
       body = (
-        <Text style={styles.panelMeta}>Select an occasion above and tap Generate</Text>
+        <Text style={styles.panelMeta} numberOfLines={2}>Select an occasion above and tap Generate</Text>
       );
     } else if (suggestions.length === 0) {
       // Empty
       body = (
         <>
-          <Text style={styles.panelPrimary}>No outfit suggestions yet</Text>
-          <Text style={styles.panelMeta}>Add more clothes to your closet and try again</Text>
+          <Text style={styles.panelPrimary} numberOfLines={1}>No outfit suggestions yet</Text>
+          <Text style={styles.panelMeta} numberOfLines={2}>Add more clothes to your closet and try again</Text>
         </>
       );
     } else {
@@ -396,52 +402,68 @@ export default function Avatar3DScreen() {
       const current = suggestions[outfitIndex];
       const firstReason = current?.reasons?.[0] ?? null;
 
+      const reasonLabel = firstReason ?? `${suggestions.length} outfit${suggestions.length > 1 ? 's' : ''} ready`;
+      const showReadMore = firstReason != null && firstReason.length > 80;
+
       body = (
-        <View style={styles.outfitRow}>
-          {/* Left arrow */}
-          <TouchableOpacity
-            style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
-            onPress={goToPrev}
-            disabled={!canNavigate}
-            accessibilityRole="button"
-            accessibilityLabel="Previous outfit">
-            <Ionicons
-              name="chevron-back"
-              size={18}
-              color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
-            />
-          </TouchableOpacity>
+        <View style={styles.outfitContent}>
+          <Text style={styles.reasonText} numberOfLines={2}>
+            {reasonLabel}
+          </Text>
 
-          {/* Centre: reason + position dots */}
-          <View style={styles.outfitBody}>
-            <Text style={styles.panelPrimary} numberOfLines={2}>
-              {firstReason ?? `${suggestions.length} outfit${suggestions.length > 1 ? 's' : ''} ready`}
-            </Text>
-            {canNavigate && (
-              <View style={styles.dotsRow}>
-                {suggestions.map((s, i) => (
-                  <View
-                    key={s.outfitId ?? `dot-${i}`}
-                    style={[styles.dot, i === outfitIndex && styles.dotActive]}
-                  />
-                ))}
-              </View>
+          <View style={[
+            styles.outfitFooter,
+            !showReadMore && styles.outfitFooterCenter,
+          ]}>
+            {showReadMore && (
+              <TouchableOpacity
+                onPress={() => setReasonModalVisible(true)}
+                hitSlop={{top: 6, bottom: 6, left: 8, right: 8}}
+                accessibilityRole="button"
+                accessibilityLabel="Read full suggestion">
+                <Text style={styles.readMoreText}>Read more</Text>
+              </TouchableOpacity>
             )}
-          </View>
 
-          {/* Right arrow */}
-          <TouchableOpacity
-            style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
-            onPress={goToNext}
-            disabled={!canNavigate}
-            accessibilityRole="button"
-            accessibilityLabel="Next outfit">
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
-            />
-          </TouchableOpacity>
+            <View style={styles.outfitNav}>
+              <TouchableOpacity
+                style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
+                onPress={goToPrev}
+                disabled={!canNavigate}
+                accessibilityRole="button"
+                accessibilityLabel="Previous outfit">
+                <Ionicons
+                  name="chevron-back"
+                  size={18}
+                  color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
+                />
+              </TouchableOpacity>
+
+              {canNavigate && (
+                <View style={styles.dotsRow}>
+                  {suggestions.map((s, i) => (
+                    <View
+                      key={s.outfitId ?? `dot-${i}`}
+                      style={[styles.dot, i === outfitIndex && styles.dotActive]}
+                    />
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
+                onPress={goToNext}
+                disabled={!canNavigate}
+                accessibilityRole="button"
+                accessibilityLabel="Next outfit">
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       );
     }
@@ -590,6 +612,48 @@ export default function Avatar3DScreen() {
 
       </View>
 
+      {/* ── Reason detail bottom sheet ─────────────────────────────── */}
+      <Modal
+        visible={reasonModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReasonModalVisible(false)}>
+        <Pressable
+          style={styles.modalBackdrop}
+          onPress={() => setReasonModalVisible(false)}>
+          <Pressable
+            style={[styles.modalCard, {paddingBottom: Math.max(insets.bottom, 16)}]}
+            onPress={e => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>OUTFIT SUGGESTION</Text>
+              <View style={styles.modalHeaderRight}>
+                {suggestions.length > 1 && (
+                  <Text style={styles.modalCounter}>
+                    {outfitIndex + 1} / {suggestions.length}
+                  </Text>
+                )}
+                <TouchableOpacity
+                  onPress={() => setReasonModalVisible(false)}
+                  hitSlop={{top: 8, bottom: 8, left: 8, right: 8}}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close">
+                  <Ionicons name="close" size={20} color={TITLE_COLOR} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <View style={styles.modalDivider} />
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              bounces={false}>
+              <Text style={styles.modalText}>
+                {suggestions[outfitIndex]?.reasons?.[0] ?? ''}
+              </Text>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
     </View>
   );
 }
@@ -731,6 +795,7 @@ const styles = StyleSheet.create({
     borderColor: CONTROL_BORDER,
     borderRadius: 12,
     overflow: 'hidden',
+    flexShrink: 1,
   },
   // Header: label left, optional counter right — consistent across all states
   panelHeader: {
@@ -738,8 +803,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 7,
+    paddingTop: 6,
+    paddingBottom: 5,
   },
   panelLabel: {
     fontSize: 9,
@@ -761,9 +826,11 @@ const styles = StyleSheet.create({
   // Body: state-specific content
   panelBody: {
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 12,
+    paddingTop: 6,
+    paddingBottom: 8,
     alignItems: 'center',
+    flexShrink: 1,
+    overflow: 'hidden',
   },
   // Shared text styles used across states
   panelPrimary: {
@@ -784,21 +851,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  // Outfit row: arrows flanking centre content
-  outfitRow: {
+  // Outfit content: preview text + compact footer (read-more + nav)
+  outfitContent: {
+    alignSelf: 'stretch',
+  },
+  reasonText: {
+    fontSize: 13,
+    fontWeight: '400',
+    lineHeight: 18,
+    color: TITLE_COLOR,
+    textAlign: 'left',
+  },
+  outfitFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
-  outfitBody: {
-    flex: 1,
+  outfitFooterCenter: {
+    justifyContent: 'center',
+  },
+  readMoreText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: CHEVRON_COLOR,
+  },
+  outfitNav: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    gap: 10,
   },
   dotsRow: {
     flexDirection: 'row',
     gap: 5,
-    marginTop: 6,
   },
   dot: {
     width: 5,
@@ -823,9 +908,65 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
 
+  // ── Reason detail bottom-sheet modal ───────────────────────────
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: CONTROL_BG,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '45%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  modalHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.2,
+    color: DISABLED_COLOR,
+  },
+  modalCounter: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: CHEVRON_COLOR,
+  },
+  modalDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: CONTROL_BORDER,
+    marginHorizontal: 16,
+  },
+  modalScroll: {
+    paddingHorizontal: 16,
+  },
+  modalScrollContent: {
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  modalText: {
+    fontSize: 15,
+    fontWeight: '400',
+    lineHeight: 22,
+    color: TITLE_COLOR,
+  },
+
   // ── Stage card ─────────────────────────────────────────────────
   stageWrapper: {
     flex: 1,
+    minHeight: 180,
     paddingHorizontal: 12,
     marginBottom: 12,
   },
