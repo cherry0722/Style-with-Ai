@@ -65,6 +65,21 @@ export interface AvatarMappingResult {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ASSET_COMBINED_TSHIRT_PANTS = require('../../assets/models/combined/avatar_tshirt_pants_male_v1.glb');
 
+/**
+ * glTF node names inside avatar_tshirt_pants_male_v1.glb.
+ * Must match the Blender object names (case-sensitive) used during export.
+ *
+ * Known nodes in this GLB:
+ *   Male_body  — skin / body mesh.  NOT tinted — excluded from EntitySelector targeting.
+ *   Tshirts    — top clothing mesh. Receives topColor tint via COMBINED_NODE_TOP.
+ *   Pants      — bottom clothing mesh. Receives bottomColor tint via COMBINED_NODE_BOTTOM.
+ *
+ * If tinting stops working after a GLB re-export, enable __DEV__ logging
+ * (see the useEffect in SceneContent) to confirm the names at runtime.
+ */
+export const COMBINED_NODE_TOP    = 'Tshirts';
+export const COMBINED_NODE_BOTTOM = 'Pants';
+
 // ── Family sets for combined-avatar matching ──────────────────────────────────
 // These sets define which backend avatarAssetFamily values map to the
 // tshirt+pants combined avatar.  When adding a new combined GLB, add a new
@@ -85,7 +100,8 @@ const PANTS_FAMILIES = new Set([
  * Per-garment render config built from a backend AvatarMappingResult.
  *
  * tintPrimary / tintSecondary: hex strings (e.g. '#1A1A1A') or null.
- *   Stored for future use — tinting not yet applied to the GLB material.
+ *   tintPrimary is converted to linear RGBA and applied as baseColorFactor
+ *   on the combined avatar's clothing mesh regions via EntitySelector.
  *
  * materialPreset / patternPreset / fitPreset / renderHints:
  *   Stored and logged — not yet wired to shader parameters.
@@ -167,12 +183,58 @@ export function buildRenderConfig(results: AvatarMappingResult[]): AvatarRenderC
 //   3. Add a require() constant above
 //   4. Add family sets and a new branch below
 
+// ── Color conversion for material tinting ─────────────────────────────────────
+
+/** Minimum per-channel linear value — prevents overly harsh pure-black. */
+const MIN_LINEAR_CHANNEL = 0.012; // ≈ sRGB #1C (soft charcoal floor)
+
+/** Neutral white — preserves the material's original appearance (no tint). */
+const NEUTRAL_TINT: [number, number, number, number] = [1, 1, 1, 1];
+
+function srgbToLinear(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+/**
+ * Converts a hex color string (#RGB or #RRGGBB) to linear RGBA [0–1]⁴
+ * for Filament's baseColorFactor PBR parameter.
+ *
+ * Applies a soft per-channel floor to avoid harsh pure-black rendering.
+ * Returns the fallback when the input is null or unparsable.
+ */
+export function hexToLinearRGBA(
+  hex: string | null,
+  fallback: [number, number, number, number] = NEUTRAL_TINT,
+): [number, number, number, number] {
+  if (hex == null || hex.length < 4) return fallback;
+
+  let h = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (h.length !== 6) return fallback;
+
+  const r = parseInt(h.substring(0, 2), 16) / 255;
+  const g = parseInt(h.substring(2, 4), 16) / 255;
+  const b = parseInt(h.substring(4, 6), 16) / 255;
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return fallback;
+
+  return [
+    Math.max(srgbToLinear(r), MIN_LINEAR_CHANNEL),
+    Math.max(srgbToLinear(g), MIN_LINEAR_CHANNEL),
+    Math.max(srgbToLinear(b), MIN_LINEAR_CHANNEL),
+    1.0,
+  ];
+}
+
 /** Result when a combined dressed avatar matches the current outfit. */
 export interface CombinedAvatarResult {
   /** Metro-resolved .glb asset — pass as `source` to <Model>. */
   asset: number;
   /** Human-readable filename for dev logs. */
   debugName: string;
+  /** Linear RGBA baseColorFactor for the top (shirt) region. */
+  topColor: [number, number, number, number];
+  /** Linear RGBA baseColorFactor for the bottom (pants) region. */
+  bottomColor: [number, number, number, number];
 }
 
 /**
@@ -193,15 +255,21 @@ export function resolveCombinedAvatar(
   if (topFamily && bottomFamily
       && SHIRT_FAMILIES.has(topFamily)
       && PANTS_FAMILIES.has(bottomFamily)) {
+    const topColor    = hexToLinearRGBA(config.top?.tintPrimary ?? null);
+    const bottomColor = hexToLinearRGBA(config.bottom?.tintPrimary ?? null);
+
     if (__DEV__) {
       console.log(
         `[Avatar] Combined resolver: ${topFamily} + ${bottomFamily}` +
-        ` → avatar_tshirt_pants_male_v1.glb`,
+        ` → avatar_tshirt_pants_male_v1.glb` +
+        ` | top=${config.top?.tintPrimary ?? 'default'} bottom=${config.bottom?.tintPrimary ?? 'default'}`,
       );
     }
     return {
-      asset:     ASSET_COMBINED_TSHIRT_PANTS,
-      debugName: 'avatar_tshirt_pants_male_v1.glb',
+      asset:       ASSET_COMBINED_TSHIRT_PANTS,
+      debugName:   'avatar_tshirt_pants_male_v1.glb',
+      topColor,
+      bottomColor,
     };
   }
 
