@@ -15,7 +15,7 @@
  *               ├─ StaticSceneParts  — React.memo'd: Camera + DefaultLight.
  *               │    Never re-renders during drag — prevents the
  *               │    "FilamentBuffer already released" crash in EnvironmentalLight.
- *               └─ Model  — receives rotate prop; only this subtree updates per frame.
+ *               └─ Model  — combined dressed avatar or base naked avatar.
  *
  * Rotation isolation strategy (two layers):
  *   1. Avatar3DScreen holds NO rotation state. PanResponder calls
@@ -23,11 +23,11 @@
  *   2. StaticSceneParts is React.memo'd with no props → Camera and DefaultLight
  *      are never re-rendered even when SceneContent's rotationY state changes.
  *
- * Model path: assets/models/avatar.glb
+ * Model path: assets/models/avatar/avatar_base_male.glb
  *   Metro resolves .glb via the assetExts entry in metro.config.js.
  */
 
-import React, {useImperativeHandle, useRef, useState} from 'react';
+import React, {useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   PanResponder,
@@ -47,19 +47,40 @@ import {
   Model,
 } from 'react-native-filament';
 import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
+import {fetchOutfitAvatarMappings} from '../api/avatar';
+import {
+  AvatarRenderConfig,
+  buildRenderConfig,
+  EMPTY_RENDER_CONFIG,
+  resolveCombinedAvatar,
+} from '../avatar/avatarClothingConfig';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const AVATAR_MODEL = require('../../assets/models/avatar.glb');
+const AVATAR_MODEL = require('../../assets/models/avatar/avatar_base_male.glb');
+
+// ── Combined avatar axis-correction ───────────────────────────────────────────
+// Combined dressed avatars exported from Blender use Z-up world space, but
+// glTF / Filament expect Y-up.  This rotation offset stands the model upright.
+// Applied only when a combined avatar is active (see isUsingCombined below).
+//
+// Values are RADIANS.  Application order: R_z · R_y · R_x · UnitCubeTransform.
+const COMBINED_AVATAR_TRANSFORM = {
+  rotateX: -Math.PI / 2,   // -90°: Z-up → Y-up
+  rotateY: 0,
+  rotateZ: 0,
+};
 
 // ── Interaction constants ──────────────────────────────────────────────────────
-const ROTATION_SENSITIVITY = 0.4;  // deg/px  (225 px swipe ≈ 90°, full 360° possible)
+const ROTATION_SENSITIVITY = 0.4;  // rad/px  (rotate prop is radians — see TransformProps.ts)
 
-// NOTE: no scale feedback prop is passed to Model.
-// useApplyTransformations (react-native-filament internal) only re-applies
-// rotate when its value *changes*. If any other Model prop changes while rotate
-// stays the same, transformToUnitCube resets the matrix but rotate is skipped
-// (areFloat3Equal guard), causing a snap back to front. Keeping rotate as the
-// ONLY changing prop avoids that entirely.
+// NOTE: useApplyTransformations (react-native-filament internal) unconditionally
+// re-applies transformToUnitCube on every effect run, resetting the matrix.
+// But rotate is ONLY re-applied when areFloat3Equal(new, prev) returns false.
+// If a new array reference is created with the same values, the effect re-runs
+// (React sees the new reference), transformToUnitCube resets the matrix, but
+// rotate is skipped → model snaps to the raw unit cube orientation.
+// FIX: modelRotation is useMemo'd inside SceneContent so the array reference
+// stays stable when the values don't change. See the CRITICAL comment there.
 
 // ── Occasion options ───────────────────────────────────────────────────────────
 const OCCASIONS = [
@@ -76,6 +97,10 @@ export interface SceneHandle {
   // Returns the authoritative current rotationY so onGrant anchors correctly
   // across consecutive drags with no snap and no accumulated drift.
   getRotationY: () => number;
+  // Push a new clothing config into the scene without triggering a React re-render
+  // on the memo-guarded AvatarStage. Phase 1: stores + logs the config so the
+  // hookup point is defined. Phase 2: will trigger .glb asset swapping here.
+  setClothingConfig: (config: AvatarRenderConfig) => void;
 }
 
 // Camera and DefaultLight are completely static — same props forever.
@@ -117,6 +142,58 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
   // Ref mirror so getRotationY() returns the live value before React flushes.
   const rotationYRef = useRef(0);
 
+  // clothingConfig drives combined-avatar resolution via resolveCombinedAvatar().
+  // useState (not useRef) so that pushing a new config via setClothingConfig()
+  // triggers a re-render of SceneContent, causing the Model source to update.
+  const [clothingConfig, setClothingConfigState] = useState<AvatarRenderConfig>(EMPTY_RENDER_CONFIG);
+
+  // ── Model source resolution ──────────────────────────────────────────────────
+  // Uses the combined dressed avatar when the resolver matches the current
+  // clothing config; otherwise falls back to the base avatar.
+  const resolvedCombined = useMemo(
+    () => resolveCombinedAvatar(clothingConfig),
+    [clothingConfig],
+  );
+
+  const avatarSource     = resolvedCombined?.asset ?? AVATAR_MODEL;
+  const isUsingCombined  = resolvedCombined != null;
+
+  // CRITICAL: the rotate array MUST be memoized.
+  //
+  // react-native-filament's useApplyTransformations runs a single useEffect
+  // whose deps include the rotate array.  Inside that effect:
+  //   1. transformToUnitCube is applied UNCONDITIONALLY (resets the matrix)
+  //   2. rotate is applied only when areFloat3Equal(new, prev) is FALSE
+  //
+  // An inline array `[x, rotationY, z]` creates a new JS reference every
+  // render.  React sees the new reference → re-runs the effect → step 1
+  // resets the matrix → step 2 skips rotation because the VALUES haven't
+  // changed → model snaps to the raw unit cube orientation (lies flat).
+  //
+  // useMemo keeps the same array reference when the values don't change,
+  // preventing the effect from re-running on unrelated state changes
+  // (e.g. clothingConfig update from an outfit switch that resolves to
+  // the same combined avatar).
+  const modelRotation = useMemo<[number, number, number]>(
+    () =>
+      isUsingCombined
+        ? [
+            COMBINED_AVATAR_TRANSFORM.rotateX,
+            COMBINED_AVATAR_TRANSFORM.rotateY + rotationY,
+            COMBINED_AVATAR_TRANSFORM.rotateZ,
+          ]
+        : [0, rotationY, 0],
+    [isUsingCombined, rotationY],
+  );
+
+  useEffect(() => {
+    if (__DEV__) {
+      const label = resolvedCombined?.debugName ?? 'avatar_base_male.glb';
+      console.log(`[Avatar] Model: ${isUsingCombined ? 'COMBINED' : 'BASE'} → ${label}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarSource]);
+
   useImperativeHandle(ref, () => ({
     setRotationY(deg) {
       rotationYRef.current = deg;
@@ -125,27 +202,34 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
     getRotationY() {
       return rotationYRef.current;
     },
-  }), []);
+    setClothingConfig(config) {
+      if (__DEV__) {
+        console.log('[Avatar] Clothing config applied:', {
+          top:    config.top    ? `${config.top.assetFamily} | tint=${config.top.tintPrimary ?? 'none'} | ${config.top.materialPreset}` : null,
+          bottom: config.bottom ? `${config.bottom.assetFamily} | tint=${config.bottom.tintPrimary ?? 'none'} | ${config.bottom.materialPreset}` : null,
+        });
+      }
+      setClothingConfigState(config);
+    },
+  }), []);  // safe: all captured values (setRotationY, setClothingConfigState) are stable
 
   return (
     <FilamentView style={styles.filamentView}>
       <StaticSceneParts />
       {/*
-       * transformToUnitCube normalises the model to a 1×1×1 cube at the
-       * origin regardless of the GLB's original scale units.
+       * Avatar model — combined dressed or base.
        *
-       * rotate=[0, rotationY, 0] — Y-axis only; avatar stays perfectly upright.
+       * rotate={modelRotation} uses a useMemo'd array — see the critical
+       * comment above explaining why this prevents the transformToUnitCube
+       * orientation-reset bug in useApplyTransformations.
        *
-       * No scale prop: changing any prop other than rotate while rotate is
-       * unchanged causes useApplyTransformations to re-run transformToUnitCube
-       * (resetting rotation) without re-applying rotate (areFloat3Equal guard
-       * skips it) → snap back to front. Keeping rotate as the only changing
-       * prop avoids this entirely.
+       * key={avatarSource} forces unmount+remount when source changes.
        */}
       <Model
-        source={AVATAR_MODEL}
+        key={avatarSource}
+        source={avatarSource}
         transformToUnitCube
-        rotate={[0, rotationY, 0]}
+        rotate={modelRotation}
       />
     </FilamentView>
   );
@@ -194,13 +278,41 @@ export default function Avatar3DScreen() {
     setDropdownOpen(false);
   };
 
+  // ── Avatar clothing config resolution ────────────────────────────────────────
+  // Resolves /avatar-mapping for the currently displayed outfit and pushes the
+  // result to SceneContent imperatively. A cancellation flag ensures that only
+  // the response for the LATEST outfit is applied — stale responses from
+  // previous outfits or prior Generate presses are silently discarded.
+  useEffect(() => {
+    if (suggestions.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const outfit = suggestions[outfitIndex];
+        const mappings = await fetchOutfitAvatarMappings(outfit.items);
+        if (cancelled) return;
+        const config = buildRenderConfig(mappings);
+        sceneRef.current?.setClothingConfig(config);
+      } catch (err) {
+        if (__DEV__) {
+          console.warn('[Avatar] resolveClothingConfig failed:', err);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [outfitIndex, suggestions]);
+
   // ── Generate handler ─────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     setIsGenerating(true);
     setGenerateError(null);
     try {
       const res = await getReasonedOutfits({occasion: OCCASIONS[occasionIndex].value});
-      setSuggestions(res.outfits.slice(0, 3));
+      const outfits = res.outfits.slice(0, 3);
+      setSuggestions(outfits);
       setOutfitIndex(0);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to generate. Please try again.';
@@ -762,4 +874,5 @@ const styles = StyleSheet.create({
   actionEmoji: {
     fontSize: 22,
   },
+
 });
