@@ -28,6 +28,7 @@ import ClosetItemDetailScreen from '../screens/ClosetItemDetailScreen';
 import InformationPermissionsScreen from '../screens/InformationPermissionsScreen';
 import YourActivityScreen from '../screens/YourActivityScreen';
 import HelpScreen from '../screens/HelpScreen';
+import AboutScreen from '../screens/AboutScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -99,7 +100,7 @@ export default function RootNavigator() {
           <Stack.Screen name="Favorites" component={ComingSoonScreen} />
           <Stack.Screen name="Activity" component={YourActivityScreen} />
           <Stack.Screen name="Help" component={HelpScreen} />
-          <Stack.Screen name="About" component={ComingSoonScreen} />
+          <Stack.Screen name="About" component={AboutScreen} />
         </>
       ) : (
         <>
