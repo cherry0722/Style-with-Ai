@@ -4,7 +4,13 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/user');
+const Wardrobe = require('../models/wardrobe');
+const OutfitHistory = require('../models/outfitHistory');
+const CalendarPlan = require('../models/calendarPlan');
+const Activity = require('../models/Activity');
 const auth = require('../middleware/auth');
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -100,6 +106,35 @@ router.post('/auth/login', authLimiter, [
       return next(err);
     }
 
+    let accountRestored = false;
+
+    // Handle soft-deleted accounts
+    if (user.deletedAt) {
+      const msSinceDeletion = Date.now() - user.deletedAt.getTime();
+
+      if (msSinceDeletion > THIRTY_DAYS_MS) {
+        // Grace period expired — hard-delete everything now and reject login
+        const uid = user._id.toString();
+        await Promise.all([
+          Wardrobe.deleteMany({ userId: uid }),
+          OutfitHistory.deleteMany({ userId: uid }),
+          CalendarPlan.deleteMany({ userId: uid }),
+          Activity.deleteMany({ userId: uid }),
+        ]);
+        await User.findByIdAndDelete(user._id);
+        console.log(`[Auth] Hard-deleted expired account: ${uid}`);
+        const err = new Error('This account has been permanently deleted and cannot be recovered.');
+        err.status = 403;
+        return next(err);
+      }
+
+      // Within grace period — restore the account
+      user.deletedAt = null;
+      await user.save();
+      accountRestored = true;
+      console.log(`[Auth] Account restored: ${user._id}`);
+    }
+
     const token = jwt.sign(
       { email: user.email, userId: user._id.toString() },
       JWT_SECRET,
@@ -113,6 +148,7 @@ router.post('/auth/login', authLimiter, [
         email: user.email,
       },
       accessToken: token,
+      accountRestored,
     });
   } catch (err) {
     next(err);

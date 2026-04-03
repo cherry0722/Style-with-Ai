@@ -43,3 +43,7 @@ export const updateUserPrivacy = async (privacy: UserPrivacyPayload) => {
 export const changePassword = async (currentPassword: string, newPassword: string) => {
   return client.post("/api/users/change-password", { currentPassword, newPassword });
 };
+
+export const deleteAccount = async (password: string) => {
+  return client.delete("/api/users/account", { data: { password } });
+};

@@ -3,6 +3,10 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
 const User = require("../models/user");
+const Wardrobe = require("../models/wardrobe");
+const OutfitHistory = require("../models/outfitHistory");
+const CalendarPlan = require("../models/calendarPlan");
+const Activity = require("../models/Activity");
 const auth = require("../middleware/auth");
 
 //signup
@@ -117,6 +121,10 @@ router.get("/users/me", auth, async (req, res) => {
     const user = await User.findById(userId).lean();
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+    if (user.deletedAt) {
+      // Account is pending deletion — invalidate the session so the client logs out
+      return res.status(403).json({ message: "Account is pending deletion", pendingDeletion: true });
     }
     delete user.password;
     return res.status(200).json(user);
@@ -313,6 +321,49 @@ router.post("/users/change-password", auth, async (req, res) => {
   } catch (err) {
     console.error("Error changing password:", err);
     return res.status(500).json({ message: "Server error while changing password" });
+  }
+});
+
+// DELETE /api/users/account — soft-delete: verify password, set deletedAt, keep data for 30-day grace period
+router.delete("/users/account", auth, async (req, res) => {
+  try {
+    const userId =
+      (req.user && req.user.id) ||
+      (req.user && req.user.userId) ||
+      (req.user && (req.user._id?.toString?.() || req.user._id));
+
+    if (!userId) {
+      return res.status(401).json({ message: "Invalid auth payload" });
+    }
+
+    const { password } = req.body || {};
+    if (!password || typeof password !== "string") {
+      return res.status(400).json({ message: "Password is required to delete your account" });
+    }
+
+    // Fetch with password field for verification
+    const user = await User.findById(userId).select("+password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Incorrect password" });
+    }
+
+    // Soft delete — mark for deletion, keep all data for 30-day grace period
+    user.deletedAt = new Date();
+    await user.save();
+
+    console.log(`[User] Account soft-deleted (30-day grace): ${userId}`);
+    return res.status(200).json({
+      success: true,
+      message: "Account scheduled for deletion. You can recover it within 30 days by logging in again.",
+    });
+  } catch (err) {
+    console.error("[User] Error deleting account:", err);
+    return res.status(500).json({ message: "Server error while deleting account" });
   }
 });
 
