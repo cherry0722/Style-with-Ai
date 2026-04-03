@@ -23,6 +23,8 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   check,
   request,
+  checkNotifications,
+  requestNotifications,
   openSettings,
   PERMISSIONS,
   RESULTS,
@@ -48,6 +50,8 @@ const P = {
 type PermKey = 'camera' | 'photos' | 'location' | 'notifications';
 type PermStatus = 'granted' | 'denied' | 'blocked' | 'unavailable' | 'limited' | 'loading';
 
+// Notifications use a separate API (checkNotifications/requestNotifications),
+// so they are excluded from the standard Permission-based config.
 interface PermConfig {
   key: PermKey;
   label: string;
@@ -56,7 +60,7 @@ interface PermConfig {
   iosPermission: Permission;
 }
 
-const PERMISSION_CONFIG: PermConfig[] = [
+const STANDARD_PERMISSION_CONFIG: PermConfig[] = [
   {
     key: 'camera',
     label: 'Camera',
@@ -78,13 +82,20 @@ const PERMISSION_CONFIG: PermConfig[] = [
     icon: 'location-outline',
     iosPermission: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
   },
-  {
-    key: 'notifications',
-    label: 'Notifications',
-    description: 'Used to send outfit reminders and updates.',
-    icon: 'notifications-outline',
-    iosPermission: PERMISSIONS.IOS.NOTIFICATION,
-  },
+];
+
+// Notifications entry for UI rendering (no iosPermission — handled separately)
+const NOTIFICATIONS_UI = {
+  key: 'notifications' as PermKey,
+  label: 'Notifications',
+  description: 'Used to send outfit reminders and updates.',
+  icon: 'notifications-outline' as keyof typeof Ionicons.glyphMap,
+};
+
+// All rows in display order
+const PERMISSION_CONFIG = [
+  ...STANDARD_PERMISSION_CONFIG,
+  { ...NOTIFICATIONS_UI, iosPermission: undefined as unknown as Permission },
 ];
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -177,8 +188,9 @@ export default function InformationPermissionsScreen() {
 
   // ── Load all permission statuses ──────────────────────────────────────────
   const loadStatuses = useCallback(async () => {
-    const results = await Promise.all(
-      PERMISSION_CONFIG.map(async (cfg) => {
+    // Standard permissions (camera, photos, location)
+    const standardResults = await Promise.all(
+      STANDARD_PERMISSION_CONFIG.map(async (cfg) => {
         try {
           const result = await check(cfg.iosPermission);
           return { key: cfg.key, status: mapResult(result) };
@@ -187,8 +199,19 @@ export default function InformationPermissionsScreen() {
         }
       })
     );
+
+    // Notifications use their own API
+    let notifStatus: PermStatus = 'unavailable';
+    try {
+      const { status } = await checkNotifications();
+      notifStatus = mapResult(status);
+    } catch (_) {
+      notifStatus = 'unavailable';
+    }
+
     const next = {} as Record<PermKey, PermStatus>;
-    results.forEach(({ key, status }) => { next[key] = status; });
+    standardResults.forEach(({ key, status }) => { next[key] = status; });
+    next.notifications = notifStatus;
     setStatuses(next);
   }, []);
 
@@ -203,11 +226,10 @@ export default function InformationPermissionsScreen() {
   );
 
   // ── Handle tap on a permission row ────────────────────────────────────────
-  const handlePress = async (cfg: PermConfig) => {
+  const handlePress = async (cfg: typeof PERMISSION_CONFIG[number]) => {
     const current = statuses[cfg.key];
 
     if (current === 'granted' || current === 'limited' || current === 'blocked') {
-      // Already granted or blocked → open Settings so user can change
       await openSettings().catch(() => {
         Linking.openURL('app-settings:').catch(() => {});
       });
@@ -215,13 +237,21 @@ export default function InformationPermissionsScreen() {
     }
 
     if (current === 'denied') {
-      // Not asked yet → request the permission
-      try {
-        const result = await request(cfg.iosPermission);
-        setStatuses((prev) => ({ ...prev, [cfg.key]: mapResult(result) }));
-      } catch (_) {
-        // If request fails, try opening settings
-        await openSettings().catch(() => {});
+      if (cfg.key === 'notifications') {
+        // Notifications require their own request API
+        try {
+          const { status } = await requestNotifications(['alert', 'sound', 'badge']);
+          setStatuses((prev) => ({ ...prev, notifications: mapResult(status) }));
+        } catch (_) {
+          await openSettings().catch(() => {});
+        }
+      } else {
+        try {
+          const result = await request(cfg.iosPermission);
+          setStatuses((prev) => ({ ...prev, [cfg.key]: mapResult(result) }));
+        } catch (_) {
+          await openSettings().catch(() => {});
+        }
       }
     }
   };
