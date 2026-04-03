@@ -303,27 +303,6 @@ export default function SettingsScreen() {
                 {settings.temperatureUnit === 'fahrenheit' ? 'Fahrenheit (°F)' : 'Celsius (°C)'}
               </Text>
 
-              <View style={[styles.prefRow, { marginTop: 12 }]}>
-                <Text style={styles.prefLabel}>Notifications</Text>
-                <Switch
-                  value={settings.notificationsEnabled}
-                  onValueChange={async () => {
-                    const next = !settings.notificationsEnabled;
-                    hapticFeedback.light();
-                    settings.toggleNotifications();
-                    try {
-                      await updateUserSettings({ notificationsEnabled: next });
-                    } catch (_) {
-                      settings.toggleNotifications();
-                    }
-                  }}
-                  trackColor={{ false: P.border, true: `${P.accent}55` }}
-                  thumbColor={settings.notificationsEnabled ? P.accent : P.lightText}
-                />
-              </View>
-              <Text style={styles.prefSublabel}>
-                {settings.notificationsEnabled ? 'Enabled' : 'Disabled'}
-              </Text>
             </View>
           )}
           <View style={styles.rowLast} />

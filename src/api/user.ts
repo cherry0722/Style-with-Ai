@@ -13,6 +13,7 @@ export interface UserProfilePayload {
 export interface UserSettingsPayload {
   temperatureUnit?: string;
   notificationsEnabled?: boolean;
+  screenTimeTrackingEnabled?: boolean;
 }
 
 export interface UserPrivacyPayload {

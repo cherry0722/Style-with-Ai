@@ -83,7 +83,7 @@ const PERMISSION_CONFIG: PermConfig[] = [
     label: 'Notifications',
     description: 'Used to send outfit reminders and updates.',
     icon: 'notifications-outline',
-    iosPermission: PERMISSIONS.IOS.NOTIFICATIONS,
+    iosPermission: PERMISSIONS.IOS.NOTIFICATION,
   },
 ];
 

@@ -26,6 +26,7 @@ import AccountPrivacyScreen from '../screens/AccountPrivacyScreen';
 import ClosetUploadScreen from '../screens/ClosetUploadScreen';
 import ClosetItemDetailScreen from '../screens/ClosetItemDetailScreen';
 import InformationPermissionsScreen from '../screens/InformationPermissionsScreen';
+import YourActivityScreen from '../screens/YourActivityScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -95,7 +96,7 @@ export default function RootNavigator() {
           />
           <Stack.Screen name="Saved" component={ComingSoonScreen} />
           <Stack.Screen name="Favorites" component={ComingSoonScreen} />
-          <Stack.Screen name="Activity" component={ComingSoonScreen} />
+          <Stack.Screen name="Activity" component={YourActivityScreen} />
           <Stack.Screen name="Help" component={ComingSoonScreen} />
           <Stack.Screen name="About" component={ComingSoonScreen} />
         </>

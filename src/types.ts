@@ -142,6 +142,7 @@ export interface Notification {
 export interface AppSettings {
   temperatureUnit: 'celsius' | 'fahrenheit';
   notificationsEnabled: boolean;
+  screenTimeTrackingEnabled: boolean;
   locationPermissionGranted: boolean;
   lastWeatherUpdate?: string;
   preferredLocation?: string;
