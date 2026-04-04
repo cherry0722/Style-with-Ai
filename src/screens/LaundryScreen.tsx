@@ -8,18 +8,23 @@ import {
   Text,
   FlatList,
   Pressable,
-  Image,
   StyleSheet,
   ActivityIndicator,
   Alert,
   Platform,
   ListRenderItemInfo,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { listLaundry, markClean, WardrobeItemResponse } from '../api/wardrobe';
+import {
+  WardrobeSquareGridCard,
+  wardrobeGridCardWidth,
+  WARDROBE_GRID_GAP,
+} from '../components/wardrobe/WardrobeSquareGridCard';
 
 const P = {
   background:    '#F5F0E8',
@@ -36,14 +41,8 @@ const P = {
 
 const SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia' });
 const H_PAD = 24;
-
-const CARD_SHADOW = {
-  shadowColor: P.shadow,
-  shadowOpacity: 1,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 3 },
-  elevation: 2,
-};
+const { width: LAUNDRY_SCREEN_W } = Dimensions.get('window');
+const LAUNDRY_CARD_W = wardrobeGridCardWidth(LAUNDRY_SCREEN_W, H_PAD, WARDROBE_GRID_GAP);
 
 function getItemName(item: WardrobeItemResponse): string {
   return item.profile?.type as string
@@ -59,7 +58,7 @@ function getStatusLabel(item: WardrobeItemResponse): string {
   return 'In Laundry';
 }
 
-function ItemRow({
+function LaundryItemGridCard({
   item,
   onMarkClean,
   busy,
@@ -69,43 +68,37 @@ function ItemRow({
   busy: boolean;
 }>) {
   const itemId = item.id ?? item._id ?? '';
-  const uri = item.cleanImageUrl || item.imageUrl;
+  const uri = item.cleanImageUrl || item.imageUrl || null;
   const isPacked = item.v2?.availability?.reason === 'packed';
 
   return (
-    <View style={[styles.itemRow, CARD_SHADOW]}>
-      <View style={styles.thumbWrap}>
-        {uri ? (
-          <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
-        ) : (
-          <View style={styles.thumbPlaceholder}>
-            <Ionicons name="shirt-outline" size={20} color={P.lightText} />
-          </View>
-        )}
-      </View>
-
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName} numberOfLines={1}>{getItemName(item)}</Text>
-        <View style={[styles.statusBadge, isPacked && styles.statusBadgePacked]}>
-          <Text style={[styles.statusText, isPacked && styles.statusTextPacked]}>
+    <WardrobeSquareGridCard
+      width={LAUNDRY_CARD_W}
+      imageUri={uri}
+      title={getItemName(item)}
+      badge={
+        <View style={[styles.gridStatusBadge, isPacked && styles.gridStatusBadgePacked]}>
+          <Text style={[styles.gridStatusText, isPacked && styles.gridStatusTextPacked]}>
             {isPacked ? '📦 Packed' : '🧺 In Laundry'}
           </Text>
         </View>
-      </View>
-
-      <Pressable
-        style={({ pressed }) => [styles.cleanBtn, pressed && { opacity: 0.7 }]}
-        onPress={() => onMarkClean(itemId)}
-        disabled={busy}
-        hitSlop={6}
-      >
-        {busy ? (
-          <ActivityIndicator size="small" color={P.accent} />
-        ) : (
-          <Text style={styles.cleanBtnText}>Clean</Text>
-        )}
-      </Pressable>
-    </View>
+      }
+      metaFooter={
+        <Pressable
+          style={({ pressed }) => [styles.gridCleanBtn, pressed && { opacity: 0.85 }]}
+          onPress={() => onMarkClean(itemId)}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel="Mark as clean"
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color={P.accent} />
+          ) : (
+            <Text style={styles.gridCleanBtnText}>Clean</Text>
+          )}
+        </Pressable>
+      }
+    />
   );
 }
 
@@ -171,7 +164,7 @@ export default function LaundryScreen() {
 
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<WardrobeItemResponse>) => (
-      <ItemRow
+      <LaundryItemGridCard
         item={item}
         onMarkClean={handleMarkClean}
         busy={busyIds.has(item.id ?? item._id ?? '')}
@@ -233,11 +226,12 @@ export default function LaundryScreen() {
         <>
           <FlatList
             data={items}
+            numColumns={2}
             keyExtractor={(i, idx) => i.id ?? i._id ?? `l-${idx}`}
             contentContainerStyle={styles.list}
+            columnWrapperStyle={styles.gridColumnWrapper}
             showsVerticalScrollIndicator={false}
             renderItem={renderItem}
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           />
 
           {/* Clean all CTA */}
@@ -313,70 +307,45 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
     paddingTop: 4,
   },
-
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: P.cardWhite,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: P.border,
-    padding: 12,
-    gap: 12,
+  gridColumnWrapper: {
+    gap: WARDROBE_GRID_GAP,
   },
 
-  thumbWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: P.cardSurface,
-  },
-  thumb: { width: '100%', height: '100%' },
-  thumbPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  itemInfo: { flex: 1 },
-  itemName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: P.primaryText,
-    marginBottom: 4,
-  },
-  statusBadge: {
+  gridStatusBadge: {
+    marginTop: 4,
     alignSelf: 'flex-start',
     backgroundColor: `${P.warning}20`,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
-  statusBadgePacked: {
+  gridStatusBadgePacked: {
     backgroundColor: `${P.accent}20`,
   },
-  statusText: {
-    fontSize: 11,
+  gridStatusText: {
+    fontSize: 10,
     fontWeight: '600',
     color: P.warning,
   },
-  statusTextPacked: {
+  gridStatusTextPacked: {
     color: P.accent,
   },
 
-  cleanBtn: {
-    paddingHorizontal: 14,
+  gridCleanBtn: {
+    marginTop: 8,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: P.cardSurface,
+    backgroundColor: '#F7F2EC',
     borderWidth: 1,
-    borderColor: P.border,
+    borderColor: 'rgba(196,168,130,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
   },
-  cleanBtnText: {
+  gridCleanBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: P.primaryText,
+    color: '#2C1A0E',
     letterSpacing: 0.3,
   },
 
