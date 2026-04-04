@@ -12,6 +12,9 @@ import AuthScreen from '../screens/AuthScreen';
 import SignupScreen from '../screens/SignupScreen';
 import GuestHomeScreen from '../screens/GuestHomeScreen';
 import ComingSoonScreen from '../screens/ComingSoonScreen';
+import SavedScreen from '../screens/SavedScreen';
+import Avatar3DScreen from '../screens/Avatar3DScreen';
+import { SavedOutfitItem } from '../api/saved';
 import PremiumSignInScreen from '../screens/PremiumSignInScreen';
 
 import Tabs from './Tabs';
@@ -48,7 +51,8 @@ export type RootStackParamList = {
   ClosetUpload: undefined;
   ClosetItemDetail: { itemId: string; frontImageUrl: string; backImageUrl?: string | null; itemName: string; isFavorite: boolean };
   InformationPermissions: undefined;
-  Saved: undefined;
+  Saved: { savedOutfit?: SavedOutfitItem } | undefined;
+  Avatar3DScreen: { savedOutfit?: SavedOutfitItem } | undefined;
   Favorites: undefined;
   Activity: undefined;
   Help: undefined;
@@ -96,7 +100,16 @@ export default function RootNavigator() {
             name="InformationPermissions"
             component={InformationPermissionsScreen}
           />
-          <Stack.Screen name="Saved" component={ComingSoonScreen} />
+          <Stack.Screen
+            name="Saved"
+            component={SavedScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Avatar3DScreen"
+            component={Avatar3DScreen}
+            options={{ headerShown: false }}
+          />
           <Stack.Screen name="Favorites" component={ComingSoonScreen} />
           <Stack.Screen name="Activity" component={YourActivityScreen} />
           <Stack.Screen name="Help" component={HelpScreen} />

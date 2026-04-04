@@ -87,6 +87,9 @@ app.use('/api/home', homeRoutes);
 const activityRoutes = require('./routes/activity');
 app.use('/api/activity', activityRoutes);
 
+const savedRoutes = require('./routes/saved');
+app.use('/api/saved', savedRoutes);
+
 if (process.env.NODE_ENV !== 'production') {
   const devRoutes = require('./routes/dev');
   app.use('/api/dev', devRoutes);
