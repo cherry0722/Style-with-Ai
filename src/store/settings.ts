@@ -30,6 +30,10 @@ export const useSettings = create<SettingsStore>((set) => ({
       if (value !== null) {
         set({ screenTimeTrackingEnabled: JSON.parse(value) });
       }
+      const storedUnit = await AsyncStorage.getItem('settings.temperatureUnit');
+      if (storedUnit === 'celsius' || storedUnit === 'fahrenheit') {
+        set({ temperatureUnit: storedUnit });
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
