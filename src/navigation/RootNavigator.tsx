@@ -11,7 +11,6 @@ import SplashScreen from '../screens/SplashScreen';
 import AuthScreen from '../screens/AuthScreen';
 import SignupScreen from '../screens/SignupScreen';
 import GuestHomeScreen from '../screens/GuestHomeScreen';
-import ComingSoonScreen from '../screens/ComingSoonScreen';
 import SavedScreen from '../screens/SavedScreen';
 import Avatar3DScreen from '../screens/Avatar3DScreen';
 import { SavedOutfitItem } from '../api/saved';
@@ -32,6 +31,7 @@ import InformationPermissionsScreen from '../screens/InformationPermissionsScree
 import YourActivityScreen from '../screens/YourActivityScreen';
 import HelpScreen from '../screens/HelpScreen';
 import AboutScreen from '../screens/AboutScreen';
+import FavoritesScreen from '../screens/FavoritesScreen';
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -110,7 +110,11 @@ export default function RootNavigator() {
             component={Avatar3DScreen}
             options={{ headerShown: false }}
           />
-          <Stack.Screen name="Favorites" component={ComingSoonScreen} />
+          <Stack.Screen
+            name="Favorites"
+            component={FavoritesScreen}
+            options={{ headerShown: false }}
+          />
           <Stack.Screen name="Activity" component={YourActivityScreen} />
           <Stack.Screen name="Help" component={HelpScreen} />
           <Stack.Screen name="About" component={AboutScreen} />
