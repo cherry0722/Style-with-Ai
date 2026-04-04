@@ -27,6 +27,8 @@ import { useAuth } from '../context/AuthContext';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
 import { listLaundry } from '../api/wardrobe';
 import { fetchForecast, ForecastDay } from '../api/weather';
+import { useSettings } from '../store/settings';
+import { convertTemp, tempLabel } from '../utils/temperature';
 
 const H_PAD = 24;
 const HEADER_H = 56;
@@ -293,6 +295,7 @@ export default function HomeScreen() {
   // ── Derived weather values (backend only) ────────────────────────────────
   const weather        = data?.weather;
   const weatherOk      = weather?.ok === true && weather.tempF != null;
+  const temperatureUnit = useSettings(s => s.temperatureUnit);
   const todayTemp      = weatherOk ? Math.round(weather!.tempF!) : null;
   const todayCondition = weatherOk && weather!.condition ? weather!.condition : null;
   const todayDateStr   = data?.date ? formatTodayLabel(data.date) : 'Today';
@@ -360,7 +363,7 @@ export default function HomeScreen() {
           <View style={styles.headerRight}>
             <PillBtn onPress={toggleWeatherPopup} style={styles.pillGap}>
               <Text style={styles.pillEmoji}>☀️</Text>
-              <Text style={styles.pillText}>{todayTemp != null ? `${todayTemp}°` : '—'}</Text>
+              <Text style={styles.pillText}>{todayTemp != null ? `${convertTemp(todayTemp, temperatureUnit)}°` : '—'}</Text>
             </PillBtn>
             <PillBtn onPress={() => goTo('Calendar')} style={styles.pillGap}>
               <Text style={styles.pillEmoji}>📅</Text>
@@ -413,7 +416,9 @@ export default function HomeScreen() {
               </>
             ) : todayTemp != null ? (
               <>
-                <Text style={styles.infoValue}>{todayTemp}°F</Text>
+                <Text style={styles.infoValue}>
+                  {todayTemp != null ? tempLabel(todayTemp, temperatureUnit) : '—'}
+                </Text>
                 <Text style={styles.infoLabel} numberOfLines={1}>{todayCondition ?? 'Mild'}</Text>
                 <Text style={styles.infoMeta}>{todayDateStr}</Text>
               </>
@@ -472,7 +477,7 @@ export default function HomeScreen() {
                       <Text style={styles.weatherDay}>{day.label}</Text>
                       <Ionicons name={iconForCondition(day.summary)} size={18} color={P.secondaryText} />
                       <Text style={styles.weatherTemp}>
-                        {day.tempHighF}° / {day.tempLowF}°
+                        {convertTemp(day.tempHighF, temperatureUnit)}° / {convertTemp(day.tempLowF, temperatureUnit)}°
                       </Text>
                     </View>
                   ))

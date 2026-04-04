@@ -30,6 +30,7 @@
 import React, {useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   PanResponder,
   Pressable,
@@ -51,6 +52,9 @@ import {
 } from 'react-native-filament';
 import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
 import {fetchOutfitAvatarMappings} from '../api/avatar';
+import { useRoute } from '@react-navigation/native';
+import { useSavedOutfits } from '../store/savedOutfits';
+import { CreateSavedOutfitPayload } from '../api/saved';
 import {
   AvatarRenderConfig,
   buildRenderConfig,
@@ -127,13 +131,9 @@ class TintBoundary extends React.Component<
 // Methods reference only refs/stable setters → no stale closures.
 export interface SceneHandle {
   setRotationY: (deg: number) => void;
-  // Returns the authoritative current rotationY so onGrant anchors correctly
-  // across consecutive drags with no snap and no accumulated drift.
   getRotationY: () => number;
-  // Push a new clothing config into the scene without triggering a React re-render
-  // on the memo-guarded AvatarStage. Phase 1: stores + logs the config so the
-  // hookup point is defined. Phase 2: will trigger .glb asset swapping here.
   setClothingConfig: (config: AvatarRenderConfig) => void;
+  getClothingConfig: () => AvatarRenderConfig;
 }
 
 // Camera and DefaultLight are completely static — same props forever.
@@ -179,6 +179,7 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
   // useState (not useRef) so that pushing a new config via setClothingConfig()
   // triggers a re-render of SceneContent, causing the Model source to update.
   const [clothingConfig, setClothingConfigState] = useState<AvatarRenderConfig>(EMPTY_RENDER_CONFIG);
+  const clothingConfigRef = useRef<AvatarRenderConfig>(EMPTY_RENDER_CONFIG);
 
   // ── Model source resolution ──────────────────────────────────────────────────
   // Uses the combined dressed avatar when the resolver matches the current
@@ -248,6 +249,7 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
       return rotationYRef.current;
     },
     setClothingConfig(config) {
+      clothingConfigRef.current = config;
       if (__DEV__) {
         console.log('[Avatar] Clothing config applied:', {
           top:    config.top    ? `${config.top.assetFamily} | tint=${config.top.tintPrimary ?? 'none'} | ${config.top.materialPreset}` : null,
@@ -256,7 +258,10 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
       }
       setClothingConfigState(config);
     },
-  }), []);  // safe: all captured values (setRotationY, setClothingConfigState) are stable
+    getClothingConfig() {
+      return clothingConfigRef.current;
+    },
+  }), []);  // safe: all captured values (setRotationY, setClothingConfigState, clothingConfigRef) are stable
 
   // Material tint parameters — memoized on the resolved result to avoid
   // unnecessary worklet re-runs during drag (where only modelRotation changes).
@@ -343,9 +348,22 @@ const AvatarStage = React.memo(function AvatarStage(
 
 export default function Avatar3DScreen() {
   const insets = useSafeAreaInsets();
+  const route = useRoute<any>();
+  const savedOutfit = (route?.params as any)?.savedOutfit ?? null;
 
   // SceneContent is driven entirely via imperative handle — no rotation state here.
   const sceneRef = useRef<SceneHandle>(null);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const addSavedOutfit = useSavedOutfits(s => s.add);
+  const savedItems = useSavedOutfits(s => s.items);
+  const fetchAllSaved = useSavedOutfits(s => s.fetchAll);
+  const loadedFromSaved = useRef(false);
+
+  // Keep the saved store fresh so isSaved derives correctly.
+  useEffect(() => {
+    fetchAllSaved().catch(() => {});
+  }, []);
+
   // Snapshot of rotationY taken at gesture start (read from scene, not a local
   // accumulator, so inertia position is always the anchor for the next drag).
   const baseAtGestureStart = useRef(0);
@@ -364,6 +382,29 @@ export default function Avatar3DScreen() {
   const [hasGenerated, setHasGenerated] = useState(false);
   const [reasonModalVisible, setReasonModalVisible] = useState(false);
 
+  // Derive isSaved from the store — true if the current outfit's item IDs
+  // match any saved outfit. This persists across navigation and tab switches.
+  // MUST be declared after suggestions and outfitIndex useState.
+  const isSaved = useMemo(() => {
+    if (suggestions.length === 0) return false;
+    const current = suggestions[outfitIndex];
+    if (!current) return false;
+    const currentIds = current.items
+      .map((i: any) => i.id || i._id)
+      .filter(Boolean)
+      .sort()
+      .join(',');
+    if (!currentIds) return false;
+    return savedItems.some(saved => {
+      const savedIds = saved.items
+        .map((i: any) => i.id || i._id)
+        .filter(Boolean)
+        .sort()
+        .join(',');
+      return savedIds === currentIds;
+    });
+  }, [suggestions, outfitIndex, savedItems]);
+
   // ── Dropdown handlers ────────────────────────────────────────────────────────
   const toggleDropdown  = () => setDropdownOpen(prev => !prev);
   const closeDropdown   = () => setDropdownOpen(false);
@@ -379,6 +420,7 @@ export default function Avatar3DScreen() {
   // previous outfits or prior Generate presses are silently discarded.
   useEffect(() => {
     if (suggestions.length === 0) return;
+    loadedFromSaved.current = false;
 
     let cancelled = false;
 
@@ -398,6 +440,57 @@ export default function Avatar3DScreen() {
 
     return () => { cancelled = true; };
   }, [outfitIndex, suggestions]);
+
+  // ── Load from saved outfit if opened from SavedScreen ────────────────────────
+  useEffect(() => {
+    if (!savedOutfit) return;
+    // Signal that the upcoming suggestions change comes from a saved outfit —
+    // prevents the [outfitIndex, suggestions] effect from clearing isSaved.
+    loadedFromSaved.current = true;
+    setHasGenerated(true);
+    setSuggestions([
+      {
+        outfitId: savedOutfit._id,
+        items: savedOutfit.items,
+        reasons: savedOutfit.reasons,
+      },
+    ]);
+    // avatarRenderConfig is applied by [outfitIndex, suggestions] via
+    // fetchOutfitAvatarMappings, which re-derives the config from item data.
+    // This is more reliable than calling setClothingConfig here while
+    // Filament may still be initialising.
+  }, [savedOutfit]);
+
+  // ── Save handler ─────────────────────────────────────────────────────────────
+  const handleSave = async () => {
+    if (saveLoading || suggestions.length === 0) return;
+
+    const outfit = suggestions[outfitIndex];
+    const occasion = OCCASIONS[occasionIndex]?.value ?? null;
+
+    // Read current clothing config from scene
+    const avatarRenderConfig = sceneRef.current
+      ? sceneRef.current.getClothingConfig()
+      : null;
+
+    const payload: CreateSavedOutfitPayload = {
+      occasion,
+      items: outfit.items,
+      reasons: outfit.reasons ?? [],
+      avatarRenderConfig,
+    };
+
+    setSaveLoading(true);
+    try {
+      await addSavedOutfit(payload);
+      Alert.alert('Saved!', 'Outfit added to your Saved collection.');
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Please try again.';
+      Alert.alert('Could not save', detail);
+    } finally {
+      setSaveLoading(false);
+    }
+  };
 
   // ── Generate handler ─────────────────────────────────────────────────────────
   const handleGenerate = async () => {
@@ -694,11 +787,17 @@ export default function Avatar3DScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.actionBtn}
+          style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(255,200,0,0.18)' }]}
+          onPress={() => { void handleSave(); }}
+          disabled={saveLoading || suggestions.length === 0}
           activeOpacity={0.75}
           accessibilityRole="button"
-          accessibilityLabel="Favourite outfit">
-          <Text style={styles.actionEmoji}>⭐</Text>
+          accessibilityLabel="Save outfit">
+          <Ionicons
+            name={isSaved ? 'star' : 'star-outline'}
+            size={26}
+            color={isSaved ? '#FFD700' : '#FFFFFF'}
+          />
         </TouchableOpacity>
 
       </View>

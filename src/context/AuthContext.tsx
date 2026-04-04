@@ -143,21 +143,28 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
   }, [navRef]);
 
   async function login(email: string, password: string) {
-    const { user: u, accessToken: t } = await authApi.login(email, password);
+    const { user: u, accessToken: t, accountRestored } = await authApi.login(email, password);
     if (!t) throw new Error('No accessToken in response');
     await AsyncStorage.setItem(TOKEN_STORAGE_KEY, t);
     setToken(t);
     const me = await getCurrentUser();
-const userData: UserAuth = {
-  id: (me._id as string)?.toString?.() ?? (me.id as string),
-  email: me.email as string,
-  username: me.username as string,
-  phone: (me.phone as string) ?? '',
-  image: me.image as string | undefined,
-  profile: (me.profile as UserAuth['profile']) ?? undefined,
-};
-await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
-setUser(userData);
+    const userData: UserAuth = {
+      id: (me._id as string)?.toString?.() ?? (me.id as string),
+      email: me.email as string,
+      username: me.username as string,
+      phone: (me.phone as string) ?? '',
+      image: me.image as string | undefined,
+      profile: (me.profile as UserAuth['profile']) ?? undefined,
+    };
+    await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+    setUser(userData);
+    if (accountRestored) {
+      Alert.alert(
+        'Welcome Back!',
+        'Your account has been restored. All your data is right where you left it.',
+        [{ text: 'OK' }]
+      );
+    }
   }
 
   async function signup(email: string, password: string, username?: string, phone?: string) {

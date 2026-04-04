@@ -19,6 +19,7 @@ export interface AuthUser {
 export interface LoginResponse {
   user: AuthUser;
   accessToken: string;
+  accountRestored?: boolean;
 }
 
 export interface SignupPayload {

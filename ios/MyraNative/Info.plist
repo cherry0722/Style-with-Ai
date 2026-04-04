@@ -41,6 +41,17 @@
 	<string>MYRA needs photo library access to add clothing items to your closet.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>MYRA needs access to your camera to photograph clothing items for your closet.</string>
+
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MYRA needs access to your photo library to import clothing photos.</string>
+
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MYRA needs your location to show local weather for outfit suggestions.</string>
+
+	<key>NSUserNotificationsUsageDescription</key>
+	<string>MYRA needs permission to send you outfit reminders and updates.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -64,5 +75,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>mailto</string>
+	</array>
 </dict>
 </plist>

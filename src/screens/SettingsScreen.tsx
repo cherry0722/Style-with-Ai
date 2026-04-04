@@ -100,13 +100,14 @@ export default function SettingsScreen() {
   const updateProfile = auth.updateProfile;
   const settings = useSettings();
 
-  const p = (user?.profile ?? {}) as {
+  const getProfile = () => (user?.profile ?? {}) as {
     preferredName?: string;
     pronouns?: Pronouns;
     heightCm?: number;
     weightLb?: number;
     bodyType?: BodyType;
   };
+  const p = getProfile();
 
   const [expanded, setExpanded] = useState<'personalDetails' | 'accessibility' | null>(null);
 
@@ -126,11 +127,12 @@ export default function SettingsScreen() {
       setExpanded(null);
     } else {
       if (section === 'personalDetails') {
-        setPreferredName(p.preferredName ?? '');
-        setPronouns(p.pronouns);
-        setHeightCm(p.heightCm);
-        setWeightLb(p.weightLb);
-        setBodyType(p.bodyType);
+        const fresh = getProfile();
+        setPreferredName(fresh.preferredName ?? '');
+        setPronouns(fresh.pronouns);
+        setHeightCm(fresh.heightCm);
+        setWeightLb(fresh.weightLb);
+        setBodyType(fresh.bodyType);
       }
       setExpanded(section);
     }
@@ -236,9 +238,10 @@ export default function SettingsScreen() {
             icon="document-text-outline"
             label="Information & Permissions"
             onPress={() => {
-              (navigation as any).navigate("InformationPermissions");
-            }}
-          />
+             console.log('🔍 Navigating to InformationPermissions');
+             (navigation as any).navigate("InformationPermissions");
+          }}
+        />
           <SettingsRow
             icon="shield-outline"
             label="Account Privacy"
@@ -300,27 +303,6 @@ export default function SettingsScreen() {
                 {settings.temperatureUnit === 'fahrenheit' ? 'Fahrenheit (°F)' : 'Celsius (°C)'}
               </Text>
 
-              <View style={[styles.prefRow, { marginTop: 12 }]}>
-                <Text style={styles.prefLabel}>Notifications</Text>
-                <Switch
-                  value={settings.notificationsEnabled}
-                  onValueChange={async () => {
-                    const next = !settings.notificationsEnabled;
-                    hapticFeedback.light();
-                    settings.toggleNotifications();
-                    try {
-                      await updateUserSettings({ notificationsEnabled: next });
-                    } catch (_) {
-                      settings.toggleNotifications();
-                    }
-                  }}
-                  trackColor={{ false: P.border, true: `${P.accent}55` }}
-                  thumbColor={settings.notificationsEnabled ? P.accent : P.lightText}
-                />
-              </View>
-              <Text style={styles.prefSublabel}>
-                {settings.notificationsEnabled ? 'Enabled' : 'Disabled'}
-              </Text>
             </View>
           )}
           <View style={styles.rowLast} />

@@ -45,6 +45,12 @@ const userSchema = Schema(
       activityVisible: { type: Boolean, default: null },
       dataSharingConsent: { type: Boolean, default: null },
     },
+    // Soft-delete: set when user requests deletion. Null = active account.
+    // Permanently deleted after 30 days by cleanup job or on next login attempt.
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
