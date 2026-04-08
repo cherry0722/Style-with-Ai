@@ -3,12 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AppSettings } from '../types';
 
 interface SettingsStore extends AppSettings {
+  calendarConnected: boolean;
   toggleTemperatureUnit: () => void;
   toggleNotifications: () => void;
   toggleScreenTimeTracking: () => void;
   toggleDarkMode: () => void;
   setLocationPermission: (granted: boolean) => void;
   setPreferredLocation: (location: string) => void;
+  setCalendarConnected: (value: boolean) => Promise<void>;
   hydrate: () => Promise<void>;
 }
 
@@ -23,6 +25,7 @@ const defaultSettings: AppSettings = {
 
 export const useSettings = create<SettingsStore>((set) => ({
   ...defaultSettings,
+  calendarConnected: false,
 
   hydrate: async () => {
     try {
@@ -33,6 +36,10 @@ export const useSettings = create<SettingsStore>((set) => ({
       const storedUnit = await AsyncStorage.getItem('settings.temperatureUnit');
       if (storedUnit === 'celsius' || storedUnit === 'fahrenheit') {
         set({ temperatureUnit: storedUnit });
+      }
+      const storedCal = await AsyncStorage.getItem('settings.calendarConnected');
+      if (storedCal !== null) {
+        set({ calendarConnected: storedCal === 'true' });
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -75,5 +82,10 @@ export const useSettings = create<SettingsStore>((set) => ({
   setPreferredLocation: (location: string) => {
     AsyncStorage.setItem('settings.preferredLocation', JSON.stringify(location));
     set({ preferredLocation: location });
+  },
+
+  setCalendarConnected: async (value: boolean) => {
+    set({ calendarConnected: value });
+    await AsyncStorage.setItem('settings.calendarConnected', String(value));
   },
 }));

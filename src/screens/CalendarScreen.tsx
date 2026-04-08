@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,16 @@ import {
   TextInput,
   ActivityIndicator,
   Modal,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
+import { useSettings } from '../store/settings';
+import {
+  requestCalendarPermission,
+  fetchEventsForDate,
+  DeviceCalendarEvent,
+  formatEventTime,
+} from '../services/deviceCalendar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -65,6 +74,11 @@ export default function CalendarScreen() {
   const [addOccasionError, setAddOccasionError] = useState<string | null>(null);
   const [patching, setPatching] = useState<string | null>(null);
 
+  const calendarConnected = useSettings(s => s.calendarConnected);
+  const setCalendarConnected = useSettings(s => s.setCalendarConnected);
+  const [deviceEvents, setDeviceEvents] = useState<DeviceCalendarEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+
   const { from, to } = getMonthRange(currentMonth);
 
   const fetchRange = useCallback(async () => {
@@ -82,6 +96,15 @@ export default function CalendarScreen() {
   }, [from, to]);
 
   useFocusEffect(useCallback(() => { fetchRange(); }, [fetchRange]));
+
+  useEffect(() => {
+    if (!calendarConnected || !selectedDate) return;
+    setEventsLoading(true);
+    fetchEventsForDate(selectedDate)
+      .then(setDeviceEvents)
+      .catch(() => setDeviceEvents([]))
+      .finally(() => setEventsLoading(false));
+  }, [selectedDate, calendarConnected]);
 
   const markedDates = React.useMemo(() => {
     const acc: Record<string, { marked: boolean; dotColor?: string }> = {};
@@ -138,6 +161,19 @@ export default function CalendarScreen() {
     hapticFeedback.light();
     navigation.navigate('PlanOutfitSuggestions', { date: selectedDate, slotLabel: addSlotLabel, occasion: occ });
   }, [selectedDate, addSlotLabel, addOccasion, navigation]);
+
+  const handleConnectCalendar = async () => {
+    const granted = await requestCalendarPermission();
+    if (granted) {
+      await setCalendarConnected(true);
+    } else {
+      Alert.alert(
+        'Calendar Access Needed',
+        'Please allow calendar access in Settings to sync your schedule.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
 
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
@@ -209,10 +245,72 @@ export default function CalendarScreen() {
             />
           </View>
 
+          {/* ── Device Calendar Connect Banner ─────────────────────── */}
+          {!calendarConnected && (
+            <TouchableOpacity
+              style={calStyles.connectBanner}
+              onPress={handleConnectCalendar}
+              activeOpacity={0.85}
+            >
+              <View style={calStyles.connectBannerLeft}>
+                <Text style={calStyles.connectBannerIcon}>📅</Text>
+                <View>
+                  <Text style={calStyles.connectBannerTitle}>Connect Your Calendar</Text>
+                  <Text style={calStyles.connectBannerSub}>
+                    Sync your schedule for smarter outfit suggestions
+                  </Text>
+                </View>
+              </View>
+              <Text style={calStyles.connectBannerArrow}>›</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ── Device Calendar Events ──────────────────────────────── */}
+          {calendarConnected && selectedDate && (
+            <View style={calStyles.deviceEventsSection}>
+              <Text style={calStyles.deviceEventsSectionTitle}>
+                YOUR SCHEDULE
+              </Text>
+              {eventsLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#C4A882"
+                  style={{ marginVertical: 8 }}
+                />
+              ) : deviceEvents.length === 0 ? (
+                <Text style={calStyles.deviceEventsEmpty}>
+                  No events on your calendar for this day
+                </Text>
+              ) : (
+                deviceEvents.map(event => (
+                  <View key={event.id} style={calStyles.deviceEventCard}>
+                    <View style={calStyles.deviceEventTimeBar} />
+                    <View style={calStyles.deviceEventContent}>
+                      <Text style={calStyles.deviceEventTitle} numberOfLines={1}>
+                        {event.title}
+                      </Text>
+                      <Text style={calStyles.deviceEventTime}>
+                        {formatEventTime(event.startDate)}
+                        {event.endDate
+                          ? ` – ${formatEventTime(event.endDate)}`
+                          : ''}
+                      </Text>
+                      {event.location ? (
+                        <Text style={calStyles.deviceEventLocation} numberOfLines={1}>
+                          📍 {event.location}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
+
           {/* ── Day detail ────────────────────────────────────────────── */}
           <View style={styles.dayDetail}>
             <Text style={styles.dayTitle}>
-              {new Date(selectedDate).toLocaleDateString('en-US', {
+              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('en-US', {
                 weekday: 'long', month: 'long', day: 'numeric',
               })}
             </Text>
@@ -524,4 +622,94 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   toastText: { fontSize: 13, color: '#FFFFFF', textAlign: 'center' },
+});
+
+const calStyles = StyleSheet.create({
+  connectBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(196,168,130,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,168,130,0.3)',
+    borderRadius: 14,
+    padding: 14,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  connectBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  connectBannerIcon: {
+    fontSize: 28,
+  },
+  connectBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#C4A882',
+  },
+  connectBannerSub: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  connectBannerArrow: {
+    fontSize: 22,
+    color: '#C4A882',
+    fontWeight: '300',
+  },
+  deviceEventsSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 4,
+  },
+  deviceEventsSectionTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#C4A882',
+    letterSpacing: 1.4,
+    marginBottom: 8,
+  },
+  deviceEventsEmpty: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.35)',
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
+  deviceEventCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 10,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  deviceEventTimeBar: {
+    width: 3,
+    backgroundColor: '#C4A882',
+    borderRadius: 2,
+  },
+  deviceEventContent: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  deviceEventTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  deviceEventTime: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  deviceEventLocation: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 2,
+  },
 });

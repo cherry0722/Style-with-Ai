@@ -2224,6 +2224,8 @@ PODS:
     - React-utils (= 0.84.1)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.84.1)
+  - RNCalendarEvents (2.2.0):
+    - React
   - RNCPicker (2.11.4):
     - hermes-engine
     - RCTRequired
@@ -2422,6 +2424,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeDependencies (from `../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)
+  - RNCalendarEvents (from `../node_modules/react-native-calendar-events`)
   - "RNCPicker (from `../node_modules/@react-native-picker/picker`)"
   - RNPermissions (from `../node_modules/react-native-permissions`)
   - RNReactNativeHapticFeedback (from `../node_modules/react-native-haptic-feedback`)
@@ -2589,6 +2592,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  RNCalendarEvents:
+    :path: "../node_modules/react-native-calendar-events"
   RNCPicker:
     :path: "../node_modules/@react-native-picker/picker"
   RNPermissions:
@@ -2682,13 +2687,14 @@ SPEC CHECKSUMS:
   ReactCodegen: 4fa1b291ad275013e39212f2463c46480fb53afe
   ReactCommon: 309419492d417c4cbb87af06f67735afa40ecb9d
   ReactNativeDependencies: 6036450d522c5e87663e0d16c5477095573319cc
+  RNCalendarEvents: 7e65eb4a94f53c1744d1e275f7fafcfaa619f7a3
   RNCPicker: e0149590451d5eae242cf686014a6f6d808f93c7
-  RNPermissions: 3e6c094925bc028878f85b76632cc33397fb5189
+  RNPermissions: 2759ff5e900c203df867c9db822d5eb9276a1dd2
   RNReactNativeHapticFeedback: 995d32ddf0bf3637ad9a33618418636340d4135d
   RNScreens: 088d923c4327c63c9f8c942cae17a9d038f47d97
   RNVectorIcons: af977c18ed27deba54ed038b439fca2911a08cfc
   Yoga: 7c1c3b93e408ac46c7ed64b5641ca7161747378d
 
-PODFILE CHECKSUM: 1849d20ed878cf1f81d0f38a4f664da33bd8d4ff
+PODFILE CHECKSUM: ea58971579edbeff3328b9d9d072d5898b4118de
 
 COCOAPODS: 1.15.2
