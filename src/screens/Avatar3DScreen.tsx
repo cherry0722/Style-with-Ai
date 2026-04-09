@@ -52,7 +52,7 @@ import {
 } from 'react-native-filament';
 import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
 import {fetchOutfitAvatarMappings} from '../api/avatar';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSavedOutfits } from '../store/savedOutfits';
 import { CreateSavedOutfitPayload } from '../api/saved';
 import {
@@ -354,6 +354,7 @@ const AvatarStage = React.memo(function AvatarStage(
 
 export default function Avatar3DScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const savedOutfit = (route?.params as any)?.savedOutfit ?? null;
   const occasionParam = (route?.params as any)?.occasion ?? null;
@@ -781,6 +782,17 @@ export default function Avatar3DScreen() {
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <View style={[styles.header, {paddingTop: insets.top + 8}]}>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            hitSlop={12}
+            style={styles.backBtn}
+            accessibilityLabel="Go back">
+            <Ionicons name="chevron-back" size={24} color="#C4A882" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.backBtn} />
+        )}
         <Text style={styles.title}>My Avatar</Text>
       </View>
 
@@ -980,6 +992,15 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   title: {
     fontSize: 20,
