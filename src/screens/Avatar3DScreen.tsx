@@ -104,10 +104,16 @@ const ROTATION_SENSITIVITY = 0.4;  // rad/px  (rotate prop is radians — see Tr
 
 // ── Occasion options ───────────────────────────────────────────────────────────
 const OCCASIONS = [
-  {label: 'Casual',  value: 'casual'},
-  {label: 'College', value: 'college'},
-  {label: 'Party',   value: 'party'},
-  {label: 'Date',    value: 'date'},
+  { label: 'Casual',         value: 'casual'          },
+  { label: 'College',        value: 'college'         },
+  { label: 'Party',          value: 'party'           },
+  { label: 'Date',           value: 'date'            },
+  { label: 'Business',       value: 'business formal' },
+  { label: 'Athletic',       value: 'athletic wear'   },
+  { label: 'Travel',         value: 'travel'          },
+  { label: 'Evening',        value: 'evening'         },
+  { label: 'Beach',          value: 'beach casual'    },
+  { label: 'Smart Casual',   value: 'smart casual'    },
 ] as const;
 
 // ── Error boundary for EntitySelector tinting ─────────────────────────────────
@@ -350,6 +356,7 @@ export default function Avatar3DScreen() {
   const insets = useSafeAreaInsets();
   const route = useRoute<any>();
   const savedOutfit = (route?.params as any)?.savedOutfit ?? null;
+  const occasionParam = (route?.params as any)?.occasion ?? null;
 
   // SceneContent is driven entirely via imperative handle — no rotation state here.
   const sceneRef = useRef<SceneHandle>(null);
@@ -460,6 +467,102 @@ export default function Avatar3DScreen() {
     // This is more reliable than calling setClothingConfig here while
     // Filament may still be initialising.
   }, [savedOutfit]);
+
+  useEffect(() => {
+    if (!occasionParam) return;
+
+    // Map free-text occasion hint → closest OCCASIONS index
+    const lowerParam = occasionParam.toLowerCase();
+    let matchIndex = 0; // default Casual
+
+    if (
+      lowerParam.includes('business') ||
+      lowerParam.includes('formal') ||
+      lowerParam.includes('meeting') ||
+      lowerParam.includes('work') ||
+      lowerParam.includes('office') ||
+      lowerParam.includes('interview') ||
+      lowerParam.includes('conference') ||
+      lowerParam.includes('client') ||
+      lowerParam.includes('presentation')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'business formal');
+    } else if (
+      lowerParam.includes('athletic') ||
+      lowerParam.includes('gym') ||
+      lowerParam.includes('workout') ||
+      lowerParam.includes('sport') ||
+      lowerParam.includes('fitness')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'athletic wear');
+    } else if (
+      lowerParam.includes('evening') ||
+      lowerParam.includes('dinner') ||
+      lowerParam.includes('gala') ||
+      lowerParam.includes('wedding')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'evening');
+    } else if (
+      lowerParam.includes('travel') ||
+      lowerParam.includes('flight') ||
+      lowerParam.includes('airport')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'travel');
+    } else if (
+      lowerParam.includes('party') ||
+      lowerParam.includes('birthday') ||
+      lowerParam.includes('celebration')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'party');
+    } else if (
+      lowerParam.includes('date') ||
+      lowerParam.includes('anniversary') ||
+      lowerParam.includes('romantic')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'date');
+    } else if (
+      lowerParam.includes('beach') ||
+      lowerParam.includes('pool')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'beach casual');
+    } else if (
+      lowerParam.includes('smart') ||
+      lowerParam.includes('casual')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'smart casual');
+    } else if (
+      lowerParam.includes('college') ||
+      lowerParam.includes('class') ||
+      lowerParam.includes('lecture') ||
+      lowerParam.includes('campus')
+    ) {
+      matchIndex = OCCASIONS.findIndex(o => o.value === 'college');
+    }
+
+    // Fallback to 0 if findIndex returned -1
+    setOccasionIndex(matchIndex !== -1 ? matchIndex : 0);
+
+    // Auto-trigger generate with the calendar occasion
+    const autoGenerate = async () => {
+      setIsGenerating(true);
+      setGenerateError(null);
+      try {
+        const res = await getReasonedOutfits({ occasion: occasionParam });
+        const outfits = res.outfits.slice(0, 3);
+        setSuggestions(outfits);
+        setOutfitIndex(0);
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to generate. Please try again.';
+        setGenerateError(message);
+      } finally {
+        setIsGenerating(false);
+        setHasGenerated(true);
+      }
+    };
+
+    void autoGenerate();
+  }, [occasionParam]);
 
   // ── Save handler ─────────────────────────────────────────────────────────────
   const handleSave = async () => {

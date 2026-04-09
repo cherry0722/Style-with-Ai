@@ -298,12 +298,7 @@ export default function CalendarScreen() {
                     activeOpacity={0.75}
                     onPress={() => {
                       const occasion = mapEventsToOccasionHint([event]) ?? 'smart casual';
-                      const slotLabel = deriveSlotLabel(event.startDate);
-                      navigation.navigate('PlanOutfitSuggestions', {
-                        date: selectedDate,
-                        slotLabel,
-                        occasion,
-                      });
+                      navigation.navigate('Avatar3DScreen', { occasion });
                     }}
                   >
                     <View style={calStyles.deviceEventTimeBar} />
