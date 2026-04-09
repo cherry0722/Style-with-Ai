@@ -61,45 +61,66 @@ export async function fetchEventsForDate(
 
 // ── Map events → occasion hint for AI ────────────────────────────────────────
 
-const OCCASION_KEYWORDS: { keywords: string[]; occasion: string }[] = [
-  {
-    keywords: ['interview', 'meeting', 'presentation', 'conference', 'board', 'client', 'office', 'work', 'standup', 'sync'],
-    occasion: 'business formal',
-  },
-  {
-    keywords: ['gym', 'workout', 'yoga', 'run', 'training', 'sport', 'fitness', 'exercise'],
-    occasion: 'athletic',
-  },
-  {
-    keywords: ['dinner', 'date', 'anniversary', 'restaurant', 'gala', 'wedding', 'party', 'cocktail'],
-    occasion: 'evening',
-  },
-  {
-    keywords: ['brunch', 'lunch', 'coffee', 'cafe', 'friends', 'hangout', 'casual'],
-    occasion: 'casual',
-  },
-  {
-    keywords: ['travel', 'flight', 'airport', 'trip', 'vacation', 'holiday'],
-    occasion: 'travel',
-  },
-];
-
 export function mapEventsToOccasionHint(
   events: DeviceCalendarEvent[]
 ): string | null {
   if (events.length === 0) return null;
 
+  // Build enriched context string for each event
+  // More context = better LLM reasoning (prompt engineering best practice)
+  const buildEventContext = (event: DeviceCalendarEvent): string => {
+    const parts: string[] = [event.title];
+    if (event.location) parts.push(`at ${event.location}`);
+    if (event.notes) parts.push(event.notes.slice(0, 80)); // cap notes length
+    return parts.join(', ');
+  };
+
+  // Step 1 — Try keyword matching for high-confidence cases
+  // These are unambiguous signals where keyword wins over LLM inference
+  const HIGH_CONFIDENCE_KEYWORDS: { keywords: string[]; occasion: string }[] = [
+    {
+      keywords: ['gym', 'workout', 'yoga', 'run', 'running', 'training',
+                 'sport', 'fitness', 'exercise', 'crossfit', 'pilates', 'swim'],
+      occasion: 'athletic wear',
+    },
+    {
+      keywords: ['black tie', 'gala', 'formal dinner', 'awards ceremony',
+                 'red carpet'],
+      occasion: 'black tie formal',
+    },
+    {
+      keywords: ['beach', 'pool', 'swim'],
+      occasion: 'beach casual',
+    },
+  ];
+
   for (const event of events) {
-    const text = `${event.title} ${event.notes ?? ''} ${event.location ?? ''}`.toLowerCase();
-    for (const { keywords, occasion } of OCCASION_KEYWORDS) {
+    const text = buildEventContext(event).toLowerCase();
+    for (const { keywords, occasion } of HIGH_CONFIDENCE_KEYWORDS) {
       if (keywords.some(kw => text.includes(kw))) {
         return occasion;
       }
     }
   }
 
-  // Default: if events exist but no keyword match, suggest smart casual
-  return 'smart casual';
+  // Step 2 — For everything else, pass enriched raw context to the LLM
+  // The LLM is a better classifier than any keyword table for:
+  // meetings, dinners, appointments, birthdays, travel, classes, etc.
+  // Prompt engineering principle: natural language > category labels
+  // for generative models
+  if (events.length === 1) {
+    return buildEventContext(events[0]);
+  }
+
+  // Multiple events — build a combined context string
+  // LLM will reason about the most formal requirement across the day
+  // (dressing for the most important event is sound fashion advice)
+  const contexts = events
+    .slice(0, 3) // cap at 3 events to avoid token bloat
+    .map(buildEventContext)
+    .join('; ');
+
+  return `day includes: ${contexts}`;
 }
 
 export function formatEventTime(isoString: string): string {

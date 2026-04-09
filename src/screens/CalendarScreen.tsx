@@ -17,6 +17,7 @@ import {
   fetchEventsForDate,
   DeviceCalendarEvent,
   formatEventTime,
+  mapEventsToOccasionHint,
 } from '../services/deviceCalendar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -162,6 +163,14 @@ export default function CalendarScreen() {
     navigation.navigate('PlanOutfitSuggestions', { date: selectedDate, slotLabel: addSlotLabel, occasion: occ });
   }, [selectedDate, addSlotLabel, addOccasion, navigation]);
 
+  function deriveSlotLabel(isoStartDate: string): PlannerSlotLabel {
+    if (!isoStartDate) return 'morning';
+    const hour = new Date(isoStartDate).getHours();
+    if (hour < 12) return 'morning';
+    if (hour < 17) return 'afternoon';
+    return 'evening';
+  }
+
   const handleConnectCalendar = async () => {
     const granted = await requestCalendarPermission();
     if (granted) {
@@ -283,7 +292,20 @@ export default function CalendarScreen() {
                 </Text>
               ) : (
                 deviceEvents.map(event => (
-                  <View key={event.id} style={calStyles.deviceEventCard}>
+                  <TouchableOpacity
+                    key={event.id}
+                    style={calStyles.deviceEventCard}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      const occasion = mapEventsToOccasionHint([event]) ?? 'smart casual';
+                      const slotLabel = deriveSlotLabel(event.startDate);
+                      navigation.navigate('PlanOutfitSuggestions', {
+                        date: selectedDate,
+                        slotLabel,
+                        occasion,
+                      });
+                    }}
+                  >
                     <View style={calStyles.deviceEventTimeBar} />
                     <View style={calStyles.deviceEventContent}>
                       <Text style={calStyles.deviceEventTitle} numberOfLines={1}>
@@ -300,8 +322,11 @@ export default function CalendarScreen() {
                           📍 {event.location}
                         </Text>
                       ) : null}
+                      <Text style={calStyles.deviceEventPlanHint}>
+                        Tap to plan outfit →
+                      </Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))
               )}
             </View>
@@ -711,5 +736,12 @@ const calStyles = StyleSheet.create({
     fontSize: 11,
     color: '#8C7B6B',
     marginTop: 2,
+  },
+  deviceEventPlanHint: {
+    fontSize: 10,
+    color: '#C4A882',
+    fontWeight: '600',
+    marginTop: 4,
+    letterSpacing: 0.3,
   },
 });
