@@ -676,13 +676,13 @@ const calStyles = StyleSheet.create({
   },
   deviceEventsEmpty: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.35)',
+    color: '#8C7B6B',
     fontStyle: 'italic',
     paddingVertical: 8,
   },
   deviceEventCard: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: '#FFFFFF',
     borderRadius: 10,
     marginBottom: 8,
     overflow: 'hidden',
@@ -700,16 +700,16 @@ const calStyles = StyleSheet.create({
   deviceEventTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#2C1A0E',
   },
   deviceEventTime: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.5)',
+    color: '#8C7B6B',
     marginTop: 2,
   },
   deviceEventLocation: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    color: '#8C7B6B',
     marginTop: 2,
   },
 });
