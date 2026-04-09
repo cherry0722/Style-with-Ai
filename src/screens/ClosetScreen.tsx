@@ -9,7 +9,6 @@ import {
   Text,
   ScrollView,
   Pressable,
-  Image,
   StyleSheet,
   ActivityIndicator,
   BackHandler,
@@ -27,6 +26,11 @@ import {
   patchWardrobeV2,
   WardrobeItemResponse,
 } from '../api/wardrobe';
+import {
+  WardrobeSquareGridCard,
+  wardrobeGridCardWidth,
+  WARDROBE_GRID_GAP,
+} from '../components/wardrobe/WardrobeSquareGridCard';
 
 const P = {
   background:    '#F5F0E8',
@@ -47,6 +51,8 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const H_PAD    = 24;
 const GRID_GAP = 14;
 const CARD_W   = (SCREEN_W - H_PAD * 2 - GRID_GAP) / 2;
+/** Detail item grid — match Favorites / Saved two-column card width */
+const DETAIL_CARD_W = wardrobeGridCardWidth(SCREEN_W, H_PAD, WARDROBE_GRID_GAP);
 
 const CARD_SHADOW = {
   shadowColor: P.shadow,
@@ -152,11 +158,6 @@ function countLabel(n: number): string {
   return n === 1 ? '1 item' : `${n} items`;
 }
 
-function ListSeparator() {
-  return <View style={separatorStyle.gap} />;
-}
-const separatorStyle = StyleSheet.create({ gap: { height: 10 } });
-
 // ─── Category card for the grid ──────────────────────────────────────────────
 function CategoryCard({
   cat, count, onPress,
@@ -176,59 +177,50 @@ function CategoryCard({
   );
 }
 
-// ─── Item row card for the detail view ───────────────────────────────────────
-function ItemRowCard({
+// ─── Item grid card (detail view) — same chrome as Favorites / Saved grids ───
+function ClosetItemGridCard({
   item,
+  cardWidth,
   onSetAvailability,
   onPress,
 }: Readonly<{
   item: WardrobeItemResponse;
+  cardWidth: number;
   onSetAvailability: (id: string, unavailable: boolean) => void;
   onPress: () => void;
 }>) {
-  const itemId        = item.id ?? item._id ?? '';
+  const itemId = item.id ?? item._id ?? '';
   const isUnavailable = item.v2?.availability?.status === 'unavailable';
-  const itemName      = getItemDisplayName(item);
+  const itemName = getItemDisplayName(item);
+  const uri = (item.cleanImageUrl || item.imageUrl) || null;
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.itemRow, isUnavailable && styles.itemRowUnavailable, pressed && styles.itemRowPressed]}
-      onPress={onPress}
-    >
-      {/* Thumbnail */}
-      <View style={styles.itemThumbWrap}>
-        {(item.cleanImageUrl || item.imageUrl) ? (
-          <Image
-            source={{ uri: item.cleanImageUrl || item.imageUrl }}
-            style={styles.itemThumb}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.itemThumbPlaceholder}>
-            <Ionicons name="shirt-outline" size={20} color={P.lightText} />
-          </View>
-        )}
-      </View>
-
-      {/* Info */}
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName} numberOfLines={1}>{itemName}</Text>
-        {isUnavailable && (
-          <View style={styles.laundryBadge}>
-            <Text style={styles.laundryBadgeText}>🧺 In Laundry</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Laundry toggle button */}
-      <Pressable
-        style={[styles.laundryBtn, isUnavailable && styles.laundryBtnActive]}
-        onPress={() => onSetAvailability(itemId, !isUnavailable)}
-        hitSlop={6}
-      >
-        <Text style={styles.laundryBtnEmoji}>🧺</Text>
-      </Pressable>
-    </Pressable>
+    <View style={isUnavailable ? styles.gridCardDimmed : undefined}>
+      <WardrobeSquareGridCard
+        width={cardWidth}
+        imageUri={uri}
+        title={itemName}
+        onPress={onPress}
+        badge={
+          isUnavailable ? (
+            <View style={styles.gridLaundryBadge}>
+              <Text style={styles.gridLaundryBadgeText}>🧺 In Laundry</Text>
+            </View>
+          ) : null
+        }
+        imageOverlay={
+          <Pressable
+            style={[styles.gridLaundryBtn, isUnavailable && styles.gridLaundryBtnActive]}
+            onPress={() => onSetAvailability(itemId, !isUnavailable)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={isUnavailable ? 'Mark as available' : 'Mark as laundry'}
+          >
+            <Text style={styles.gridLaundryBtnEmoji}>🧺</Text>
+          </Pressable>
+        }
+      />
+    </View>
   );
 }
 
@@ -258,7 +250,12 @@ function ClosetDetailView({
 }>) {
   const renderItem = useCallback(
     ({ item }: ListRenderItemInfo<WardrobeItemResponse>) => (
-      <ItemRowCard item={item} onSetAvailability={onSetAvailability} onPress={() => onPressItem(item)} />
+      <ClosetItemGridCard
+        item={item}
+        cardWidth={DETAIL_CARD_W}
+        onSetAvailability={onSetAvailability}
+        onPress={() => onPressItem(item)}
+      />
     ),
     [onSetAvailability, onPressItem],
   );
@@ -282,11 +279,12 @@ function ClosetDetailView({
     bodyContent = (
       <FlatList
         data={filteredItems}
+        numColumns={2}
         keyExtractor={(i, idx) => i.id ?? i._id ?? `item-${idx}`}
         contentContainerStyle={styles.detailList}
+        columnWrapperStyle={styles.gridColumnWrapper}
         showsVerticalScrollIndicator={false}
         renderItem={renderItem}
-        ItemSeparatorComponent={ListSeparator}
       />
     );
   }
@@ -582,44 +580,12 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
     paddingTop: 4,
   },
-  itemSeparator: { height: 10 },
+  gridColumnWrapper: {
+    gap: WARDROBE_GRID_GAP,
+  },
+  gridCardDimmed: { opacity: 0.92 },
 
-  // ── Item row card ─────────────────────────────────────────────────────────
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: P.cardWhite,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: P.border,
-    padding: 12,
-    gap: 12,
-    ...CARD_SHADOW,
-  },
-  itemRowUnavailable: { opacity: 0.5 },
-  itemRowPressed:     { opacity: 0.75 },
-
-  itemThumbWrap: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: P.cardSurface,
-  },
-  itemThumb: { width: '100%', height: '100%' },
-  itemThumbPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  itemInfo: { flex: 1 },
-  itemName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: P.primaryText,
-  },
-  laundryBadge: {
+  gridLaundryBadge: {
     marginTop: 4,
     alignSelf: 'flex-start',
     backgroundColor: `${P.warning}20`,
@@ -627,27 +593,31 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 6,
   },
-  laundryBadgeText: {
-    fontSize: 11,
+  gridLaundryBadgeText: {
+    fontSize: 10,
     fontWeight: '600',
     color: P.warning,
   },
-
-  laundryBtn: {
-    width: 36,
-    height: 36,
+  gridLaundryBtn: {
+    width: 34,
+    height: 34,
     borderRadius: 10,
-    backgroundColor: P.cardSurface,
+    backgroundColor: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
-    borderColor: P.border,
+    borderColor: 'rgba(196,168,130,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#2C1A0E',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  laundryBtnActive: {
-    backgroundColor: `${P.warning}20`,
+  gridLaundryBtnActive: {
+    backgroundColor: `${P.warning}25`,
     borderColor: P.warning,
   },
-  laundryBtnEmoji: { fontSize: 16 },
+  gridLaundryBtnEmoji: { fontSize: 15 },
 
   // ── Empty state ───────────────────────────────────────────────────────────
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
