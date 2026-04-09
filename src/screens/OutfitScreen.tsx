@@ -12,6 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -167,7 +168,22 @@ function OutfitResultView({
         >
           <Text style={styles.actionEmoji}>🔖</Text>
         </Pressable>
-        <Pressable style={styles.actionBtn} onPress={() => Alert.alert('Share', 'Share coming soon!')}>
+        <Pressable
+          style={styles.actionBtn}
+          onPress={async () => {
+            try {
+              const outfit = outfits[currentIdx];
+              const itemLines = outfit.items
+                .map(i => `• ${i.type ?? i.category ?? 'Item'}${i.primaryColor ? ` (${i.primaryColor})` : ''}`)
+                .join('\n');
+              await Share.share({
+                message: `Check out my outfit suggestion from Myra! ✨\n\n${itemLines}\n\nStyled for: ${outfit.reasons?.[0] ?? 'a great look'}`,
+                title: 'My Myra Outfit',
+              });
+            } catch (err) {
+              if (__DEV__) console.warn('[Share] failed:', err);
+            }
+          }}>
           <Text style={styles.actionEmoji}>📤</Text>
         </Pressable>
       </View>
