@@ -208,6 +208,7 @@ export default function HomeScreen() {
   const [locationCoords, setLocationCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [locationDenied, setLocationDenied] = useState(false);
   const [weatherOpen, setWeatherOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [forecastDays, setForecastDays] = useState<ForecastDay[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [laundryCount, setLaundryCount] = useState(0);
@@ -371,7 +372,7 @@ export default function HomeScreen() {
             <PillBtn onPress={() => goTo('Closet')} style={styles.pillGap}>
               <Text style={styles.pillEmoji}>👔</Text>
             </PillBtn>
-            <PillBtn onPress={() => goTo('Settings')}>
+            <PillBtn onPress={() => setProfileOpen(prev => !prev)}>
               <Text style={styles.pillEmoji}>👤</Text>
             </PillBtn>
           </View>
@@ -493,6 +494,75 @@ export default function HomeScreen() {
                     )}
                   </View>
                 )}
+              </View>
+            </View>
+          </View>
+        </>
+      )}
+
+      {profileOpen && (
+        <>
+          <Pressable
+            style={[StyleSheet.absoluteFill, styles.weatherBackdrop]}
+            onPress={() => setProfileOpen(false)}
+          />
+          <View style={[styles.weatherPanel, { top: HEADER_H + (insets?.top ?? 0), right: H_PAD }]}>
+            <View style={CARD_SHADOW}>
+              <View style={[styles.weatherCard, { paddingTop: 18, paddingHorizontal: 14, paddingBottom: 12 }]}>
+                <View style={styles.profileHeaderRow}>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <View style={styles.profileAvatar}>
+                      <Text style={styles.profileAvatarInitial}>
+                        {(
+                          user?.profile?.preferredName ??
+                          user?.displayName ??
+                          user?.username ??
+                          user?.email ??
+                          '?'
+                        ).charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.profileNameBlock}>
+                      <Text style={styles.profileName}>
+                        {user?.profile?.preferredName ??
+                          user?.displayName ??
+                          user?.username ??
+                          'My Profile'}
+                      </Text>
+                      {user?.email ? (
+                        <Text style={styles.profileEmail} numberOfLines={1}>
+                          {user.email}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Divider */}
+                <View style={styles.profileDivider} />
+
+                {/* Quick actions */}
+                <Pressable
+                  style={styles.profileAction}
+                  onPress={() => { setProfileOpen(false); goTo('Settings'); }}>
+                  <Ionicons name="settings-outline" size={14} color={P.secondaryText} />
+                  <Text style={styles.profileActionText}>Settings</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.profileAction}
+                  onPress={() => { setProfileOpen(false); goTo('Saved'); }}>
+                  <Ionicons name="star-outline" size={14} color={P.secondaryText} />
+                  <Text style={styles.profileActionText}>Saved Outfits</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.profileAction}
+                  onPress={() => { setProfileOpen(false); goTo('Favorites'); }}>
+                  <Ionicons name="heart-outline" size={14} color={P.secondaryText} />
+                  <Text style={styles.profileActionText}>Favorites</Text>
+                </Pressable>
+
               </View>
             </View>
           </View>
@@ -867,4 +937,63 @@ const styles = StyleSheet.create({
   weatherTemp: { fontSize: 14, fontWeight: '600', color: P.primaryText },
   forecastNote: { paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center' },
   forecastNoteText: { fontSize: 11, color: P.lightText, fontStyle: 'italic' },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 0,
+  },
+  profileAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#C4A882',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  profileAvatarInitial: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  profileNameBlock: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: P.primaryText,
+  },
+  profileEmail: {
+    fontSize: 11,
+    color: P.secondaryText,
+    marginTop: 2,
+  },
+  profileDivider: {
+    height: 1,
+    backgroundColor: 'rgba(196,168,130,0.2)',
+    marginVertical: 8,
+  },
+  profileCloseBtn: {
+    flexShrink: 0,
+    padding: 2,
+  },
+  profileAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(196,168,130,0.07)',
+    marginBottom: 6,
+  },
+  profileActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: P.primaryText,
+    flex: 1,
+    textAlign: 'left',
+  },
 });
