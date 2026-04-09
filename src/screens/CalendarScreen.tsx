@@ -186,10 +186,10 @@ export default function CalendarScreen() {
         </Pressable>
         <Text style={styles.title}>CALENDAR</Text>
         <View style={styles.headerRight}>
-          <Pressable style={styles.headerPill} onPress={() => {}}>
-            <Text style={styles.headerPillEmoji}>☁️</Text>
-          </Pressable>
-          <Pressable style={styles.headerPill} onPress={() => {}}>
+          <Pressable
+            style={styles.headerPill}
+            onPress={() => navigation.navigate('Main' as any, { screen: 'Closet' } as any)}
+            hitSlop={8}>
             <Text style={styles.headerPillEmoji}>👔</Text>
           </Pressable>
           <Pressable style={styles.headerPillSmall} onPress={openAddModal}>
