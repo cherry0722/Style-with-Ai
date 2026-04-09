@@ -782,8 +782,14 @@ export default function Avatar3DScreen() {
           style={styles.actionBtn}
           activeOpacity={0.75}
           accessibilityRole="button"
-          accessibilityLabel="Regenerate outfit">
-          <Text style={styles.actionEmoji}>🔄</Text>
+          accessibilityLabel="Regenerate outfit"
+          disabled={isGenerating}
+          onPress={() => { void handleGenerate(); }}>
+          <Ionicons
+            name="refresh"
+            size={26}
+            color={isGenerating ? 'rgba(255,255,255,0.3)' : '#FFFFFF'}
+          />
         </TouchableOpacity>
 
         <TouchableOpacity
