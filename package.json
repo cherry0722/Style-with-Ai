@@ -25,6 +25,7 @@
     "axios": "^1.13.6",
     "react": "19.2.3",
     "react-native": "0.84.1",
+    "react-native-calendar-events": "^2.2.0",
     "react-native-calendars": "^1.1314.0",
     "react-native-config": "^1.6.1",
     "react-native-filament": "^1.9.0",

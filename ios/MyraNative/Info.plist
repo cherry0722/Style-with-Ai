@@ -79,5 +79,9 @@
 	<array>
 		<string>mailto</string>
 	</array>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Myra uses your calendar to suggest outfits that match your daily schedule and events.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Myra uses your calendar to suggest outfits that match your daily schedule and events.</string>
 </dict>
 </plist>
