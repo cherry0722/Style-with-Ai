@@ -342,6 +342,25 @@ const AvatarStage = React.memo(function AvatarStage(
   );
 });
 
+/** Known non-AI reason strings emitted by the backend on deterministic fallback paths. */
+const KNOWN_BACKEND_FALLBACKS = new Set([
+  'Deterministic outfit from available items.',
+]);
+
+/**
+ * Returns the display reason for an outfit entry, or null if the reason is
+ * missing, empty, or a known generic backend fallback string.
+ * Both the compact card and the expanded modal MUST use this — never read
+ * reasons[0] directly — so they can never get out of sync.
+ */
+function getOutfitDisplayReason(entry: ReasonedOutfitEntry | null): string | null {
+  const raw = entry?.reasons?.[0];
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed || KNOWN_BACKEND_FALLBACKS.has(trimmed)) return null;
+  return trimmed;
+}
+
 /**
  * Guard: only keep entries that have at least one item and a non-empty first reason.
  * Filters out blank/structurally invalid entries before they reach the suggestion state.
@@ -688,7 +707,7 @@ export default function Avatar3DScreen() {
     } else {
       // Outfits available
       const canNavigate = suggestions.length > 1;
-      const firstReason = currentOutfit?.reasons?.[0] ?? null;
+      const firstReason = getOutfitDisplayReason(currentOutfit);
 
       const reasonLabel = firstReason ?? `${suggestions.length} outfit${suggestions.length > 1 ? 's' : ''} ready`;
       const showReadMore = firstReason != null && firstReason.length > 80;
@@ -978,7 +997,7 @@ export default function Avatar3DScreen() {
               contentContainerStyle={styles.modalScrollContent}
               bounces={false}>
               <Text style={styles.modalText}>
-                {currentOutfit?.reasons?.[0] ?? ''}
+                {getOutfitDisplayReason(currentOutfit) ?? ''}
               </Text>
             </ScrollView>
           </Pressable>
