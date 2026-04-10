@@ -16,7 +16,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { listLaundry, markClean, WardrobeItemResponse } from '../api/wardrobe';
@@ -79,7 +79,7 @@ function LaundryItemGridCard({
       badge={
         <View style={[styles.gridStatusBadge, isPacked && styles.gridStatusBadgePacked]}>
           <Text style={[styles.gridStatusText, isPacked && styles.gridStatusTextPacked]}>
-            {isPacked ? '📦 Packed' : '🧺 In Laundry'}
+            {isPacked ? 'Packed' : 'In Laundry'}
           </Text>
         </View>
       }
@@ -191,7 +191,7 @@ export default function LaundryScreen() {
           <Ionicons name="arrow-back" size={20} color={P.primaryText} />
         </Pressable>
         <Text style={styles.title}>LAUNDRY</Text>
-        <Text style={styles.titleEmoji}> 🧺</Text>
+        <Ionicons name="basket-outline" size={22} color={P.accent} style={{ marginLeft: 6 }} />
       </View>
 
       {/* Include packed toggle */}
@@ -218,7 +218,7 @@ export default function LaundryScreen() {
         </View>
       ) : items.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyEmoji}>🧺</Text>
+          <Ionicons name="basket-outline" size={48} color={P.lightText} style={{ marginBottom: 12 }} />
           <Text style={styles.emptyTitle}>No items in laundry</Text>
           <Text style={styles.emptyHint}>All your clothes are ready to wear!</Text>
         </View>
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     color: P.primaryText,
     letterSpacing: -0.3,
   },
-  titleEmoji: { fontSize: 22 },
+  titleIcon: { marginLeft: 6 },
 
   toggleRow: {
     flexDirection: 'row',
@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyIcon: { marginBottom: 12 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: P.primaryText, marginBottom: 6 },
   emptyHint:  { fontSize: 13, color: P.lightText },
 

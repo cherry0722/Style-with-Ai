@@ -52,7 +52,13 @@ export type RootStackParamList = {
   ClosetItemDetail: { itemId: string; frontImageUrl: string; backImageUrl?: string | null; itemName: string; isFavorite: boolean };
   InformationPermissions: undefined;
   Saved: { savedOutfit?: SavedOutfitItem } | undefined;
-  Avatar3DScreen: { savedOutfit?: SavedOutfitItem } | undefined;
+  Avatar3DScreen: {
+    savedOutfit?: SavedOutfitItem;
+    intent?: 'today' | 'calendar';
+    date?: string;
+    slotLabel?: string;
+    occasion?: string;
+  } | undefined;
   Favorites: undefined;
   Activity: undefined;
   Help: undefined;

@@ -41,7 +41,7 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Ionicons} from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   Camera,
   DefaultLight,
@@ -52,9 +52,11 @@ import {
 } from 'react-native-filament';
 import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
 import {fetchOutfitAvatarMappings} from '../api/avatar';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSavedOutfits } from '../store/savedOutfits';
 import { CreateSavedOutfitPayload } from '../api/saved';
+import { getPlannerRange, postPlanner, PlannerPlan, PlannerSlotLabel } from '../api/planner';
+import { OCCASIONS } from '../constants/occasions';
 import {
   AvatarRenderConfig,
   buildRenderConfig,
@@ -102,13 +104,7 @@ const ROTATION_SENSITIVITY = 0.4;  // rad/px  (rotate prop is radians — see Tr
 // FIX: modelRotation is useMemo'd inside SceneContent so the array reference
 // stays stable when the values don't change. See the CRITICAL comment there.
 
-// ── Occasion options ───────────────────────────────────────────────────────────
-const OCCASIONS = [
-  {label: 'Casual',  value: 'casual'},
-  {label: 'College', value: 'college'},
-  {label: 'Party',   value: 'party'},
-  {label: 'Date',    value: 'date'},
-] as const;
+// ── Occasion options — imported from shared constants ─────────────────────────
 
 // ── Error boundary for EntitySelector tinting ─────────────────────────────────
 // EntitySelector throws during render if a GLB node name is not found.
@@ -346,14 +342,74 @@ const AvatarStage = React.memo(function AvatarStage(
   );
 });
 
+/** Known non-AI reason strings emitted by the backend on deterministic fallback paths. */
+const KNOWN_BACKEND_FALLBACKS = new Set([
+  'Deterministic outfit from available items.',
+]);
+
+/**
+ * Returns the display reason for an outfit entry, or null if the reason is
+ * missing, empty, or a known generic backend fallback string.
+ * Both the compact card and the expanded modal MUST use this — never read
+ * reasons[0] directly — so they can never get out of sync.
+ */
+function getOutfitDisplayReason(entry: ReasonedOutfitEntry | null): string | null {
+  const raw = entry?.reasons?.[0];
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed || KNOWN_BACKEND_FALLBACKS.has(trimmed)) return null;
+  return trimmed;
+}
+
+/**
+ * Guard: only keep entries that have at least one item and a non-empty first reason.
+ * Filters out blank/structurally invalid entries before they reach the suggestion state.
+ */
+function isValidSuggestion(entry: ReasonedOutfitEntry): boolean {
+  return (
+    Array.isArray(entry.items) &&
+    entry.items.length > 0 &&
+    Array.isArray(entry.reasons) &&
+    entry.reasons.length > 0 &&
+    typeof entry.reasons[0] === 'string' &&
+    entry.reasons[0].trim().length > 0
+  );
+}
+
+function formatPlanDate(isoDate: string): string {
+  try {
+    return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return 'Calendar';
+  }
+}
+
 export default function Avatar3DScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const savedOutfit = (route?.params as any)?.savedOutfit ?? null;
+
+  // Typed route params — all optional for backward compat with tab usage.
+  const params = (route?.params ?? {}) as {
+    savedOutfit?: any;
+    intent?: 'today' | 'calendar';
+    date?: string;
+    slotLabel?: string;
+    occasion?: string;
+  };
+  const savedOutfit = params.savedOutfit ?? null;
+  const routeIntent  = params.intent   ?? null;
+  const routeDate    = params.date     ?? null;
+  const routeSlotLabel = (params.slotLabel ?? 'morning') as PlannerSlotLabel;
+  const routeOccasion  = params.occasion ?? null;
 
   // SceneContent is driven entirely via imperative handle — no rotation state here.
   const sceneRef = useRef<SceneHandle>(null);
   const [saveLoading, setSaveLoading] = useState(false);
+  const [commitLoading, setCommitLoading] = useState(false);
   const addSavedOutfit = useSavedOutfits(s => s.add);
   const savedItems = useSavedOutfits(s => s.items);
   const fetchAllSaved = useSavedOutfits(s => s.fetchAll);
@@ -362,6 +418,18 @@ export default function Avatar3DScreen() {
   // Keep the saved store fresh so isSaved derives correctly.
   useEffect(() => {
     fetchAllSaved().catch(() => {});
+  }, []);
+
+  // Prefill occasion from route params (calendar intent passes a suggestion).
+  // Run once on mount only — don't clobber user changes after that.
+  useEffect(() => {
+    if (!routeOccasion) return;
+    const lower = routeOccasion.toLowerCase();
+    const idx = OCCASIONS.findIndex(
+      o => lower === o.value || lower.includes(o.value) || o.value.includes(lower),
+    );
+    if (idx >= 0) setOccasionIndex(idx);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Snapshot of rotationY taken at gesture start (read from scene, not a local
@@ -382,14 +450,23 @@ export default function Avatar3DScreen() {
   const [hasGenerated, setHasGenerated] = useState(false);
   const [reasonModalVisible, setReasonModalVisible] = useState(false);
 
-  // Derive isSaved from the store — true if the current outfit's item IDs
-  // match any saved outfit. This persists across navigation and tab switches.
-  // MUST be declared after suggestions and outfitIndex useState.
+  // Clamp outfitIndex whenever the suggestions list shrinks (e.g. after filtering).
+  // Prevents currentOutfit from being null when suggestions are non-empty.
+  useEffect(() => {
+    if (suggestions.length > 0) {
+      setOutfitIndex(i => Math.min(i, suggestions.length - 1));
+    }
+  }, [suggestions.length]);
+
+  // The outfit the user is currently viewing — single source of truth for all actions.
+  // All save, commit, and display logic must read from this constant.
+  const currentOutfit = suggestions[outfitIndex] ?? null;
+
+  // Derive isSaved from the store — true if currentOutfit's item IDs match any
+  // saved outfit. Updates whenever the viewed outfit or the saved collection changes.
   const isSaved = useMemo(() => {
-    if (suggestions.length === 0) return false;
-    const current = suggestions[outfitIndex];
-    if (!current) return false;
-    const currentIds = current.items
+    if (!currentOutfit) return false;
+    const currentIds = currentOutfit.items
       .map((i: any) => i.id || i._id)
       .filter(Boolean)
       .sort()
@@ -403,7 +480,7 @@ export default function Avatar3DScreen() {
         .join(',');
       return savedIds === currentIds;
     });
-  }, [suggestions, outfitIndex, savedItems]);
+  }, [currentOutfit, savedItems]);
 
   // ── Dropdown handlers ────────────────────────────────────────────────────────
   const toggleDropdown  = () => setDropdownOpen(prev => !prev);
@@ -462,21 +539,17 @@ export default function Avatar3DScreen() {
   }, [savedOutfit]);
 
   // ── Save handler ─────────────────────────────────────────────────────────────
+  // Bookmarks the currently viewed outfit (currentOutfit) to Saved Outfits.
   const handleSave = async () => {
-    if (saveLoading || suggestions.length === 0) return;
+    if (saveLoading || !currentOutfit) return;
 
-    const outfit = suggestions[outfitIndex];
     const occasion = OCCASIONS[occasionIndex]?.value ?? null;
-
-    // Read current clothing config from scene
-    const avatarRenderConfig = sceneRef.current
-      ? sceneRef.current.getClothingConfig()
-      : null;
+    const avatarRenderConfig = sceneRef.current?.getClothingConfig() ?? null;
 
     const payload: CreateSavedOutfitPayload = {
       occasion,
-      items: outfit.items,
-      reasons: outfit.reasons ?? [],
+      items: currentOutfit.items,
+      reasons: currentOutfit.reasons ?? [],
       avatarRenderConfig,
     };
 
@@ -492,13 +565,64 @@ export default function Avatar3DScreen() {
     }
   };
 
+  // ── Commit to planner handler ─────────────────────────────────────────────────
+  // Used by Wear Today (intent='today') and Save to Calendar (intent='calendar').
+  // Commits the currently viewed outfit (currentOutfit) to the planner.
+  // Flow: save to /api/saved first (stable ID), then POST to /api/planner.
+  const handleCommitToPlan = async () => {
+    if (commitLoading || !currentOutfit) return;
+
+    const occasion = OCCASIONS[occasionIndex]?.value ?? 'casual';
+    const avatarRenderConfig = sceneRef.current?.getClothingConfig() ?? null;
+
+    const payload: CreateSavedOutfitPayload = {
+      occasion,
+      items: currentOutfit.items,
+      reasons: currentOutfit.reasons ?? [],
+      avatarRenderConfig,
+    };
+
+    setCommitLoading(true);
+    try {
+      // 1. Persist to Saved Outfits — returns confirmed record with stable _id.
+      const saved = await addSavedOutfit(payload);
+
+      // 2. Fetch existing plans for the date to avoid overwriting them.
+      const date = routeDate ?? new Date().toISOString().split('T')[0];
+      const rangeRes = await getPlannerRange(date, date);
+      const existingPlans =
+        rangeRes.entries.find(e => e.date === date)?.plans ?? [];
+
+      const newPlan: PlannerPlan = {
+        slotLabel: routeSlotLabel,
+        occasion,
+        outfitId: saved._id,
+        status: 'planned',
+      };
+
+      // 3. POST (upsert) the updated plan list for the date.
+      await postPlanner(date, [...existingPlans, newPlan]);
+
+      navigation.goBack();
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Please try again.';
+      Alert.alert('Could not save plan', detail);
+    } finally {
+      setCommitLoading(false);
+    }
+  };
+
   // ── Generate handler ─────────────────────────────────────────────────────────
   const handleGenerate = async () => {
     setIsGenerating(true);
     setGenerateError(null);
     try {
       const res = await getReasonedOutfits({occasion: OCCASIONS[occasionIndex].value});
-      const outfits = res.outfits.slice(0, 3);
+      const outfits = res.outfits.slice(0, 3).filter(isValidSuggestion);
       setSuggestions(outfits);
       setOutfitIndex(0);
       setReasonModalVisible(false);
@@ -583,8 +707,7 @@ export default function Avatar3DScreen() {
     } else {
       // Outfits available
       const canNavigate = suggestions.length > 1;
-      const current = suggestions[outfitIndex];
-      const firstReason = current?.reasons?.[0] ?? null;
+      const firstReason = getOutfitDisplayReason(currentOutfit);
 
       const reasonLabel = firstReason ?? `${suggestions.length} outfit${suggestions.length > 1 ? 's' : ''} ready`;
       const showReadMore = firstReason != null && firstReason.length > 80;
@@ -678,7 +801,21 @@ export default function Avatar3DScreen() {
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <View style={[styles.header, {paddingTop: insets.top + 8}]}>
-        <Text style={styles.title}>My Avatar</Text>
+        {routeIntent ? (
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              style={styles.headerBackBtn}
+              onPress={() => navigation.goBack()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Go back">
+              <Ionicons name="chevron-back" size={22} color={TITLE_COLOR} />
+            </TouchableOpacity>
+            <Text style={styles.title}>My Avatar</Text>
+          </View>
+        ) : (
+          <Text style={styles.title}>My Avatar</Text>
+        )}
       </View>
 
       {/* ── Top controls: occasion selector + generate button ─────── */}
@@ -767,16 +904,8 @@ export default function Avatar3DScreen() {
         </View>
       </View>
 
-      {/* ── Bottom action row: emoji buttons ─────────────────────── */}
-      <View style={[styles.actionRow, {paddingBottom: insets.bottom + 10}]}>
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="Like outfit">
-          <Text style={styles.actionEmoji}>❤️</Text>
-        </TouchableOpacity>
+      {/* ── Bottom action row ─────────────────────────────────────── */}
+      <View style={[styles.actionRow, {paddingBottom: routeIntent ? 10 : insets.bottom + 10}]}>
 
         <TouchableOpacity
           style={styles.actionBtn}
@@ -795,7 +924,7 @@ export default function Avatar3DScreen() {
         <TouchableOpacity
           style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(255,200,0,0.18)' }]}
           onPress={() => { void handleSave(); }}
-          disabled={saveLoading || suggestions.length === 0}
+          disabled={saveLoading || isGenerating || !currentOutfit}
           activeOpacity={0.75}
           accessibilityRole="button"
           accessibilityLabel="Save outfit">
@@ -807,6 +936,31 @@ export default function Avatar3DScreen() {
         </TouchableOpacity>
 
       </View>
+
+      {/* ── Contextual intent CTA (Wear Today / Save to Calendar) ─── */}
+      {routeIntent != null && !!currentOutfit && !isGenerating && (
+        <View style={[styles.intentCtaRow, {paddingBottom: insets.bottom + 16}]}>
+          <TouchableOpacity
+            style={[styles.intentCtaBtn, commitLoading && styles.intentCtaBtnDisabled]}
+            onPress={() => { void handleCommitToPlan(); }}
+            disabled={commitLoading}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={routeIntent === 'today' ? 'Wear today' : 'Save to calendar'}>
+            {commitLoading ? (
+              <ActivityIndicator size="small" color={STAGE_BG} />
+            ) : (
+              <Text style={styles.intentCtaText}>
+                {routeIntent === 'today'
+                  ? 'Wear Today'
+                  : routeDate
+                    ? `Save to ${formatPlanDate(routeDate)}`
+                    : 'Save to Calendar'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Reason detail bottom sheet ─────────────────────────────── */}
       <Modal
@@ -843,7 +997,7 @@ export default function Avatar3DScreen() {
               contentContainerStyle={styles.modalScrollContent}
               bounces={false}>
               <Text style={styles.modalText}>
-                {suggestions[outfitIndex]?.reasons?.[0] ?? ''}
+                {getOutfitDisplayReason(currentOutfit) ?? ''}
               </Text>
             </ScrollView>
           </Pressable>
@@ -1208,8 +1362,41 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-  actionEmoji: {
-    fontSize: 22,
+  // ── Header row (intent-based flows) ────────────────────────────
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerBackBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(196, 168, 130, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // ── Intent CTA (Wear Today / Save to Calendar) ─────────────────
+  intentCtaRow: {
+    paddingHorizontal: 24,
+    paddingTop: 10,
+  },
+  intentCtaBtn: {
+    backgroundColor: TITLE_COLOR,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  intentCtaBtnDisabled: {
+    opacity: 0.6,
+  },
+  intentCtaText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: STAGE_BG,
+    letterSpacing: 0.3,
   },
 
 });

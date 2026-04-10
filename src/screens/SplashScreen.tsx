@@ -6,6 +6,7 @@ import {
   Dimensions,
   StyleSheet,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -138,9 +139,17 @@ export default function SplashScreen() {
                 },
               ]}
             >
-              <Text style={styles.fashionEmoji}>
-                {['👗', '👠', '👜', '💄', '💍', '👑', '🕶️', '🧥', '👔', '👖'][index % 10]}
-              </Text>
+              <Ionicons
+                name={
+                  ([
+                    'shirt-outline', 'footsteps-outline', 'bag-outline',
+                    'color-palette-outline', 'diamond-outline', 'trophy-outline',
+                    'glasses-outline', 'layers-outline', 'shirt', 'walk-outline',
+                  ] as const)[index % 10]
+                }
+                size={24}
+                color="rgba(255,255,255,0.7)"
+              />
             </Animated.View>
           ))}
         </Animated.View>
@@ -234,8 +243,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     opacity: 0.7,
   },
-  fashionEmoji: {
-    fontSize: 24,
+  fashionIcon: {
     textAlign: 'center',
   },
   contentContainer: {

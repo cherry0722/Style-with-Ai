@@ -7,8 +7,6 @@
  *   - HomeScreen: real screen (expo-location → react-native-geolocation-service ✓)
  *   - SettingsScreen: real screen (expo-haptics → react-native-haptic-feedback ✓)
  *
- * Icon names typed as string because @expo/vector-icons is Metro-aliased to a stub
- * during this migration phase (glyphMap property not available on stub).
  */
 import React, { useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -18,7 +16,7 @@ import Avatar3DScreen from '../screens/Avatar3DScreen';
 import HomeScreen from '../screens/HomeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ClosetScreen from '../screens/ClosetScreen';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   View,
   Text,

@@ -17,6 +17,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const H_PAD = 24;
@@ -146,21 +147,21 @@ export default function GuestHomeScreen() {
         <View style={[styles.headerRow, { height: HEADER_H }]}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>HOME</Text>
-            <Text style={styles.headerEmoji}> 🏠</Text>
+            <Ionicons name="home" size={22} color={P.accent} style={{ marginLeft: 6 }} />
           </View>
           <View style={styles.headerRight}>
             <PillBtn onPress={() => {}} style={styles.pillGap}>
-              <Text style={styles.pillEmoji}>☀️</Text>
+              <Ionicons name="sunny-outline" size={15} color={P.secondaryText} />
               <Text style={styles.pillText}>72°</Text>
             </PillBtn>
             <PillBtn onPress={goAuth} style={styles.pillGap}>
-              <Text style={styles.pillEmoji}>📅</Text>
+              <Ionicons name="calendar-outline" size={15} color={P.secondaryText} />
             </PillBtn>
             <PillBtn onPress={goAuth} style={styles.pillGap}>
-              <Text style={styles.pillEmoji}>👔</Text>
+              <Ionicons name="shirt-outline" size={15} color={P.secondaryText} />
             </PillBtn>
             <PillBtn onPress={goAuth}>
-              <Text style={styles.pillEmoji}>👤</Text>
+              <Ionicons name="person-outline" size={15} color={P.secondaryText} />
             </PillBtn>
           </View>
         </View>
@@ -177,15 +178,15 @@ export default function GuestHomeScreen() {
         >
           <Text style={styles.ctaBtnText}>PLAN MY OUTFIT OF THE DAY</Text>
           <View style={styles.ctaIcons}>
-            <Text style={styles.ctaEmoji}>👔</Text>
-            <Text style={styles.ctaEmoji}>✨</Text>
+            <Ionicons name="shirt-outline" size={16} color={P.primaryText} />
+            <Ionicons name="sparkles" size={16} color={P.accent} />
           </View>
         </Pressable>
 
         {/* Info cards */}
         <View style={styles.infoRow}>
           <InfoCard width={infoCardW}>
-            <Text style={styles.infoEmoji}>☁️</Text>
+            <Ionicons name="cloud-outline" size={20} color={P.secondaryText} style={{ marginBottom: 2 }} />
             <Text style={styles.infoValue}>72°F</Text>
             <Text style={styles.infoLabel} numberOfLines={1}>Clear</Text>
             <Text style={styles.infoMeta}>Today</Text>
@@ -202,7 +203,7 @@ export default function GuestHomeScreen() {
           <InfoCard width={infoCardW}>
             <View style={styles.factHeader}>
               <Text style={styles.infoTitle}>Fashion Fact</Text>
-              <Text style={styles.factSparkle}>✨</Text>
+              <Ionicons name="sparkles" size={10} color={P.accent} />
             </View>
             <Text style={styles.infoFact}>Neutral tones pair with any accent.</Text>
           </InfoCard>
@@ -211,7 +212,7 @@ export default function GuestHomeScreen() {
         {/* Sign-in banner */}
         <Pressable style={styles.signInBanner} onPress={goAuth}>
           <Text style={styles.signInText}>Sign in to unlock your personalised wardrobe</Text>
-          <Text style={styles.signInArrow}>→</Text>
+          <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -254,12 +255,12 @@ const styles = StyleSheet.create({
   headerRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerTitle:{ fontFamily: SERIF, fontSize: 30, fontWeight: '700', color: P.primaryText, letterSpacing: -0.5 },
-  headerEmoji:{ fontSize: 22, marginLeft: 4 },
+  headerIcon: { marginLeft: 6 },
   headerRight:{ flexDirection: 'row', alignItems: 'center' },
 
   pillBtn:    { flexDirection: 'row', alignItems: 'center', height: 34, paddingHorizontal: 10, borderRadius: 14, backgroundColor: P.cardWhite, borderWidth: 1, borderColor: P.border, shadowColor: P.shadow, shadowOpacity: 1, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 1, gap: 3 },
   pillGap:    { marginRight: 6 },
-  pillEmoji:  { fontSize: 15 },
+  pillIcon:   { },
   pillText:   { fontSize: 13, fontWeight: '600', color: P.primaryText },
 
   avatarArea: { alignSelf: 'center', width: '100%', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
@@ -267,17 +268,17 @@ const styles = StyleSheet.create({
   ctaBtn:     { width: '100%', height: 54, backgroundColor: P.cardWhite, borderRadius: 18, borderWidth: 1, borderColor: P.border, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 14, shadowColor: P.shadow, shadowOpacity: 1, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   ctaBtnText: { fontSize: 14, fontWeight: '700', color: P.primaryText, letterSpacing: 1.2, textTransform: 'uppercase' },
   ctaIcons:   { flexDirection: 'row', marginLeft: 10, gap: 2 },
-  ctaEmoji:   { fontSize: 16 },
+  ctaIcon:    { },
 
   infoRow:    { flexDirection: 'row', gap: GRID_GAP, marginBottom: 16 },
   infoCard:   { backgroundColor: P.cardSurface, borderRadius: 16, borderWidth: 1, borderColor: P.border, padding: 12, justifyContent: 'center', alignItems: 'center', minHeight: 110 },
-  infoEmoji:  { fontSize: 20, marginBottom: 2 },
+  infoIcon:   { marginBottom: 2 },
   infoTitle:  { fontSize: 10, fontWeight: '700', color: P.secondaryText, letterSpacing: 0.5, marginBottom: 4, textAlign: 'center' },
   infoValue:  { fontSize: 18, fontWeight: '700', color: P.primaryText, marginTop: 2 },
   infoLabel:  { fontSize: 11, color: P.secondaryText, marginTop: 2 },
   infoMeta:   { fontSize: 10, color: P.lightText, marginTop: 2 },
   factHeader: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  factSparkle:{ fontSize: 10 },
+  factIcon:   { },
   infoFact:   { fontSize: 10, color: P.secondaryText, marginTop: 4, textAlign: 'center', lineHeight: 14 },
 
   signInBanner: {
@@ -291,5 +292,5 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   signInText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF', flex: 1, marginRight: 8 },
-  signInArrow:{ fontSize: 18, color: '#FFFFFF' },
+  signInArrow:{ },
 });

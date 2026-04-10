@@ -59,10 +59,13 @@ function safeLog(prefix, msg, extra = {}) {
 
 /**
  * Execute a request with retries (max 2 retries, backoff 2s then 5s).
+ * Pass config.maxRetries (0–2) to override the default retry count.
  */
 async function requestWithRetry(config) {
+  const maxRetries = config.maxRetries != null ? config.maxRetries : RETRY_DELAYS.length;
+  const delays = RETRY_DELAYS.slice(0, maxRetries);
   let lastErr;
-  const attempts = 1 + RETRY_DELAYS.length;
+  const attempts = 1 + delays.length;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
@@ -70,9 +73,9 @@ async function requestWithRetry(config) {
       return res;
     } catch (err) {
       lastErr = err;
-      if (!isRetriable(err) || attempt >= RETRY_DELAYS.length) break;
-      const delay = RETRY_DELAYS[attempt];
-      safeLog('AIService', `Retry ${attempt + 1}/${RETRY_DELAYS.length} after ${delay}ms`, {
+      if (!isRetriable(err) || attempt >= delays.length) break;
+      const delay = delays[attempt];
+      safeLog('AIService', `Retry ${attempt + 1}/${delays.length} after ${delay}ms`, {
         reason: err.code || err.response?.status || err.message?.slice(0, 80),
       });
       await sleep(delay);

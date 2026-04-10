@@ -6,11 +6,14 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   Alert,
   ActivityIndicator,
   Dimensions,
   StatusBar,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useSavedOutfits } from '../store/savedOutfits';
 import { SavedOutfitItem } from '../api/saved';
@@ -242,7 +245,9 @@ export default function SavedScreen() {
   const { items, loading, fetchAll, remove } = useSavedOutfits();
 
   useEffect(() => {
-    fetchAll();
+    fetchAll().catch(err => {
+      if (__DEV__) console.warn('[SavedScreen] fetchAll error:', err);
+    });
   }, []);
 
   const handlePress = useCallback(
@@ -262,7 +267,11 @@ export default function SavedScreen() {
           {
             text: 'Remove',
             style: 'destructive',
-            onPress: () => remove(outfit._id),
+            onPress: () => {
+              remove(outfit._id).catch(err => {
+                if (__DEV__) console.warn('[SavedScreen] remove error:', err);
+              });
+            },
           },
         ]
       );
@@ -290,10 +299,15 @@ export default function SavedScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.title}>Saved Outfits</Text>
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color={P.primaryText} />
+          </Pressable>
+          <Text style={styles.title}>SAVED OUTFITS</Text>
+        </View>
         <Text style={styles.subtitle}>Long press a card to remove</Text>
         <View style={styles.separator} />
       </View>
@@ -310,7 +324,7 @@ export default function SavedScreen() {
         ListEmptyComponent={<EmptyState />}
         showsVerticalScrollIndicator={false}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -326,16 +340,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
-    paddingTop: 56,
+    paddingTop: 8,
     paddingBottom: 14,
     paddingHorizontal: H_PADDING,
     backgroundColor: P.screenBg,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#EDE6D8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 30,
+    fontWeight: '700',
     color: P.primaryText,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 12,

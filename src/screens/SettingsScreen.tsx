@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../store/settings';
 import { saveUserProfile, updateUserSettings } from '../api/user';
@@ -173,9 +173,6 @@ export default function SettingsScreen() {
 
         {/* Header */}
         <View style={styles.headerRow}>
-          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={22} color={P.primaryText} />
-          </Pressable>
           <Text style={styles.pageTitle}>SETTINGS</Text>
         </View>
 
@@ -396,14 +393,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 20,
     gap: 10,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: P.cardSurface,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   pageTitle: {
     fontSize: 30,
