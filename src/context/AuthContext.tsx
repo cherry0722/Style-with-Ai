@@ -147,6 +147,11 @@ export function AuthProvider({ children, navRef }: { children: ReactNode; navRef
     if (!t) throw new Error('No accessToken in response');
     await AsyncStorage.setItem(TOKEN_STORAGE_KEY, t);
     setToken(t);
+    if (__DEV__) {
+      console.log('========== MYRA_JWT_TOKEN START ==========');
+      console.log(t);
+      console.log('========== MYRA_JWT_TOKEN END ==========');
+    }
     const me = await getCurrentUser();
     const userData: UserAuth = {
       id: (me._id as string)?.toString?.() ?? (me.id as string),

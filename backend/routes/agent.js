@@ -98,7 +98,7 @@ router.post('/reasoned_outfits', auth, async (req, res, next) => {
         lockedItemIds: locked.length ? locked : undefined,
       };
       try {
-        const pyRes = await aiService.post('/generate-outfits', payload);
+        const pyRes = await aiService.post('/generate-outfits', payload, { timeout: 12000, maxRetries: 0 });
         const data = pyRes.data || {};
         const pyOutfits = Array.isArray(data.outfits) ? data.outfits : [];
         if (pyRes.status >= 200 && pyRes.status < 300 && pyOutfits.length > 0) {

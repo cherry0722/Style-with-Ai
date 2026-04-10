@@ -416,14 +416,15 @@ export default function Avatar3DScreen() {
   const [hasGenerated, setHasGenerated] = useState(false);
   const [reasonModalVisible, setReasonModalVisible] = useState(false);
 
-  // Derive isSaved from the store — true if the current outfit's item IDs
-  // match any saved outfit. This persists across navigation and tab switches.
-  // MUST be declared after suggestions and outfitIndex useState.
+  // The outfit the user is currently viewing — single source of truth for all actions.
+  // All save, commit, and display logic must read from this constant.
+  const currentOutfit = suggestions[outfitIndex] ?? null;
+
+  // Derive isSaved from the store — true if currentOutfit's item IDs match any
+  // saved outfit. Updates whenever the viewed outfit or the saved collection changes.
   const isSaved = useMemo(() => {
-    if (suggestions.length === 0) return false;
-    const current = suggestions[outfitIndex];
-    if (!current) return false;
-    const currentIds = current.items
+    if (!currentOutfit) return false;
+    const currentIds = currentOutfit.items
       .map((i: any) => i.id || i._id)
       .filter(Boolean)
       .sort()
@@ -437,7 +438,7 @@ export default function Avatar3DScreen() {
         .join(',');
       return savedIds === currentIds;
     });
-  }, [suggestions, outfitIndex, savedItems]);
+  }, [currentOutfit, savedItems]);
 
   // ── Dropdown handlers ────────────────────────────────────────────────────────
   const toggleDropdown  = () => setDropdownOpen(prev => !prev);
@@ -496,21 +497,17 @@ export default function Avatar3DScreen() {
   }, [savedOutfit]);
 
   // ── Save handler ─────────────────────────────────────────────────────────────
+  // Bookmarks the currently viewed outfit (currentOutfit) to Saved Outfits.
   const handleSave = async () => {
-    if (saveLoading || suggestions.length === 0) return;
+    if (saveLoading || !currentOutfit) return;
 
-    const outfit = suggestions[outfitIndex];
     const occasion = OCCASIONS[occasionIndex]?.value ?? null;
-
-    // Read current clothing config from scene
-    const avatarRenderConfig = sceneRef.current
-      ? sceneRef.current.getClothingConfig()
-      : null;
+    const avatarRenderConfig = sceneRef.current?.getClothingConfig() ?? null;
 
     const payload: CreateSavedOutfitPayload = {
       occasion,
-      items: outfit.items,
-      reasons: outfit.reasons ?? [],
+      items: currentOutfit.items,
+      reasons: currentOutfit.reasons ?? [],
       avatarRenderConfig,
     };
 
@@ -528,19 +525,18 @@ export default function Avatar3DScreen() {
 
   // ── Commit to planner handler ─────────────────────────────────────────────────
   // Used by Wear Today (intent='today') and Save to Calendar (intent='calendar').
-  // Flow: save outfit to /api/saved first (gives us a stable ID), then POST to
-  // /api/planner so the planner entry references a real saved-outfit record.
+  // Commits the currently viewed outfit (currentOutfit) to the planner.
+  // Flow: save to /api/saved first (stable ID), then POST to /api/planner.
   const handleCommitToPlan = async () => {
-    if (commitLoading || suggestions.length === 0) return;
+    if (commitLoading || !currentOutfit) return;
 
-    const outfit = suggestions[outfitIndex];
     const occasion = OCCASIONS[occasionIndex]?.value ?? 'casual';
     const avatarRenderConfig = sceneRef.current?.getClothingConfig() ?? null;
 
     const payload: CreateSavedOutfitPayload = {
       occasion,
-      items: outfit.items,
-      reasons: outfit.reasons ?? [],
+      items: currentOutfit.items,
+      reasons: currentOutfit.reasons ?? [],
       avatarRenderConfig,
     };
 
@@ -669,8 +665,7 @@ export default function Avatar3DScreen() {
     } else {
       // Outfits available
       const canNavigate = suggestions.length > 1;
-      const current = suggestions[outfitIndex];
-      const firstReason = current?.reasons?.[0] ?? null;
+      const firstReason = currentOutfit?.reasons?.[0] ?? null;
 
       const reasonLabel = firstReason ?? `${suggestions.length} outfit${suggestions.length > 1 ? 's' : ''} ready`;
       const showReadMore = firstReason != null && firstReason.length > 80;
@@ -887,7 +882,7 @@ export default function Avatar3DScreen() {
         <TouchableOpacity
           style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(255,200,0,0.18)' }]}
           onPress={() => { void handleSave(); }}
-          disabled={saveLoading || suggestions.length === 0}
+          disabled={saveLoading || isGenerating || !currentOutfit}
           activeOpacity={0.75}
           accessibilityRole="button"
           accessibilityLabel="Save outfit">
@@ -901,12 +896,12 @@ export default function Avatar3DScreen() {
       </View>
 
       {/* ── Contextual intent CTA (Wear Today / Save to Calendar) ─── */}
-      {routeIntent != null && suggestions.length > 0 && (
+      {routeIntent != null && !!currentOutfit && !isGenerating && (
         <View style={[styles.intentCtaRow, {paddingBottom: insets.bottom + 16}]}>
           <TouchableOpacity
-            style={[styles.intentCtaBtn, (commitLoading || suggestions.length === 0) && styles.intentCtaBtnDisabled]}
+            style={[styles.intentCtaBtn, commitLoading && styles.intentCtaBtnDisabled]}
             onPress={() => { void handleCommitToPlan(); }}
-            disabled={commitLoading || suggestions.length === 0}
+            disabled={commitLoading}
             activeOpacity={0.85}
             accessibilityRole="button"
             accessibilityLabel={routeIntent === 'today' ? 'Wear today' : 'Save to calendar'}>
@@ -960,7 +955,7 @@ export default function Avatar3DScreen() {
               contentContainerStyle={styles.modalScrollContent}
               bounces={false}>
               <Text style={styles.modalText}>
-                {suggestions[outfitIndex]?.reasons?.[0] ?? ''}
+                {currentOutfit?.reasons?.[0] ?? ''}
               </Text>
             </ScrollView>
           </Pressable>
@@ -1325,9 +1320,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-  actionIcon: {
-  },
-
   // ── Header row (intent-based flows) ────────────────────────────
   headerRow: {
     flexDirection: 'row',
