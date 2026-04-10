@@ -5,7 +5,6 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  TextInput,
   ActivityIndicator,
   Modal,
   TouchableOpacity,
@@ -34,6 +33,7 @@ import {
   type PlannerStatus,
 } from '../api/planner';
 import { Picker } from '@react-native-picker/picker';
+import { OCCASIONS } from '../constants/occasions';
 
 // ─── Design palette ──────────────────────────────────────────────────────────
 const P = {
@@ -70,9 +70,8 @@ export default function CalendarScreen() {
   const [loading, setLoading]   = useState(true);
   const [toast, setToast]       = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
-  const [addSlotLabel, setAddSlotLabel]       = useState<PlannerSlotLabel>('morning');
-  const [addOccasion, setAddOccasion]         = useState('');
-  const [addOccasionError, setAddOccasionError] = useState<string | null>(null);
+  const [addSlotLabel, setAddSlotLabel]         = useState<PlannerSlotLabel>('morning');
+  const [addOccasionIndex, setAddOccasionIndex] = useState(0);
   const [patching, setPatching] = useState<string | null>(null);
 
   const calendarConnected = useSettings(s => s.calendarConnected);
@@ -148,20 +147,17 @@ export default function CalendarScreen() {
   }, [selectedDate, plans]);
 
   const openAddModal = useCallback(() => {
-    setAddOccasion('');
-    setAddOccasionError(null);
+    setAddOccasionIndex(0);
     setAddSlotLabel('morning');
     setAddModalVisible(true);
   }, []);
 
   const handleContinueToSuggestions = useCallback(() => {
-    const occ = addOccasion.trim();
-    if (!occ) { setAddOccasionError('Occasion is required'); return; }
-    setAddOccasionError(null);
+    const occ = OCCASIONS[addOccasionIndex]?.value ?? OCCASIONS[0].value;
     setAddModalVisible(false);
     hapticFeedback.light();
-    navigation.navigate('PlanOutfitSuggestions', { date: selectedDate, slotLabel: addSlotLabel, occasion: occ });
-  }, [selectedDate, addSlotLabel, addOccasion, navigation]);
+    navigation.navigate('Avatar3DScreen', { intent: 'calendar', date: selectedDate, slotLabel: addSlotLabel, occasion: occ });
+  }, [selectedDate, addSlotLabel, addOccasionIndex, navigation]);
 
   function deriveSlotLabel(isoStartDate: string): PlannerSlotLabel {
     if (!isoStartDate) return 'morning';
@@ -172,15 +168,19 @@ export default function CalendarScreen() {
   }
 
   const handleConnectCalendar = async () => {
-    const granted = await requestCalendarPermission();
-    if (granted) {
-      await setCalendarConnected(true);
-    } else {
-      Alert.alert(
-        'Calendar Access Needed',
-        'Please allow calendar access in Settings to sync your schedule.',
-        [{ text: 'OK' }]
-      );
+    try {
+      const granted = await requestCalendarPermission();
+      if (granted) {
+        await setCalendarConnected(true);
+      } else {
+        Alert.alert(
+          'Calendar Access Needed',
+          'Please allow calendar access in Settings to sync your schedule.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (err) {
+      if (__DEV__) console.warn('[CalendarScreen] handleConnectCalendar error:', err);
     }
   };
 
@@ -299,7 +299,8 @@ export default function CalendarScreen() {
                     onPress={() => {
                       const occasion = mapEventsToOccasionHint([event]) ?? 'smart casual';
                       const slotLabel = deriveSlotLabel(event.startDate);
-                      navigation.navigate('PlanOutfitSuggestions', {
+                      navigation.navigate('Avatar3DScreen', {
+                        intent: 'calendar',
                         date: selectedDate,
                         slotLabel,
                         occasion,
@@ -412,25 +413,27 @@ export default function CalendarScreen() {
               </Picker>
             </View>
 
-            <Text style={styles.formLabel}>Occasion (required)</Text>
-            <TextInput
-              style={[styles.input, addOccasionError ? styles.inputError : null]}
-              value={addOccasion}
-              onChangeText={(t) => { setAddOccasion(t); setAddOccasionError(null); }}
-              placeholder="e.g. casual, work"
-              placeholderTextColor={P.lightText}
-            />
-            {addOccasionError && <Text style={styles.errorText}>{addOccasionError}</Text>}
+            <Text style={styles.formLabel}>Occasion</Text>
+            <View style={styles.occasionPills}>
+              {OCCASIONS.map((o, i) => (
+                <Pressable
+                  key={o.value}
+                  style={[styles.occasionPill, i === addOccasionIndex && styles.occasionPillActive]}
+                  onPress={() => setAddOccasionIndex(i)}>
+                  <Text style={[styles.occasionPillText, i === addOccasionIndex && styles.occasionPillTextActive]}>
+                    {o.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
 
             <View style={styles.modalActions}>
               <Pressable style={styles.cancelBtn} onPress={() => setAddModalVisible(false)}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[styles.continueBtn, !addOccasion.trim() && styles.continueBtnDisabled]}
-                onPress={handleContinueToSuggestions}
-                disabled={!addOccasion.trim()}
-              >
+                style={styles.continueBtn}
+                onPress={handleContinueToSuggestions}>
                 <Text style={styles.continueBtnText}>Continue</Text>
               </Pressable>
             </View>
@@ -607,18 +610,21 @@ const styles = StyleSheet.create({
   formLabel:  { fontSize: 12, color: P.secondaryText, marginBottom: 6, marginTop: 12, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
   pickerWrap: { borderWidth: 1, borderColor: P.border, borderRadius: 12, overflow: 'hidden', backgroundColor: P.background },
   picker:     { color: P.primaryText },
-  input: {
+  occasionPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  occasionPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: P.border,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: P.primaryText,
     backgroundColor: P.background,
   },
-  inputError: { borderColor: P.error },
-  errorText:  { fontSize: 12, color: P.error, marginTop: 4 },
+  occasionPillActive: {
+    backgroundColor: P.accent,
+    borderColor: P.accent,
+  },
+  occasionPillText: { fontSize: 14, color: P.secondaryText, fontWeight: '500' },
+  occasionPillTextActive: { color: '#FFFFFF', fontWeight: '700' },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 24 },
   cancelBtn: {
     flex: 1,
@@ -635,7 +641,6 @@ const styles = StyleSheet.create({
     backgroundColor: P.accent,
     alignItems: 'center',
   },
-  continueBtnDisabled: { opacity: 0.45 },
   continueBtnText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 
   // Toast

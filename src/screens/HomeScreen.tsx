@@ -396,7 +396,7 @@ export default function HomeScreen() {
         {/* ── CTA button ─────────────────────────────────────────────────── */}
         <Pressable
           style={({ pressed }) => [styles.ctaBtn, pressed && { opacity: 0.85 }]}
-          onPress={() => goTo('Outfits')}
+          onPress={() => navigation.navigate('Avatar3DScreen', { intent: 'today' })}
         >
           <Text style={styles.ctaBtnText}>PLAN MY OUTFIT OF THE DAY</Text>
           <View style={styles.ctaIcons}>
