@@ -245,7 +245,9 @@ export default function SavedScreen() {
   const { items, loading, fetchAll, remove } = useSavedOutfits();
 
   useEffect(() => {
-    fetchAll();
+    fetchAll().catch(err => {
+      if (__DEV__) console.warn('[SavedScreen] fetchAll error:', err);
+    });
   }, []);
 
   const handlePress = useCallback(
@@ -265,7 +267,11 @@ export default function SavedScreen() {
           {
             text: 'Remove',
             style: 'destructive',
-            onPress: () => remove(outfit._id),
+            onPress: () => {
+              remove(outfit._id).catch(err => {
+                if (__DEV__) console.warn('[SavedScreen] remove error:', err);
+              });
+            },
           },
         ]
       );
