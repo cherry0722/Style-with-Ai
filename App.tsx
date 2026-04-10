@@ -13,11 +13,9 @@ import RootNavigator from './src/navigation/RootNavigator';
 import { initActivityTracking } from './src/services/activityTracker';
 import { useSettings } from './src/store/settings';
 
-// Explicitly register Ionicons TTF with the native font system.
-// UIAppFonts handles this at launch for old architecture; loadFont() is the
-// reliable path for New Architecture (Fabric) where UIAppFonts can race.
-import Ionicons from 'react-native-vector-icons/Ionicons';
-Ionicons.loadFont();
+// Ionicons.ttf is listed in ios/MyraNative/Info.plist (UIAppFonts) and registered
+// synchronously in AppDelegate before React Native starts — avoids a Fabric race
+// where import-time Ionicons.loadFont() could run before RNVectorIcons / font registration.
 enableScreens();
 
 function App() {

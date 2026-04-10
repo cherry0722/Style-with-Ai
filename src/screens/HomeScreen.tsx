@@ -22,7 +22,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Geolocation from 'react-native-geolocation-service';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { fetchHomeToday, HomeTodayResponse } from '../api/home';
 import { listLaundry } from '../api/wardrobe';
@@ -359,21 +359,21 @@ export default function HomeScreen() {
         <View style={[styles.headerRow, { height: HEADER_H }]}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>HOME</Text>
-            <Text style={styles.headerEmoji}> 🏠</Text>
+            <Ionicons name="home" size={22} color={P.accent} style={{ marginLeft: 6 }} />
           </View>
           <View style={styles.headerRight}>
             <PillBtn onPress={toggleWeatherPopup} style={styles.pillGap}>
-              <Text style={styles.pillEmoji}>☀️</Text>
+              <Ionicons name="sunny-outline" size={15} color={P.secondaryText} />
               <Text style={styles.pillText}>{todayTemp != null ? `${convertTemp(todayTemp, temperatureUnit)}°` : '—'}</Text>
             </PillBtn>
             <PillBtn onPress={() => goTo('Calendar')} style={styles.pillGap}>
-              <Text style={styles.pillEmoji}>📅</Text>
+              <Ionicons name="calendar-outline" size={15} color={P.secondaryText} />
             </PillBtn>
             <PillBtn onPress={() => goTo('Closet')} style={styles.pillGap}>
-              <Text style={styles.pillEmoji}>👔</Text>
+              <Ionicons name="shirt-outline" size={15} color={P.secondaryText} />
             </PillBtn>
             <PillBtn onPress={() => setProfileOpen(prev => !prev)}>
-              <Text style={styles.pillEmoji}>👤</Text>
+              <Ionicons name="person-outline" size={15} color={P.secondaryText} />
             </PillBtn>
           </View>
         </View>
@@ -400,8 +400,8 @@ export default function HomeScreen() {
         >
           <Text style={styles.ctaBtnText}>PLAN MY OUTFIT OF THE DAY</Text>
           <View style={styles.ctaIcons}>
-            <Text style={styles.ctaEmoji}>👔</Text>
-            <Text style={styles.ctaEmoji}>✨</Text>
+            <Ionicons name="shirt-outline" size={16} color={P.primaryText} />
+            <Ionicons name="sparkles" size={16} color={P.accent} />
           </View>
         </Pressable>
 
@@ -409,7 +409,7 @@ export default function HomeScreen() {
         <View style={styles.infoRow}>
           {/* Weather — backend only */}
           <InfoCard width={infoCardW}>
-            <Text style={styles.infoEmoji}>☁️</Text>
+            <Ionicons name="cloud-outline" size={20} color={P.secondaryText} style={{ marginBottom: 2 }} />
             {locationDenied ? (
               <>
                 <Text style={styles.infoValue}>—</Text>
@@ -445,7 +445,7 @@ export default function HomeScreen() {
           <InfoCard width={infoCardW}>
             <View style={styles.factHeader}>
               <Text style={styles.infoTitle}>Fashion Fact</Text>
-              <Text style={styles.factSparkle}>✨</Text>
+              <Ionicons name="sparkles" size={10} color={P.accent} />
             </View>
             <Text style={styles.infoFact}>Neutral tones pair with any accent.</Text>
           </InfoCard>
@@ -797,9 +797,8 @@ const styles = StyleSheet.create({
     color: P.primaryText,
     letterSpacing: -0.5,
   },
-  headerEmoji: {
-    fontSize: 22,
-    marginLeft: 4,
+  headerIcon: {
+    marginLeft: 6,
   },
   headerRight: { flexDirection: 'row', alignItems: 'center' },
 
@@ -821,7 +820,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   pillGap: { marginRight: 6 },
-  pillEmoji: { fontSize: 15 },
+  pillIcon: { },
   pillText: { fontSize: 13, fontWeight: '600', color: P.primaryText },
 
   // Error
@@ -879,8 +878,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     gap: 2,
   },
-  ctaEmoji: {
-    fontSize: 16,
+  ctaIcon: {
   },
 
   // Info cards
@@ -895,13 +893,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 110,
   },
-  infoEmoji:  { fontSize: 20, marginBottom: 2 },
+  infoIcon:   { marginBottom: 2 },
   infoTitle:  { fontSize: 10, fontWeight: '700', color: P.secondaryText, letterSpacing: 0.5, marginBottom: 4, textAlign: 'center' },
   infoValue:  { fontSize: 18, fontWeight: '700', color: P.primaryText, marginTop: 2 },
   infoLabel:  { fontSize: 11, color: P.secondaryText, marginTop: 2 },
   infoMeta:   { fontSize: 10, color: P.lightText, marginTop: 2 },
   factHeader: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  factSparkle:{ fontSize: 10 },
+  factIcon:   { },
   infoFact:   { fontSize: 10, color: P.secondaryText, marginTop: 4, textAlign: 'center', lineHeight: 14 },
 
   // Weather overlay

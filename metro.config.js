@@ -1,17 +1,7 @@
-const path = require('path');
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 
 const defaultConfig = getDefaultConfig(__dirname);
 
-/**
- * Extend assetExts with file types needed by react-native-filament.
- * We spread defaultConfig.resolver.assetExts to avoid overwriting
- * existing extensions (png, jpg, ttf, etc.).
- *
- * resolveRequest aliases @expo/vector-icons → src/stubs/vector-icons.js,
- * a compatibility shim backed by react-native-vector-icons. This keeps
- * all screen imports unchanged while ensuring expo-font is never executed.
- */
 const config = {
   resolver: {
     assetExts: [
@@ -22,15 +12,6 @@ const config = {
       'ktx',     // Khronos Texture — used by Filament IBL/skybox
       'filamat', // Filament material binary
     ],
-    resolveRequest: (context, moduleName, _platform) => {
-      if (moduleName === '@expo/vector-icons') {
-        return {
-          filePath: path.resolve(__dirname, 'src/stubs/vector-icons.js'),
-          type: 'sourceFile',
-        };
-      }
-      return context.resolveRequest(context, moduleName, _platform);
-    },
   },
 };
 

@@ -18,7 +18,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -31,6 +31,7 @@ import {
   wardrobeGridCardWidth,
   WARDROBE_GRID_GAP,
 } from '../components/wardrobe/WardrobeSquareGridCard';
+import { HoodieIcon, PantsIcon } from '../components/icons/ClothingIcons';
 
 const P = {
   background:    '#F5F0E8',
@@ -63,12 +64,12 @@ const CARD_SHADOW = {
 };
 
 const WARDROBE_CATEGORIES = [
-  { key: 'tshirt',    label: 'T-SHIRTS',    emoji: '👕' },
-  { key: 'shirt',     label: 'SHIRTS',      emoji: '👔' },
-  { key: 'hoodie',    label: 'HOODIES',     emoji: '🧥' },
-  { key: 'pant',      label: 'PANTS',       emoji: '👖' },
-  { key: 'shoes',     label: 'SHOES',       emoji: '👟' },
-  { key: 'accessory', label: 'ACCESSORIES', emoji: '🎒' },
+  { key: 'tshirt',    label: 'T-SHIRTS',    icon: 'shirt-outline'       as const },
+  { key: 'shirt',     label: 'SHIRTS',      icon: 'shirt'              as const },
+  { key: 'hoodie',    label: 'HOODIES',     icon: 'layers-outline'      as const },
+  { key: 'pant',      label: 'PANTS',       icon: 'walk-outline'        as const },
+  { key: 'shoes',     label: 'SHOES',       icon: 'footsteps-outline'   as const },
+  { key: 'accessory', label: 'ACCESSORIES', icon: 'bag-outline'         as const },
 ] as const;
 
 type CategoryKey = typeof WARDROBE_CATEGORIES[number]['key'];
@@ -158,6 +159,14 @@ function countLabel(n: number): string {
   return n === 1 ? '1 item' : `${n} items`;
 }
 
+function CategoryIcon({ catKey, icon, size, color, style }: {
+  catKey: string; icon: string; size: number; color: string; style?: object;
+}) {
+  if (catKey === 'hoodie') return <HoodieIcon size={size} color={color} style={style} />;
+  if (catKey === 'pant')   return <PantsIcon  size={size} color={color} style={style} />;
+  return <Ionicons name={icon} size={size} color={color} style={style} />;
+}
+
 // ─── Category card for the grid ──────────────────────────────────────────────
 function CategoryCard({
   cat, count, onPress,
@@ -170,7 +179,7 @@ function CategoryCard({
       ]}
       onPress={onPress}
     >
-      <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+      <CategoryIcon catKey={cat.key} icon={cat.icon} size={32} color={P.accent} style={{ marginBottom: 10 }} />
       <Text style={styles.categoryLabel}>{cat.label}</Text>
       <Text style={styles.categoryCount}>{countLabel(count)}</Text>
     </Pressable>
@@ -204,7 +213,7 @@ function ClosetItemGridCard({
         badge={
           isUnavailable ? (
             <View style={styles.gridLaundryBadge}>
-              <Text style={styles.gridLaundryBadgeText}>🧺 In Laundry</Text>
+              <Text style={styles.gridLaundryBadgeText}>In Laundry</Text>
             </View>
           ) : null
         }
@@ -216,7 +225,7 @@ function ClosetItemGridCard({
             accessibilityRole="button"
             accessibilityLabel={isUnavailable ? 'Mark as available' : 'Mark as laundry'}
           >
-            <Text style={styles.gridLaundryBtnEmoji}>🧺</Text>
+            <Ionicons name="basket-outline" size={15} color={P.warning} />
           </Pressable>
         }
       />
@@ -270,7 +279,7 @@ function ClosetDetailView({
   } else if (filteredItems.length === 0) {
     bodyContent = (
       <View style={styles.center}>
-        <Text style={styles.emptyEmoji}>{catDef.emoji}</Text>
+        <CategoryIcon catKey={catDef.key} icon={catDef.icon} size={48} color={P.lightText} style={{ marginBottom: 12 }} />
         <Text style={styles.emptyText}>No items in {catDef.label.toLowerCase()} yet</Text>
         <Text style={styles.emptyHint}>Tap the + button below to add one</Text>
       </View>
@@ -296,7 +305,8 @@ function ClosetDetailView({
         <Pressable onPress={onBack} style={styles.backBtn} hitSlop={10}>
           <Ionicons name="arrow-back" size={20} color={P.primaryText} />
         </Pressable>
-        <Text style={styles.detailTitle}>{catDef.emoji} {catDef.label}</Text>
+        <CategoryIcon catKey={catDef.key} icon={catDef.icon} size={22} color={P.accent} />
+        <Text style={styles.detailTitle}>{catDef.label}</Text>
       </View>
 
       {!!error && <Text style={styles.errorText}>{error}</Text>}
@@ -434,10 +444,10 @@ export default function ClosetScreen() {
           <Text style={styles.pageTitle}>MY CLOSET</Text>
           <View style={styles.headerRight}>
             <Pressable style={styles.pillBtn} onPress={() => {}}>
-              <Text style={styles.pillEmoji}>🔍</Text>
+              <Ionicons name="search-outline" size={17} color={P.secondaryText} />
             </Pressable>
             <Pressable style={styles.pillBtn} onPress={() => navigation.navigate('Laundry')}>
-              <Text style={styles.pillEmoji}>🧺</Text>
+              <Ionicons name="basket-outline" size={17} color={P.secondaryText} />
             </Pressable>
           </View>
         </View>
@@ -505,7 +515,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...CARD_SHADOW,
   },
-  pillEmoji: { fontSize: 17 },
+  pillIcon: { },
 
   grid: {
     flexDirection: 'row',
@@ -523,7 +533,7 @@ const styles = StyleSheet.create({
     borderColor: P.border,
     ...CARD_SHADOW,
   },
-  categoryEmoji: { fontSize: 32, marginBottom: 10 },
+  categoryIcon: { marginBottom: 10 },
   categoryLabel: {
     fontSize: 12,
     fontWeight: '700',
@@ -617,10 +627,10 @@ const styles = StyleSheet.create({
     backgroundColor: `${P.warning}25`,
     borderColor: P.warning,
   },
-  gridLaundryBtnEmoji: { fontSize: 15 },
+  gridLaundryBtnIcon: { },
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyIcon: { marginBottom: 12 },
   emptyText:  { fontSize: 15, color: P.secondaryText, marginBottom: 6 },
   emptyHint:  { fontSize: 13, color: P.lightText },
 

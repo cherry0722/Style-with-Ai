@@ -41,7 +41,7 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {Ionicons} from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   Camera,
   DefaultLight,
@@ -767,7 +767,7 @@ export default function Avatar3DScreen() {
         </View>
       </View>
 
-      {/* ── Bottom action row: emoji buttons ─────────────────────── */}
+      {/* ── Bottom action row ─────────────────────────────────────── */}
       <View style={[styles.actionRow, {paddingBottom: insets.bottom + 10}]}>
 
         <TouchableOpacity
@@ -775,7 +775,7 @@ export default function Avatar3DScreen() {
           activeOpacity={0.75}
           accessibilityRole="button"
           accessibilityLabel="Like outfit">
-          <Text style={styles.actionEmoji}>❤️</Text>
+          <Ionicons name="heart" size={22} color="#E8706A" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1208,8 +1208,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 6,
   },
-  actionEmoji: {
-    fontSize: 22,
+  actionIcon: {
   },
 
 });

@@ -24,7 +24,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { Calendar, DateData } from 'react-native-calendars';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { hapticFeedback } from '../utils/haptics';
 import {
   getPlannerRange,
@@ -199,7 +199,7 @@ export default function CalendarScreen() {
             style={styles.headerPill}
             onPress={() => navigation.navigate('Main' as any, { screen: 'Closet' } as any)}
             hitSlop={8}>
-            <Text style={styles.headerPillEmoji}>👔</Text>
+            <Ionicons name="shirt-outline" size={15} color={P.secondaryText} />
           </Pressable>
           <Pressable style={styles.headerPillSmall} onPress={openAddModal}>
             <Ionicons name="add" size={18} color={P.primaryText} />
@@ -262,7 +262,7 @@ export default function CalendarScreen() {
               activeOpacity={0.85}
             >
               <View style={calStyles.connectBannerLeft}>
-                <Text style={calStyles.connectBannerIcon}>📅</Text>
+                <Ionicons name="calendar-outline" size={28} color="#C4A882" />
                 <View>
                   <Text style={calStyles.connectBannerTitle}>Connect Your Calendar</Text>
                   <Text style={calStyles.connectBannerSub}>
@@ -270,7 +270,7 @@ export default function CalendarScreen() {
                   </Text>
                 </View>
               </View>
-              <Text style={calStyles.connectBannerArrow}>›</Text>
+              <Ionicons name="chevron-forward" size={22} color="#C4A882" />
             </TouchableOpacity>
           )}
 
@@ -318,9 +318,12 @@ export default function CalendarScreen() {
                           : ''}
                       </Text>
                       {event.location ? (
-                        <Text style={calStyles.deviceEventLocation} numberOfLines={1}>
-                          📍 {event.location}
-                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 2 }}>
+                          <Ionicons name="location-outline" size={11} color="#8C7B6B" />
+                          <Text style={calStyles.deviceEventLocation} numberOfLines={1}>
+                            {event.location}
+                          </Text>
+                        </View>
                       ) : null}
                       <Text style={calStyles.deviceEventPlanHint}>
                         Tap to plan outfit →
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerPillEmoji: { fontSize: 15 },
+  headerPillIcon: { },
   headerPillSmall: {
     width: 34,
     height: 34,
@@ -670,7 +673,6 @@ const calStyles = StyleSheet.create({
     flex: 1,
   },
   connectBannerIcon: {
-    fontSize: 28,
   },
   connectBannerTitle: {
     fontSize: 14,
@@ -683,9 +685,6 @@ const calStyles = StyleSheet.create({
     marginTop: 2,
   },
   connectBannerArrow: {
-    fontSize: 22,
-    color: '#C4A882',
-    fontWeight: '300',
   },
   deviceEventsSection: {
     marginHorizontal: 16,

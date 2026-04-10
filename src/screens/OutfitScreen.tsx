@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { getReasonedOutfits, ReasonedOutfitsResponse, ReasonedOutfitEntry } from '../api/ai';
 
@@ -160,13 +160,13 @@ function OutfitResultView({
           style={[styles.actionBtn, liked && styles.actionBtnActive]}
           onPress={() => setLiked((v) => !v)}
         >
-          <Text style={styles.actionEmoji}>{liked ? '❤️' : '🤍'}</Text>
+          <Ionicons name={liked ? 'heart' : 'heart-outline'} size={20} color={liked ? '#E8706A' : P.secondaryText} />
         </Pressable>
         <Pressable
           style={[styles.actionBtn, saved && styles.actionBtnActive]}
           onPress={() => setSaved((v) => !v)}
         >
-          <Text style={styles.actionEmoji}>🔖</Text>
+          <Ionicons name="bookmark-outline" size={20} color={saved ? P.accent : P.secondaryText} />
         </Pressable>
         <Pressable
           style={styles.actionBtn}
@@ -177,14 +177,14 @@ function OutfitResultView({
                 .map(i => `• ${i.type ?? i.category ?? 'Item'}${i.primaryColor ? ` (${i.primaryColor})` : ''}`)
                 .join('\n');
               await Share.share({
-                message: `Check out my outfit suggestion from Myra! ✨\n\n${itemLines}\n\nStyled for: ${outfit.reasons?.[0] ?? 'a great look'}`,
+                message: `Check out my outfit suggestion from Myra!\n\n${itemLines}\n\nStyled for: ${outfit.reasons?.[0] ?? 'a great look'}`,
                 title: 'My Myra Outfit',
               });
             } catch (err) {
               if (__DEV__) console.warn('[Share] failed:', err);
             }
           }}>
-          <Text style={styles.actionEmoji}>📤</Text>
+          <Ionicons name="share-outline" size={20} color={P.secondaryText} />
         </Pressable>
       </View>
 
@@ -323,7 +323,7 @@ export default function OutfitScreen() {
             ? <ActivityIndicator size="small" color="#FFFFFF" />
             : (
               <View style={styles.generateBtnInner}>
-                <Text style={styles.generateBtnEmoji}>{result ? '↻' : '✨'}</Text>
+                <Ionicons name={result ? 'refresh-outline' : 'sparkles'} size={16} color="#FFFFFF" />
                 <Text style={[styles.generateBtnText, !occasion && styles.generateBtnTextDisabled]}>
                   {result ? 'Regenerate' : 'Generate'}
                 </Text>
@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  generateBtnEmoji: { fontSize: 16, color: '#FFFFFF' },
+  generateBtnIcon: { },
   generateBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.5 },
   generateBtnTextDisabled: { color: P.lightText },
 
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     ...CARD_SHADOW,
   },
   actionBtnActive: { borderColor: P.accent },
-  actionEmoji: { fontSize: 20 },
+  actionIcon: { },
 
   // Clothing icons
   clothingIconsRow: {

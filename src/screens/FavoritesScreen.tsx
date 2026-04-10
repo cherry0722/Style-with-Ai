@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { fetchWardrobeItems, WardrobeItemResponse } from '../api/wardrobe';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -72,7 +73,7 @@ function FavoriteItemCard({ item, onPress }: CardProps) {
           />
         ) : (
           <View style={card.imagePlaceholder}>
-            <Text style={card.placeholderEmoji}>👕</Text>
+            <Ionicons name="shirt-outline" size={40} color="#C4A882" />
           </View>
         )}
       </View>
@@ -117,8 +118,7 @@ const card = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
   },
-  placeholderEmoji: {
-    fontSize: 40,
+  placeholderIcon: {
   },
   meta: {
     paddingHorizontal: 10,
@@ -197,7 +197,7 @@ function buildRows(items: WardrobeItemResponse[]): RowItem[] {
 function EmptyState() {
   return (
     <View style={empty.container}>
-      <Text style={empty.icon}>❤️</Text>
+      <Ionicons name="heart-outline" size={48} color="#C4A882" />
       <Text style={empty.title}>No favorites yet</Text>
       <Text style={empty.subtitle}>
         Tap the heart on any clothing item in your closet to save it here
@@ -215,7 +215,7 @@ const empty = StyleSheet.create({
     paddingTop: 80,
     gap: 12,
   },
-  icon: { fontSize: 48 },
+  icon: { marginBottom: 4 },
   title: {
     fontSize: 18,
     fontWeight: '700',
