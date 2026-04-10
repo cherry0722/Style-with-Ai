@@ -5,6 +5,7 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   Image,
   ActivityIndicator,
   Dimensions,
@@ -14,6 +15,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchWardrobeItems, WardrobeItemResponse } from '../api/wardrobe';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -309,12 +311,17 @@ export default function FavoritesScreen() {
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView edges={['top']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Favorites</Text>
+        <View style={styles.headerRow}>
+          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
+            <Ionicons name="chevron-back" size={22} color="#2C1A0E" />
+          </Pressable>
+          <Text style={styles.title}>FAVORITES</Text>
+        </View>
         <Text style={styles.subtitle}>
           {totalCount === 1 ? '1 favourite item' : `${totalCount} favourite items`} across your closet
         </Text>
@@ -357,7 +364,7 @@ export default function FavoritesScreen() {
           stickySectionHeaders={false}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -373,15 +380,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
-    paddingTop: 56,
+    paddingTop: 8,
     paddingBottom: 4,
     paddingHorizontal: H_PADDING,
     backgroundColor: '#F2EBE0',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#EDE6D8',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   title: {
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 30,
+    fontWeight: '700',
     color: '#2C1A0E',
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: 12,

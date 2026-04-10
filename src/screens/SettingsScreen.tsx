@@ -173,9 +173,6 @@ export default function SettingsScreen() {
 
         {/* Header */}
         <View style={styles.headerRow}>
-          <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} hitSlop={8}>
-            <Ionicons name="chevron-back" size={22} color={P.primaryText} />
-          </Pressable>
           <Text style={styles.pageTitle}>SETTINGS</Text>
         </View>
 
@@ -396,14 +393,6 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 20,
     gap: 10,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: P.cardSurface,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   pageTitle: {
     fontSize: 30,
