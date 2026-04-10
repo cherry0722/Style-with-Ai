@@ -342,6 +342,21 @@ const AvatarStage = React.memo(function AvatarStage(
   );
 });
 
+/**
+ * Guard: only keep entries that have at least one item and a non-empty first reason.
+ * Filters out blank/structurally invalid entries before they reach the suggestion state.
+ */
+function isValidSuggestion(entry: ReasonedOutfitEntry): boolean {
+  return (
+    Array.isArray(entry.items) &&
+    entry.items.length > 0 &&
+    Array.isArray(entry.reasons) &&
+    entry.reasons.length > 0 &&
+    typeof entry.reasons[0] === 'string' &&
+    entry.reasons[0].trim().length > 0
+  );
+}
+
 function formatPlanDate(isoDate: string): string {
   try {
     return new Date(isoDate + 'T12:00:00').toLocaleDateString('en-US', {
@@ -415,6 +430,14 @@ export default function Avatar3DScreen() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [reasonModalVisible, setReasonModalVisible] = useState(false);
+
+  // Clamp outfitIndex whenever the suggestions list shrinks (e.g. after filtering).
+  // Prevents currentOutfit from being null when suggestions are non-empty.
+  useEffect(() => {
+    if (suggestions.length > 0) {
+      setOutfitIndex(i => Math.min(i, suggestions.length - 1));
+    }
+  }, [suggestions.length]);
 
   // The outfit the user is currently viewing — single source of truth for all actions.
   // All save, commit, and display logic must read from this constant.
@@ -580,7 +603,7 @@ export default function Avatar3DScreen() {
     setGenerateError(null);
     try {
       const res = await getReasonedOutfits({occasion: OCCASIONS[occasionIndex].value});
-      const outfits = res.outfits.slice(0, 3);
+      const outfits = res.outfits.slice(0, 3).filter(isValidSuggestion);
       setSuggestions(outfits);
       setOutfitIndex(0);
       setReasonModalVisible(false);
