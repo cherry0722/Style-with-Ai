@@ -899,6 +899,7 @@ export default function Avatar3DScreen() {
         <View style={styles.stageCard}>
           {/* FilamentScene does not accept a style prop — sized via View */}
           <View style={styles.sceneContainer} {...panResponder.panHandlers}>
+            <View style={styles.avatarHighlight} />
             <AvatarStage sceneRef={sceneRef} />
           </View>
         </View>
@@ -1347,6 +1348,16 @@ const styles = StyleSheet.create({
   },
   filamentView: {
     flex: 1,
+  },
+  avatarHighlight: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(196, 168, 130, 0.18)',
+    alignSelf: 'center',
+    top: '50%',
+    marginTop: -110,
   },
 
   // ── Action row ─────────────────────────────────────────────────
