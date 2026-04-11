@@ -93,6 +93,7 @@ const SHIRT_FAMILIES = new Set([
 
 const PANTS_FAMILIES = new Set([
   'jeans', 'trousers', 'chinos', 'cargo_pants', 'joggers', 'sweatpants',
+  'shorts', 'leggings', 'skirt',
 ]);
 
 // ── Runtime render config ──────────────────────────────────────────────────────
