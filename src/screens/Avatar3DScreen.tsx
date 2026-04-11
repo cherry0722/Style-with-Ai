@@ -917,12 +917,12 @@ export default function Avatar3DScreen() {
           <Ionicons
             name="refresh"
             size={26}
-            color={isGenerating ? 'rgba(255,255,255,0.3)' : '#FFFFFF'}
+            color={isGenerating ? 'rgba(61,52,38,0.25)' : '#3D3426'}
           />
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(255,200,0,0.18)' }]}
+          style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(196,168,130,0.18)' }]}
           onPress={() => { void handleSave(); }}
           disabled={saveLoading || isGenerating || !currentOutfit}
           activeOpacity={0.75}
@@ -931,7 +931,7 @@ export default function Avatar3DScreen() {
           <Ionicons
             name={isSaved ? 'star' : 'star-outline'}
             size={26}
-            color={isSaved ? '#FFD700' : '#FFFFFF'}
+            color={isSaved ? '#C4A882' : '#3D3426'}
           />
         </TouchableOpacity>
 
@@ -1009,17 +1009,16 @@ export default function Avatar3DScreen() {
 }
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-// Intentionally dark-stage regardless of app light/dark toggle.
-// Warm-brown dark tones match the brand (primary: #3D3426, primaryDark: #2A2318).
-const STAGE_BG      = '#1C1812';                      // page background
-const CARD_BG       = '#252018';                      // stage card surface
-const CARD_BORDER   = 'rgba(196, 168, 130, 0.20)';   // accent at low opacity
-const TITLE_COLOR   = '#C4A882';                      // accent gold
-const CONTROL_BG    = '#27201A';                      // slightly lighter than page
-const CONTROL_BORDER= 'rgba(196, 168, 130, 0.18)';
-const CHEVRON_COLOR = 'rgba(196, 168, 130, 0.55)';
-const ACTION_BG     = 'rgba(255, 255, 255, 0.07)';   // subtle glass
-const DISABLED_COLOR = 'rgba(196, 168, 130, 0.25)';  // muted gold for disabled arrows
+// Cream/beige theme — matches the rest of the MYRA app.
+const STAGE_BG      = '#F5F0E8';                      // page background (cream)
+const CARD_BG       = '#FFFFFF';                      // stage card surface (white)
+const CARD_BORDER   = '#E8E0D0';                      // warm border
+const TITLE_COLOR   = '#3D3426';                      // primary dark brown
+const CONTROL_BG    = '#FFFFFF';                      // control surfaces (white)
+const CONTROL_BORDER= '#E8E0D0';                      // warm border
+const CHEVRON_COLOR = '#B5A894';                      // textTertiary
+const ACTION_BG     = 'rgba(61, 52, 38, 0.06)';      // subtle warm tint
+const DISABLED_COLOR = '#B5A894';                     // muted for disabled arrows
 
 const styles = StyleSheet.create({
   root: {
@@ -1087,9 +1086,9 @@ const styles = StyleSheet.create({
     borderColor: CONTROL_BORDER,
     borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: 'rgba(61, 52, 38, 0.12)',
     shadowOffset: {width: 0, height: 6},
-    shadowOpacity: 0.45,
+    shadowOpacity: 1,
     shadowRadius: 14,
     elevation: 12,
     zIndex: 30,
@@ -1107,7 +1106,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   dropdownItemActive: {
-    backgroundColor: 'rgba(196, 168, 130, 0.10)',
+    backgroundColor: 'rgba(61, 52, 38, 0.06)',
   },
   dropdownItemText: {
     fontSize: 15,
@@ -1120,10 +1119,15 @@ const styles = StyleSheet.create({
   },
   generateBtn: {
     alignSelf: 'center',
-    backgroundColor: TITLE_COLOR,   // solid accent gold
+    backgroundColor: '#C4A882',     // accent gold — explicit so it stays gold
     borderRadius: 24,
     paddingVertical: 12,
     paddingHorizontal: 44,
+    shadowColor: 'rgba(196, 168, 130, 0.35)',
+    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   generateBtnDisabled: {
     opacity: 0.6,
@@ -1131,7 +1135,7 @@ const styles = StyleSheet.create({
   generateText: {
     fontSize: 15,
     fontWeight: '600',
-    color: STAGE_BG,                // dark text on gold — readable
+    color: '#FFFFFF',               // white on gold — strong contrast
     letterSpacing: 0.4,
   },
 
@@ -1140,12 +1144,17 @@ const styles = StyleSheet.create({
   suggestionPanel: {
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: CONTROL_BG,
+    backgroundColor: '#EDE6D8',
     borderWidth: 1,
     borderColor: CONTROL_BORDER,
     borderRadius: 12,
     overflow: 'hidden',
     flexShrink: 1,
+    shadowColor: 'rgba(61, 52, 38, 0.10)',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   // Header: label left, optional counter right — consistent across all states
   panelHeader: {
@@ -1191,7 +1200,7 @@ const styles = StyleSheet.create({
   },
   panelMeta: {
     fontSize: 11,
-    color: CHEVRON_COLOR,
+    color: '#8C7E6A',
     textAlign: 'center',
     marginTop: 3,
   },
@@ -1248,7 +1257,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(196, 168, 130, 0.08)',
+    backgroundColor: 'rgba(61, 52, 38, 0.06)',
     borderWidth: 1,
     borderColor: CONTROL_BORDER,
     justifyContent: 'center',
@@ -1261,7 +1270,7 @@ const styles = StyleSheet.create({
   // ── Reason detail bottom-sheet modal ───────────────────────────
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(61, 52, 38, 0.4)',
     justifyContent: 'flex-end',
   },
   modalCard: {
@@ -1324,13 +1333,14 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: CARD_BG,
+    backgroundColor: '#EFE7DA',
     borderWidth: 1,
     borderColor: CARD_BORDER,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.55,
+    shadowColor: 'rgba(61, 52, 38, 0.18)',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 1,
     shadowRadius: 16,
+    elevation: 6,
   },
   sceneContainer: {
     flex: 1,
@@ -1357,10 +1367,11 @@ const styles = StyleSheet.create({
     borderColor: CONTROL_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.3,
+    shadowColor: 'rgba(61, 52, 38, 0.08)',
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 1,
     shadowRadius: 6,
+    elevation: 2,
   },
   // ── Header row (intent-based flows) ────────────────────────────
   headerRow: {
@@ -1372,7 +1383,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: 'rgba(196, 168, 130, 0.12)',
+    backgroundColor: 'rgba(61, 52, 38, 0.06)',
     justifyContent: 'center',
     alignItems: 'center',
   },
