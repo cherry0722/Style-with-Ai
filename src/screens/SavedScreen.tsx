@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useSavedOutfits } from '../store/savedOutfits';
 import { SavedOutfitItem } from '../api/saved';
+import SavedOutfitDetailModal from '../components/saved/SavedOutfitDetailModal';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const COLUMN_GAP = 12;
@@ -29,7 +30,6 @@ const IMAGE_AREA_HEIGHT = CARD_HEIGHT * 0.68;
 const P = {
   screenBg:    '#F2EBE0',
   cardBg:      '#FFFFFF',
-  imageBg:     '#F7F2EC',
   primaryText: '#2C1A0E',
   secondary:   '#8C7B6B',
   accent:      '#C4A882',
@@ -39,39 +39,54 @@ const P = {
   badgeBorder: 'rgba(196,168,130,0.4)',
 } as const;
 
-// ── Clothing image preview ───────────────────────────────────────────────────
+// ── Outfit image preview ─────────────────────────────────────────────────────
+// Shows the top and bottom clothing item images side by side. Falls back to a
+// styled placeholder when an image URL is unavailable. A small 3D badge in the
+// corner signals that tapping opens an interactive avatar view.
 
-function ClothingImagePreview({ items }: { items: SavedOutfitItem['items'] }) {
-  const topItem    = items[0] as any;
-  const bottomItem = items[1] as any;
-  const topUri: string | null    = topItem?.cleanImageUrl    ?? topItem?.imageUrl    ?? null;
-  const bottomUri: string | null = bottomItem?.cleanImageUrl ?? bottomItem?.imageUrl ?? null;
+function OutfitImagePreview({ outfit }: { outfit: SavedOutfitItem }) {
+  const topItem = outfit.items[0] as any;
+  const bottomItem = outfit.items[1] as any;
+  const topUri: string | null =
+    topItem?.cleanImageUrl ?? topItem?.imageUrl ?? null;
+  const bottomUri: string | null =
+    bottomItem?.cleanImageUrl ?? bottomItem?.imageUrl ?? null;
 
   return (
     <View style={img.container}>
-      {/* Left: top garment */}
       <View style={img.half}>
         {topUri ? (
-          <Image source={{ uri: topUri }} style={img.image} resizeMode="contain" />
+          <Image
+            source={{ uri: topUri }}
+            style={img.image}
+            resizeMode="contain"
+          />
         ) : (
           <View style={img.placeholder}>
-            <Text style={img.placeholderText}>👕</Text>
+            <Ionicons name="shirt-outline" size={24} color={P.accent} />
           </View>
         )}
       </View>
 
-      {/* Vertical divider */}
       <View style={img.divider} />
 
-      {/* Right: bottom garment */}
       <View style={img.half}>
         {bottomUri ? (
-          <Image source={{ uri: bottomUri }} style={img.image} resizeMode="contain" />
+          <Image
+            source={{ uri: bottomUri }}
+            style={img.image}
+            resizeMode="contain"
+          />
         ) : (
           <View style={img.placeholder}>
-            <Text style={img.placeholderText}>👖</Text>
+            <Ionicons name="cut-outline" size={22} color={P.accent} />
           </View>
         )}
+      </View>
+
+      {/* 3D badge */}
+      <View style={img.badge3d}>
+        <Ionicons name="cube-outline" size={10} color={P.accent} />
       </View>
     </View>
   );
@@ -81,12 +96,13 @@ const img = StyleSheet.create({
   container: {
     height: IMAGE_AREA_HEIGHT,
     flexDirection: 'row',
-    backgroundColor: P.imageBg,
+    backgroundColor: '#F7F2EC',
   },
   half: {
     flex: 1,
-    backgroundColor: P.imageBg,
-    padding: 6,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   image: {
     width: '100%',
@@ -96,15 +112,25 @@ const img = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  placeholderText: {
-    fontSize: 28,
-    opacity: 0.45,
+    opacity: 0.5,
   },
   divider: {
     width: StyleSheet.hairlineWidth,
-    backgroundColor: P.border,
-    marginVertical: 8,
+    backgroundColor: P.separator,
+    marginVertical: 10,
+  },
+  badge3d: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: 1,
+    borderColor: P.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 
@@ -131,7 +157,7 @@ function SavedOutfitCard({ outfit, onPress, onLongPress }: CardProps) {
       delayLongPress={500}
       activeOpacity={0.88}
     >
-      <ClothingImagePreview items={outfit.items} />
+      <OutfitImagePreview outfit={outfit} />
 
       {/* Meta */}
       <View style={card.meta}>
@@ -243,6 +269,7 @@ const empty = StyleSheet.create({
 export default function SavedScreen() {
   const navigation = useNavigation<any>();
   const { items, loading, fetchAll, remove } = useSavedOutfits();
+  const [detailOutfit, setDetailOutfit] = useState<SavedOutfitItem | null>(null);
 
   useEffect(() => {
     fetchAll().catch(err => {
@@ -252,9 +279,9 @@ export default function SavedScreen() {
 
   const handlePress = useCallback(
     (outfit: SavedOutfitItem) => {
-      navigation.navigate('Avatar3DScreen', { savedOutfit: outfit });
+      setDetailOutfit(outfit);
     },
-    [navigation]
+    []
   );
 
   const handleLongPress = useCallback(
@@ -323,6 +350,11 @@ export default function SavedScreen() {
         ]}
         ListEmptyComponent={<EmptyState />}
         showsVerticalScrollIndicator={false}
+      />
+      <SavedOutfitDetailModal
+        visible={detailOutfit != null}
+        outfit={detailOutfit}
+        onClose={() => setDetailOutfit(null)}
       />
     </SafeAreaView>
   );

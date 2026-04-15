@@ -31,6 +31,7 @@ import React, {useEffect, useImperativeHandle, useMemo, useRef, useState} from '
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   PanResponder,
   Pressable,
@@ -42,6 +43,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {hapticFeedback} from '../utils/haptics';
 import {
   Camera,
   DefaultLight,
@@ -410,6 +412,10 @@ export default function Avatar3DScreen() {
   const sceneRef = useRef<SceneHandle>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [commitLoading, setCommitLoading] = useState(false);
+  const [saveToastVisible, setSaveToastVisible] = useState(false);
+  const saveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Scale animation for the save button press feedback.
+  const saveScaleAnim = useRef(new Animated.Value(1)).current;
   const addSavedOutfit = useSavedOutfits(s => s.add);
   const savedItems = useSavedOutfits(s => s.items);
   const fetchAllSaved = useSavedOutfits(s => s.fetchAll);
@@ -540,8 +546,11 @@ export default function Avatar3DScreen() {
 
   // ── Save handler ─────────────────────────────────────────────────────────────
   // Bookmarks the currently viewed outfit (currentOutfit) to Saved Outfits.
+  // Double-tap is blocked by the saveLoading guard.
   const handleSave = async () => {
     if (saveLoading || !currentOutfit) return;
+
+    hapticFeedback.success();
 
     const occasion = OCCASIONS[occasionIndex]?.value ?? null;
     const avatarRenderConfig = sceneRef.current?.getClothingConfig() ?? null;
@@ -556,8 +565,12 @@ export default function Avatar3DScreen() {
     setSaveLoading(true);
     try {
       await addSavedOutfit(payload);
-      Alert.alert('Saved!', 'Outfit added to your Saved collection.');
+      // Show inline toast — clear any prior timer first.
+      if (saveToastTimer.current) clearTimeout(saveToastTimer.current);
+      setSaveToastVisible(true);
+      saveToastTimer.current = setTimeout(() => setSaveToastVisible(false), 2200);
     } catch (err: any) {
+      hapticFeedback.error();
       const detail = err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Please try again.';
       Alert.alert('Could not save', detail);
     } finally {
@@ -899,6 +912,7 @@ export default function Avatar3DScreen() {
         <View style={styles.stageCard}>
           {/* FilamentScene does not accept a style prop — sized via View */}
           <View style={styles.sceneContainer} {...panResponder.panHandlers}>
+            <View style={styles.avatarHighlight} />
             <AvatarStage sceneRef={sceneRef} />
           </View>
         </View>
@@ -917,23 +931,48 @@ export default function Avatar3DScreen() {
           <Ionicons
             name="refresh"
             size={26}
-            color={isGenerating ? 'rgba(255,255,255,0.3)' : '#FFFFFF'}
+            color={isGenerating ? 'rgba(61,52,38,0.25)' : '#3D3426'}
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(255,200,0,0.18)' }]}
-          onPress={() => { void handleSave(); }}
-          disabled={saveLoading || isGenerating || !currentOutfit}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="Save outfit">
-          <Ionicons
-            name={isSaved ? 'star' : 'star-outline'}
-            size={26}
-            color={isSaved ? '#FFD700' : '#FFFFFF'}
-          />
-        </TouchableOpacity>
+        <Animated.View style={{transform: [{scale: saveScaleAnim}]}}>
+          <Pressable
+            style={[
+              styles.actionBtn,
+              isSaved && {backgroundColor: 'rgba(196,168,130,0.18)'},
+              (saveLoading || isGenerating || !currentOutfit) && styles.actionBtnDisabled,
+            ]}
+            onPress={() => { void handleSave(); }}
+            disabled={saveLoading || isGenerating || !currentOutfit}
+            onPressIn={() => {
+              Animated.spring(saveScaleAnim, {
+                toValue: 0.88,
+                useNativeDriver: true,
+                speed: 40,
+                bounciness: 4,
+              }).start();
+            }}
+            onPressOut={() => {
+              Animated.spring(saveScaleAnim, {
+                toValue: 1,
+                useNativeDriver: true,
+                speed: 30,
+                bounciness: 6,
+              }).start();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Save outfit">
+            {saveLoading ? (
+              <ActivityIndicator size="small" color="#C4A882" />
+            ) : (
+              <Ionicons
+                name={isSaved ? 'star' : 'star-outline'}
+                size={26}
+                color={isSaved ? '#C4A882' : '#3D3426'}
+              />
+            )}
+          </Pressable>
+        </Animated.View>
 
       </View>
 
@@ -959,6 +998,14 @@ export default function Avatar3DScreen() {
               </Text>
             )}
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── Save confirmation toast ───────────────────────────────── */}
+      {saveToastVisible && (
+        <View style={styles.saveToast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={16} color="#C4A882" />
+          <Text style={styles.saveToastText}>Saved to your outfits</Text>
         </View>
       )}
 
@@ -1009,17 +1056,16 @@ export default function Avatar3DScreen() {
 }
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-// Intentionally dark-stage regardless of app light/dark toggle.
-// Warm-brown dark tones match the brand (primary: #3D3426, primaryDark: #2A2318).
-const STAGE_BG      = '#1C1812';                      // page background
-const CARD_BG       = '#252018';                      // stage card surface
-const CARD_BORDER   = 'rgba(196, 168, 130, 0.20)';   // accent at low opacity
-const TITLE_COLOR   = '#C4A882';                      // accent gold
-const CONTROL_BG    = '#27201A';                      // slightly lighter than page
-const CONTROL_BORDER= 'rgba(196, 168, 130, 0.18)';
-const CHEVRON_COLOR = 'rgba(196, 168, 130, 0.55)';
-const ACTION_BG     = 'rgba(255, 255, 255, 0.07)';   // subtle glass
-const DISABLED_COLOR = 'rgba(196, 168, 130, 0.25)';  // muted gold for disabled arrows
+// Cream/beige theme — matches the rest of the MYRA app.
+const STAGE_BG      = '#F5F0E8';                      // page background (cream)
+const CARD_BG       = '#FFFFFF';                      // stage card surface (white)
+const CARD_BORDER   = '#E8E0D0';                      // warm border
+const TITLE_COLOR   = '#3D3426';                      // primary dark brown
+const CONTROL_BG    = '#FFFFFF';                      // control surfaces (white)
+const CONTROL_BORDER= '#E8E0D0';                      // warm border
+const CHEVRON_COLOR = '#B5A894';                      // textTertiary
+const ACTION_BG     = 'rgba(61, 52, 38, 0.06)';      // subtle warm tint
+const DISABLED_COLOR = '#B5A894';                     // muted for disabled arrows
 
 const styles = StyleSheet.create({
   root: {
@@ -1087,9 +1133,9 @@ const styles = StyleSheet.create({
     borderColor: CONTROL_BORDER,
     borderRadius: 14,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: 'rgba(61, 52, 38, 0.12)',
     shadowOffset: {width: 0, height: 6},
-    shadowOpacity: 0.45,
+    shadowOpacity: 1,
     shadowRadius: 14,
     elevation: 12,
     zIndex: 30,
@@ -1107,7 +1153,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   dropdownItemActive: {
-    backgroundColor: 'rgba(196, 168, 130, 0.10)',
+    backgroundColor: 'rgba(61, 52, 38, 0.06)',
   },
   dropdownItemText: {
     fontSize: 15,
@@ -1120,10 +1166,15 @@ const styles = StyleSheet.create({
   },
   generateBtn: {
     alignSelf: 'center',
-    backgroundColor: TITLE_COLOR,   // solid accent gold
+    backgroundColor: '#C4A882',     // accent gold — explicit so it stays gold
     borderRadius: 24,
     paddingVertical: 12,
     paddingHorizontal: 44,
+    shadowColor: 'rgba(196, 168, 130, 0.35)',
+    shadowOffset: {width: 0, height: 6},
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   generateBtnDisabled: {
     opacity: 0.6,
@@ -1131,7 +1182,7 @@ const styles = StyleSheet.create({
   generateText: {
     fontSize: 15,
     fontWeight: '600',
-    color: STAGE_BG,                // dark text on gold — readable
+    color: '#FFFFFF',               // white on gold — strong contrast
     letterSpacing: 0.4,
   },
 
@@ -1140,12 +1191,17 @@ const styles = StyleSheet.create({
   suggestionPanel: {
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: CONTROL_BG,
+    backgroundColor: '#EDE6D8',
     borderWidth: 1,
     borderColor: CONTROL_BORDER,
     borderRadius: 12,
     overflow: 'hidden',
     flexShrink: 1,
+    shadowColor: 'rgba(61, 52, 38, 0.10)',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   // Header: label left, optional counter right — consistent across all states
   panelHeader: {
@@ -1191,7 +1247,7 @@ const styles = StyleSheet.create({
   },
   panelMeta: {
     fontSize: 11,
-    color: CHEVRON_COLOR,
+    color: '#8C7E6A',
     textAlign: 'center',
     marginTop: 3,
   },
@@ -1248,7 +1304,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(196, 168, 130, 0.08)',
+    backgroundColor: 'rgba(61, 52, 38, 0.06)',
     borderWidth: 1,
     borderColor: CONTROL_BORDER,
     justifyContent: 'center',
@@ -1261,7 +1317,7 @@ const styles = StyleSheet.create({
   // ── Reason detail bottom-sheet modal ───────────────────────────
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(61, 52, 38, 0.4)',
     justifyContent: 'flex-end',
   },
   modalCard: {
@@ -1324,19 +1380,30 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: CARD_BG,
+    backgroundColor: '#EFE7DA',
     borderWidth: 1,
     borderColor: CARD_BORDER,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.55,
+    shadowColor: 'rgba(61, 52, 38, 0.18)',
+    shadowOffset: {width: 0, height: 8},
+    shadowOpacity: 1,
     shadowRadius: 16,
+    elevation: 6,
   },
   sceneContainer: {
     flex: 1,
   },
   filamentView: {
     flex: 1,
+  },
+  avatarHighlight: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(196, 168, 130, 0.18)',
+    alignSelf: 'center',
+    top: '50%',
+    marginTop: -110,
   },
 
   // ── Action row ─────────────────────────────────────────────────
@@ -1357,10 +1424,11 @@ const styles = StyleSheet.create({
     borderColor: CONTROL_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.3,
+    shadowColor: 'rgba(61, 52, 38, 0.08)',
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 1,
     shadowRadius: 6,
+    elevation: 2,
   },
   // ── Header row (intent-based flows) ────────────────────────────
   headerRow: {
@@ -1372,7 +1440,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    backgroundColor: 'rgba(196, 168, 130, 0.12)',
+    backgroundColor: 'rgba(61, 52, 38, 0.06)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1397,6 +1465,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: STAGE_BG,
     letterSpacing: 0.3,
+  },
+
+  // ── Action button disabled state ────────────────────────────────
+  actionBtnDisabled: {
+    opacity: 0.4,
+  },
+
+  // ── Save confirmation toast ─────────────────────────────────────
+  // Positioned absolutely above the action row so it never shifts layout.
+  saveToast: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    shadowColor: 'rgba(61, 52, 38, 0.12)',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveToastText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#3D3426',
+    letterSpacing: 0.2,
   },
 
 });
