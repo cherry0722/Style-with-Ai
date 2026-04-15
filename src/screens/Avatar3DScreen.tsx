@@ -31,6 +31,7 @@ import React, {useEffect, useImperativeHandle, useMemo, useRef, useState} from '
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Modal,
   PanResponder,
   Pressable,
@@ -42,6 +43,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import {hapticFeedback} from '../utils/haptics';
 import {
   Camera,
   DefaultLight,
@@ -410,6 +412,10 @@ export default function Avatar3DScreen() {
   const sceneRef = useRef<SceneHandle>(null);
   const [saveLoading, setSaveLoading] = useState(false);
   const [commitLoading, setCommitLoading] = useState(false);
+  const [saveToastVisible, setSaveToastVisible] = useState(false);
+  const saveToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Scale animation for the save button press feedback.
+  const saveScaleAnim = useRef(new Animated.Value(1)).current;
   const addSavedOutfit = useSavedOutfits(s => s.add);
   const savedItems = useSavedOutfits(s => s.items);
   const fetchAllSaved = useSavedOutfits(s => s.fetchAll);
@@ -540,8 +546,11 @@ export default function Avatar3DScreen() {
 
   // ── Save handler ─────────────────────────────────────────────────────────────
   // Bookmarks the currently viewed outfit (currentOutfit) to Saved Outfits.
+  // Double-tap is blocked by the saveLoading guard.
   const handleSave = async () => {
     if (saveLoading || !currentOutfit) return;
+
+    hapticFeedback.success();
 
     const occasion = OCCASIONS[occasionIndex]?.value ?? null;
     const avatarRenderConfig = sceneRef.current?.getClothingConfig() ?? null;
@@ -556,8 +565,12 @@ export default function Avatar3DScreen() {
     setSaveLoading(true);
     try {
       await addSavedOutfit(payload);
-      Alert.alert('Saved!', 'Outfit added to your Saved collection.');
+      // Show inline toast — clear any prior timer first.
+      if (saveToastTimer.current) clearTimeout(saveToastTimer.current);
+      setSaveToastVisible(true);
+      saveToastTimer.current = setTimeout(() => setSaveToastVisible(false), 2200);
     } catch (err: any) {
+      hapticFeedback.error();
       const detail = err?.response?.data?.detail || err?.response?.data?.error || err?.message || 'Please try again.';
       Alert.alert('Could not save', detail);
     } finally {
@@ -922,19 +935,44 @@ export default function Avatar3DScreen() {
           />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.actionBtn, isSaved && { backgroundColor: 'rgba(196,168,130,0.18)' }]}
-          onPress={() => { void handleSave(); }}
-          disabled={saveLoading || isGenerating || !currentOutfit}
-          activeOpacity={0.75}
-          accessibilityRole="button"
-          accessibilityLabel="Save outfit">
-          <Ionicons
-            name={isSaved ? 'star' : 'star-outline'}
-            size={26}
-            color={isSaved ? '#C4A882' : '#3D3426'}
-          />
-        </TouchableOpacity>
+        <Animated.View style={{transform: [{scale: saveScaleAnim}]}}>
+          <Pressable
+            style={[
+              styles.actionBtn,
+              isSaved && {backgroundColor: 'rgba(196,168,130,0.18)'},
+              (saveLoading || isGenerating || !currentOutfit) && styles.actionBtnDisabled,
+            ]}
+            onPress={() => { void handleSave(); }}
+            disabled={saveLoading || isGenerating || !currentOutfit}
+            onPressIn={() => {
+              Animated.spring(saveScaleAnim, {
+                toValue: 0.88,
+                useNativeDriver: true,
+                speed: 40,
+                bounciness: 4,
+              }).start();
+            }}
+            onPressOut={() => {
+              Animated.spring(saveScaleAnim, {
+                toValue: 1,
+                useNativeDriver: true,
+                speed: 30,
+                bounciness: 6,
+              }).start();
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Save outfit">
+            {saveLoading ? (
+              <ActivityIndicator size="small" color="#C4A882" />
+            ) : (
+              <Ionicons
+                name={isSaved ? 'star' : 'star-outline'}
+                size={26}
+                color={isSaved ? '#C4A882' : '#3D3426'}
+              />
+            )}
+          </Pressable>
+        </Animated.View>
 
       </View>
 
@@ -960,6 +998,14 @@ export default function Avatar3DScreen() {
               </Text>
             )}
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ── Save confirmation toast ───────────────────────────────── */}
+      {saveToastVisible && (
+        <View style={styles.saveToast} pointerEvents="none">
+          <Ionicons name="checkmark-circle" size={16} color="#C4A882" />
+          <Text style={styles.saveToastText}>Saved to your outfits</Text>
         </View>
       )}
 
@@ -1419,6 +1465,39 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: STAGE_BG,
     letterSpacing: 0.3,
+  },
+
+  // ── Action button disabled state ────────────────────────────────
+  actionBtnDisabled: {
+    opacity: 0.4,
+  },
+
+  // ── Save confirmation toast ─────────────────────────────────────
+  // Positioned absolutely above the action row so it never shifts layout.
+  saveToast: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    shadowColor: 'rgba(61, 52, 38, 0.12)',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveToastText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#3D3426',
+    letterSpacing: 0.2,
   },
 
 });
