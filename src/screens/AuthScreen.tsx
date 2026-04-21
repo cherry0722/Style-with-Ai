@@ -123,6 +123,17 @@ function FloatingLabelInput({
   const isActive = focused || value.length > 0;
   const anim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
 
+  // FIX: ref + imperative focus fallback.
+  // Diagnosis: the card sub-tree receives taps correctly (Pressables work),
+  // but tapping the TextInput wasn't reliably triggering the native
+  // first-responder acquisition — most often when the tap landed on the
+  // icon column, the floating-label's cutout area, or right against the
+  // row's padding. Wrapping the row in a Pressable with an onPress that
+  // imperatively calls inputRef.current?.focus() guarantees focus from
+  // anywhere in the row. If the native tap already focused the TextInput,
+  // focus() is a no-op.
+  const inputRef = useRef<TextInput>(null);
+
   useEffect(() => {
     Animated.timing(anim, {
       toValue: isActive ? 1 : 0,
@@ -137,13 +148,32 @@ function FloatingLabelInput({
 
   const iconColor = focused ? COLORS.gold : COLORS.mutedLight;
 
+  const handleRowPress = () => {
+    if (!editable) return;
+    inputRef.current?.focus();
+  };
+
   return (
     <View style={fieldStyles.wrap}>
-      <View
-        style={[
+      {/*
+        The row container is a Pressable (was a plain View). Its only job is
+        to provide a focus fallback: `onPress` calls the TextInput's ref.focus()
+        so a tap anywhere on the row (icon gap, label cutout, padding) reliably
+        focuses the input. A nested child that claims the gesture first — the
+        SHOW/HIDE Pressable or the TextInput itself — still wins its own hit
+        region, so this is purely additive.
+      */}
+      <Pressable
+        onPress={handleRowPress}
+        // `android_disableSound` avoids the tap sound fire every time we
+        // forward focus; harmless on iOS.
+        android_disableSound
+        style={({ pressed }) => [
           fieldStyles.container,
           focused && fieldStyles.containerFocused,
           hasError && fieldStyles.containerError,
+          // Keep the visual identical — Pressable doesn't change opacity.
+          pressed && null,
         ]}
       >
         {/*
@@ -156,12 +186,8 @@ function FloatingLabelInput({
 
         <View style={fieldStyles.inputCol} collapsable={false}>
           {/*
-            FIX: the floating label must not swallow touches. `pointerEvents`
-            is a View prop (not a Text prop), so applying it to <Animated.Text>
-            had no effect — on Android the Text node was intercepting taps
-            that sat over the label, leaving the TextInput unfocusable. We now
-            wrap the label in an <Animated.View pointerEvents="none"> which
-            RN honors, so touches fall through to the TextInput beneath.
+            Floating label wrapped in an Animated.View with pointerEvents="none"
+            so it never swallows taps meant for the TextInput (prior fix).
           */}
           <Animated.View
             pointerEvents="none"
@@ -184,6 +210,7 @@ function FloatingLabelInput({
           </Animated.View>
 
           <TextInput
+            ref={inputRef}
             value={value}
             onChangeText={onChangeText}
             onFocus={() => setFocused(true)}
@@ -199,15 +226,12 @@ function FloatingLabelInput({
             selectionColor={COLORS.gold}
             returnKeyType={returnKeyType}
             onSubmitEditing={onSubmitEditing}
-            // Android: prevent the Fabric/Paper renderer from collapsing this
-            // View tree in a way that sometimes swallows focus events after
-            // the parent row animates/re-layouts.
             underlineColorAndroid="transparent"
           />
         </View>
 
         {rightAccessory ? <View style={fieldStyles.accessoryCol}>{rightAccessory}</View> : null}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -307,7 +331,7 @@ export default function AuthScreen() {
     !validatePassword(password);
   const signupDisabled = !signupValid || loading;
 
-  // ── Auth handlers (unchanged) ────────────────────────────────────────────
+  // ── Auth handlers ────────────────────────────────────────────────────────
   const handleLogin = async () => {
     const emailErr = validateEmail(email.trim());
     const pwErr = validatePassword(password);
@@ -317,6 +341,9 @@ export default function AuthScreen() {
       return;
     }
     setError('');
+    // Clear any lingering "Session expired" banner so it never masks the
+    // real result of this new login attempt.
+    clearSessionRef.current?.();
     setLoading(true);
     try {
       await login(email.trim(), password);
@@ -349,6 +376,7 @@ export default function AuthScreen() {
       return;
     }
     setError('');
+    clearSessionRef.current?.();
     setLoading(true);
     try {
       await signup(e, password, u);
@@ -477,7 +505,10 @@ export default function AuthScreen() {
     setError('');
   };
 
-  const displayError = sessionExpiredMessage || error;
+  // A real attempt-level error (setError from handleLogin / handleSignup) must
+  // always take precedence over the generic "Session expired" banner so the
+  // user sees why *this* attempt failed, not the state of a previous session.
+  const displayError = error || sessionExpiredMessage;
   const isLogin = tab === 'login';
 
   // First inline error to show (prioritized) under the form
@@ -606,6 +637,7 @@ export default function AuthScreen() {
                   onChangeText={(t) => {
                     setUsername(t);
                     if (error) setError('');
+                    if (sessionExpiredMessage) clearSessionRef.current?.();
                   }}
                   onBlur={() => setTouched((p) => ({ ...p, username: true }))}
                   icon="person-outline"
@@ -623,6 +655,7 @@ export default function AuthScreen() {
               onChangeText={(t) => {
                 setEmail(t);
                 if (error) setError('');
+                if (sessionExpiredMessage) clearSessionRef.current?.();
               }}
               onBlur={() => setTouched((p) => ({ ...p, email: true }))}
               icon="mail-outline"
@@ -639,6 +672,7 @@ export default function AuthScreen() {
               onChangeText={(t) => {
                 setPassword(t);
                 if (error) setError('');
+                if (sessionExpiredMessage) clearSessionRef.current?.();
               }}
               onBlur={() => setTouched((p) => ({ ...p, password: true }))}
               icon="lock-closed-outline"
