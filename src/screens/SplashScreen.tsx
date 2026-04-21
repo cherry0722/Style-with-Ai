@@ -18,6 +18,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -164,12 +165,41 @@ export default function SplashScreen() {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.fill, { opacity: fadeAnim }]}>
-        <ImageBackground source={heroImage} style={styles.fill} resizeMode="cover">
-          {/* Dark gradient overlay simulated with stacked rgba views */}
-          <View style={styles.overlayTop} pointerEvents="none" />
-          <View style={styles.overlayTopFade} pointerEvents="none" />
-          <View style={styles.overlayBottomFade} pointerEvents="none" />
-          <View style={styles.overlayBottom} pointerEvents="none" />
+        <ImageBackground
+          source={heroImage}
+          // `resizeMode` on the inner <Image> is the authoritative prop for
+          // ImageBackground — the outer style is applied to the wrapping
+          // View, while `imageStyle` targets the Image node directly. Setting
+          // it both here and via `imageStyle` guarantees "cover" fill on all
+          // RN versions/platforms and prevents the image from falling back
+          // to its intrinsic pixel dimensions (which was producing the
+          // stacked "horizontal lines" tiling effect on-device).
+          resizeMode="cover"
+          style={styles.imageBg}
+          imageStyle={styles.imageBgImage}
+        >
+          {/*
+            Real LinearGradient overlays (replacing the previous four stacked
+            solid-rgba Views, which produced visible rectangular bands). Two
+            gradients — top darkens for the MYRA masthead, bottom darkens for
+            the loader — rendered above the image but below text content so
+            the type still sits on top crisply. pointerEvents="none" keeps
+            them purely decorative.
+          */}
+          <LinearGradient
+            colors={['rgba(10,8,5,0.75)', 'transparent']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.gradientTop}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(10,8,5,0.85)']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.gradientBottom}
+            pointerEvents="none"
+          />
 
           {/* ── Top content ─────────────────────────────────────────── */}
           <View style={styles.topContent} pointerEvents="none">
@@ -222,39 +252,41 @@ const styles = StyleSheet.create({
   fill: {
     ...StyleSheet.absoluteFillObject,
   },
+  // ImageBackground — the wrapping View. Must be a real, flex-filled layout
+  // box (NOT position: absolute with 0 bounds) so the inner <Image> receives
+  // concrete width/height constraints from layout and renders "cover" once,
+  // edge-to-edge, instead of falling back to its intrinsic pixel dimensions
+  // stacked vertically (the "horizontal lines" artifact).
+  imageBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  // ImageBackground — the inner <Image>. Setting resizeMode here via style
+  // is the authoritative way on modern RN; pairs with the `resizeMode` prop
+  // on the component itself to be safe across versions.
+  imageBgImage: {
+    resizeMode: 'cover',
+    width: '100%',
+    height: '100%',
+  },
 
-  // Dark gradient overlay — simulated with four stacked layers
-  overlayTop: {
+  // Real gradient overlays — replace the previous four solid-rgba bands.
+  gradientTop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '28%',
-    backgroundColor: 'rgba(10,8,5,0.7)',
+    width: '100%',
+    height: '55%',
   },
-  overlayTopFade: {
-    position: 'absolute',
-    top: '28%',
-    left: 0,
-    right: 0,
-    height: '27%',
-    backgroundColor: 'rgba(10,8,5,0.35)',
-  },
-  overlayBottomFade: {
-    position: 'absolute',
-    top: '60%',
-    left: 0,
-    right: 0,
-    height: '20%',
-    backgroundColor: 'rgba(10,8,5,0.4)',
-  },
-  overlayBottom: {
+  gradientBottom: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: '20%',
-    backgroundColor: 'rgba(10,8,5,0.8)',
+    width: '100%',
+    height: '40%',
   },
 
   // Top content at ~18% from top
