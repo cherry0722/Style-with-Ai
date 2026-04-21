@@ -146,22 +146,43 @@ function FloatingLabelInput({
           hasError && fieldStyles.containerError,
         ]}
       >
-        <View style={fieldStyles.iconCol}>
+        {/*
+          Decorative icon column — made non-interactive so taps on the icon
+          still forward to the row's TextInput rather than dead-ending here.
+        */}
+        <View style={fieldStyles.iconCol} pointerEvents="none">
           <Ionicons name={icon} size={16} color={iconColor} />
         </View>
 
-        <View style={fieldStyles.inputCol}>
-          <Animated.Text
+        <View style={fieldStyles.inputCol} collapsable={false}>
+          {/*
+            FIX: the floating label must not swallow touches. `pointerEvents`
+            is a View prop (not a Text prop), so applying it to <Animated.Text>
+            had no effect — on Android the Text node was intercepting taps
+            that sat over the label, leaving the TextInput unfocusable. We now
+            wrap the label in an <Animated.View pointerEvents="none"> which
+            RN honors, so touches fall through to the TextInput beneath.
+          */}
+          <Animated.View
             pointerEvents="none"
             style={[
-              fieldStyles.labelBase,
-              { top: labelTop, fontSize: labelFontSize },
-              isActive && fieldStyles.labelActive,
-              { color: isActive ? COLORS.gold : COLORS.mutedLight },
+              fieldStyles.labelWrap,
+              { top: labelTop },
+              isActive && fieldStyles.labelWrapActive,
             ]}
           >
-            {label}
-          </Animated.Text>
+            <Animated.Text
+              style={[
+                fieldStyles.labelBase,
+                { fontSize: labelFontSize },
+                isActive && fieldStyles.labelActiveText,
+                { color: isActive ? COLORS.gold : COLORS.mutedLight },
+              ]}
+            >
+              {label}
+            </Animated.Text>
+          </Animated.View>
+
           <TextInput
             value={value}
             onChangeText={onChangeText}
@@ -178,6 +199,10 @@ function FloatingLabelInput({
             selectionColor={COLORS.gold}
             returnKeyType={returnKeyType}
             onSubmitEditing={onSubmitEditing}
+            // Android: prevent the Fabric/Paper renderer from collapsing this
+            // View tree in a way that sometimes swallows focus events after
+            // the parent row animates/re-layouts.
+            underlineColorAndroid="transparent"
           />
         </View>
 
@@ -354,6 +379,15 @@ export default function AuthScreen() {
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
   const rotate = useRef(new Animated.Value(0)).current;
 
+  // FIX: track whether the bottom-sheet slide-up is still running.
+  // While true, we apply the Animated transform to the card. Once it settles,
+  // we drop the transform entirely so the card is a plain, laid-out view —
+  // this is required because on iOS, a persistent native-driven `transform`
+  // on an ancestor of interactive children keeps the shadow-tree layout and
+  // the native view's hit region out of sync, which causes <TextInput>s to
+  // silently ignore taps (the exact symptom we saw).
+  const [cardAnimating, setCardAnimating] = useState(true);
+
   useEffect(() => {
     Animated.timing(topFade, {
       toValue: 1,
@@ -367,8 +401,21 @@ export default function AuthScreen() {
         toValue: 0,
         tension: 50,
         friction: 12,
-        useNativeDriver: true,
-      }).start();
+        // CRITICAL: useNativeDriver MUST be false here. With the native
+        // driver, iOS animates the CoreAnimation presentation layer while
+        // doing hit-tests against the model layer — the two drift apart for
+        // the lifetime of the view, and <TextInput>s inside this animated
+        // container permanently stop receiving focus. JS-driven animation
+        // keeps React's shadow tree and the native view's hit region in
+        // sync on every frame, so inputs remain reliably focusable during
+        // and after the slide-up.
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        // Once the spring finishes, re-render without the transform style so
+        // the card sub-tree is no longer considered "animated/transformed" by
+        // the RN hit-test system. TextInputs become reliably focusable.
+        if (finished) setCardAnimating(false);
+      });
     }, 500);
 
     Animated.loop(
@@ -477,15 +524,32 @@ export default function AuthScreen() {
         style={styles.cardWrap}
       >
         <Animated.View
+          // collapsable={false} stops Fabric/Paper from flattening this view
+          // into its parent — flattening is another known cause of focus
+          // events being silently dropped on a descendant TextInput after
+          // the parent's layout/props change. Keeping the node distinct
+          // preserves a stable native view handle for hit-testing.
+          collapsable={false}
           style={[
             styles.card,
-            { transform: [{ translateY: slideAnim }] },
+            // Only apply the transform while the slide-up is in flight.
+            // After it settles, the style is dropped entirely so the card
+            // is a plain laid-out view again — a second layer of safety on
+            // top of the useNativeDriver:false change above.
+            cardAnimating ? { transform: [{ translateY: slideAnim }] } : null,
           ]}
         >
           <ScrollView
             contentContainerStyle={styles.cardScroll}
-            keyboardShouldPersistTaps="handled"
+            // "always" guarantees taps on inputs are delivered even if the
+            // keyboard/responder tree is in an intermediate state (e.g. while
+            // switching tabs or right after the slide-up finishes).
+            keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
+            // Disable iOS view clipping of children that briefly sit outside
+            // the ScrollView's bounds during layout — another source of lost
+            // hit targets when parents have been transformed.
+            removeClippedSubviews={false}
           >
             {/* Drag handle (decorative affordance) */}
             <View style={styles.dragHandle} />
@@ -770,6 +834,10 @@ const styles = StyleSheet.create({
   },
   cardScroll: {
     paddingBottom: 24,
+    // flexGrow ensures the content container always fills the card's height,
+    // so hit regions for the inputs/buttons match their visible positions
+    // even when the form is short (login mode has fewer fields).
+    flexGrow: 1,
   },
 
   // Drag handle (decorative)
@@ -978,20 +1046,28 @@ const fieldStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  labelBase: {
+  // Wrapper owns positioning + the "cutout" background in the active state.
+  // pointerEvents="none" lives on this View (see FloatingLabelInput JSX) so
+  // the label never intercepts taps meant for the TextInput.
+  labelWrap: {
     position: 'absolute',
     left: 0,
+  },
+  labelWrapActive: {
+    backgroundColor: COLORS.cream,
+    paddingHorizontal: 6,
+    // Pull left a touch so the padded background aligns with the input's edge
+    left: -4,
+    borderRadius: 2,
+  },
+  labelBase: {
     fontWeight: '400',
     color: COLORS.mutedLight,
   },
-  labelActive: {
+  labelActiveText: {
     fontWeight: '600',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    backgroundColor: COLORS.cream,
-    paddingHorizontal: 6,
-    // Pull left a touch so the padded background aligns visually with the input's edge
-    left: -4,
   },
   input: {
     fontSize: 15,
