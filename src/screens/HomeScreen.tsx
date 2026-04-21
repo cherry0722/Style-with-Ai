@@ -99,8 +99,283 @@ function PillBtn({
   );
 }
 
-// ─── CSS-drawn avatar character ──────────────────────────────────────────────
-function AvatarFigure() {
+// ─── CSS-drawn rotating boy avatars ──────────────────────────────────────────
+// Three avatar variants that rotate every 2 days (casual → smart casual →
+// formal → casual → …). All variants share the same overall dimensions,
+// floating animation, face/ears/eyes/eyebrows/smile, neck, and ground shadow
+// so the Home layout never shifts between rotations. Only hair, body
+// (shirt/jacket/tie/watch), pants, and shoes change.
+//
+// Built entirely from <View> + borderRadius + transforms (no SVG, images, or
+// gradients) to match the rest of the home screen's CSS-drawn aesthetic.
+type AvatarVariant = 0 | 1 | 2;
+
+// Rotation rule: bump to a new index every 2 whole days since the Unix epoch.
+// Per spec — returns 0, 1, or 2.
+function getAvatarIndex(): AvatarVariant {
+  const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+  return (Math.floor(daysSinceEpoch / 2) % 3) as AvatarVariant;
+}
+
+function RotatingAvatar() {
+  const variant = getAvatarIndex();
+  return <AvatarFigure variant={variant} />;
+}
+
+// ─ Hair (per variant) ─────────────────────────────────────────────────────
+function HairCasual() {
+  return (
+    <View style={avatarStyles.hair}>
+      <View style={[avatarStyles.hairTop, { backgroundColor: '#5C4A3A' }]} />
+      {/* Slightly taller top overlay for texture */}
+      <View style={avatarStyles.hairCasualRidge} />
+      <View style={[avatarStyles.bangLeft, { backgroundColor: '#5C4A3A' }]} />
+      <View style={[avatarStyles.bangRight, { backgroundColor: '#5C4A3A' }]} />
+    </View>
+  );
+}
+function HairSmartCasual() {
+  return (
+    <View style={avatarStyles.hair}>
+      <View style={[avatarStyles.hairTop, { backgroundColor: '#3D2B1F' }]} />
+      {/* Wavy medium — two rotated lobes on top */}
+      <View style={avatarStyles.hairWaveLeft} />
+      <View style={avatarStyles.hairWaveRight} />
+      <View style={[avatarStyles.bangLeft, { backgroundColor: '#3D2B1F' }]} />
+      <View style={[avatarStyles.bangRight, { backgroundColor: '#3D2B1F' }]} />
+    </View>
+  );
+}
+function HairFormal() {
+  return (
+    <View style={avatarStyles.hair}>
+      <View style={[avatarStyles.hairTop, { backgroundColor: '#2A1F14' }]} />
+      {/* Neat side part — thin vertical gap on the left third */}
+      <View style={avatarStyles.hairSidePart} />
+      <View style={[avatarStyles.bangLeft, { backgroundColor: '#2A1F14' }]} />
+      <View style={[avatarStyles.bangRight, { backgroundColor: '#2A1F14' }]} />
+    </View>
+  );
+}
+
+// ─ Shared head (face + neck, hair varies by variant) ──────────────────────
+function AvatarHead({ variant }: Readonly<{ variant: AvatarVariant }>) {
+  let HairComp: () => React.JSX.Element;
+  if (variant === 0) HairComp = HairCasual;
+  else if (variant === 1) HairComp = HairSmartCasual;
+  else HairComp = HairFormal;
+  const browColor = variant === 2 ? '#2A1F14' : '#5C4A3A';
+  return (
+    <>
+      <HairComp />
+      <View style={avatarStyles.face}>
+        <View style={[avatarStyles.ear, avatarStyles.earLeft]} />
+        <View style={[avatarStyles.ear, avatarStyles.earRight]} />
+
+        {/* Curved eyebrows (3-sided border arc) */}
+        <View style={avatarStyles.browRow}>
+          <View style={[avatarStyles.brow, { borderColor: browColor }]} />
+          <View style={[avatarStyles.brow, { borderColor: browColor }]} />
+        </View>
+        <View style={avatarStyles.eyeRow}>
+          <View style={avatarStyles.eye} />
+          <View style={avatarStyles.eye} />
+        </View>
+        <View style={avatarStyles.smile} />
+      </View>
+      <View style={avatarStyles.neck} />
+    </>
+  );
+}
+
+// ─ Variant 0 — CASUAL: cream knit polo + tan chinos + loafers ─────────────
+function CasualBody() {
+  return (
+    <View style={casualStyles.torso}>
+      {/* V-collar */}
+      <View style={casualStyles.collarWrap}>
+        <View style={casualStyles.collarLeft} />
+        <View style={casualStyles.collarRight} />
+      </View>
+      {/* Two small gold buttons below collar */}
+      <View style={casualStyles.buttonsWrap}>
+        <View style={casualStyles.button} />
+        <View style={[casualStyles.button, { marginTop: 5 }]} />
+      </View>
+      {/* Three horizontal knit-texture lines */}
+      <View style={[casualStyles.knitLine, { top: 34 }]} />
+      <View style={[casualStyles.knitLine, { top: 50 }]} />
+      <View style={[casualStyles.knitLine, { top: 66 }]} />
+      {/* Short sleeves with ribbed cuff + hand */}
+      <View style={[casualStyles.sleeve, casualStyles.sleeveLeft]}>
+        <View style={casualStyles.cuff} />
+        <View style={casualStyles.hand} />
+      </View>
+      <View style={[casualStyles.sleeve, casualStyles.sleeveRight]}>
+        <View style={casualStyles.cuff} />
+        <View style={casualStyles.hand} />
+      </View>
+    </View>
+  );
+}
+function CasualLowerBody() {
+  return (
+    <>
+      <View style={casualStyles.beltRow}>
+        <View style={casualStyles.belt}>
+          <View style={casualStyles.buckle} />
+        </View>
+      </View>
+      <View style={casualStyles.legsRow}>
+        <View style={casualStyles.leg} />
+        <View style={casualStyles.leg} />
+      </View>
+      <View style={casualStyles.shoesRow}>
+        <View style={casualStyles.shoe}>
+          <View style={casualStyles.shoeStrap} />
+        </View>
+        <View style={casualStyles.shoe}>
+          <View style={casualStyles.shoeStrap} />
+        </View>
+      </View>
+    </>
+  );
+}
+
+// ─ Variant 1 — SMART CASUAL: turtleneck + camel overcoat + watch + boots ─
+function SmartCasualBody() {
+  return (
+    <View style={smartStyles.torsoWrap}>
+      {/* Inner turtleneck base */}
+      <View style={smartStyles.turtleneck} />
+      {/* Turtleneck fold peeking above collar */}
+      <View style={smartStyles.turtleFold}>
+        <View style={[smartStyles.turtleFoldLine, { top: 3 }]} />
+        <View style={[smartStyles.turtleFoldLine, { top: 6 }]} />
+      </View>
+      {/* Overcoat — left panel (buttons + pocket flap + lapel stroke) */}
+      <View style={[smartStyles.coatPanel, smartStyles.coatLeft]}>
+        <View style={smartStyles.coatOverlay} />
+        <View style={smartStyles.coatLapelLeft} />
+        <View style={[smartStyles.coatButton, { top: 26 }]} />
+        <View style={[smartStyles.coatButton, { top: 42 }]} />
+        <View style={[smartStyles.coatPocketFlap, { bottom: 20 }]} />
+      </View>
+      {/* Overcoat — right panel */}
+      <View style={[smartStyles.coatPanel, smartStyles.coatRight]}>
+        <View style={smartStyles.coatOverlay} />
+        <View style={smartStyles.coatLapelRight} />
+        <View style={[smartStyles.coatPocketFlap, { bottom: 20 }]} />
+      </View>
+      {/* Sleeves rotated ±6°; watch on left wrist */}
+      <View style={[smartStyles.sleeve, smartStyles.sleeveLeft]}>
+        <View style={smartStyles.watchWrap}>
+          <View style={smartStyles.watchStrap} />
+          <View style={smartStyles.watchOuter}>
+            <View style={smartStyles.watchFace} />
+          </View>
+          <View style={smartStyles.watchStrap} />
+        </View>
+        <View style={smartStyles.hand} />
+      </View>
+      <View style={[smartStyles.sleeve, smartStyles.sleeveRight]}>
+        <View style={smartStyles.hand} />
+      </View>
+    </View>
+  );
+}
+function SmartCasualLowerBody() {
+  return (
+    <>
+      <View style={smartStyles.legsRow}>
+        <View style={smartStyles.leg} />
+        <View style={smartStyles.leg} />
+      </View>
+      <View style={smartStyles.shoesRow}>
+        <View style={smartStyles.boot}>
+          <View style={smartStyles.bootElasticLeft} />
+          <View style={smartStyles.bootSole} />
+        </View>
+        <View style={smartStyles.boot}>
+          <View style={smartStyles.bootElasticRight} />
+          <View style={smartStyles.bootSole} />
+        </View>
+      </View>
+    </>
+  );
+}
+
+// ─ Variant 2 — FORMAL: white shirt + gold tie + blazer + oxfords ──────────
+function FormalBody() {
+  return (
+    <View style={formalStyles.torsoWrap}>
+      {/* Dress shirt with small collar points */}
+      <View style={formalStyles.dressShirt}>
+        <View style={formalStyles.collarPoints}>
+          <View style={formalStyles.dressCollarLeft} />
+          <View style={formalStyles.dressCollarRight} />
+        </View>
+      </View>
+      {/* Gold silk tie — knot + tapered body + shine + darker overlay */}
+      <View style={formalStyles.tieWrap}>
+        <View style={formalStyles.tieKnot} />
+        <View style={formalStyles.tieBody}>
+          <View style={formalStyles.tieShine} />
+          <View style={formalStyles.tieOverlay} />
+        </View>
+      </View>
+      {/* Blazer — left panel with lapel, 2 gold buttons, breast pocket + square */}
+      <View style={[formalStyles.blazerPanel, formalStyles.blazerLeft]}>
+        <View style={formalStyles.blazerOverlay} />
+        <View style={formalStyles.blazerLapelLeft} />
+        <View style={[formalStyles.blazerButton, { top: 40 }]} />
+        <View style={[formalStyles.blazerButton, { top: 54 }]} />
+        <View style={formalStyles.breastPocket} />
+        <View style={formalStyles.pocketSquare} />
+      </View>
+      {/* Blazer — right panel */}
+      <View style={[formalStyles.blazerPanel, formalStyles.blazerRight]}>
+        <View style={formalStyles.blazerOverlay} />
+        <View style={formalStyles.blazerLapelRight} />
+      </View>
+      {/* Sleeves ±6° with shirt-cuff peek + hand */}
+      <View style={[formalStyles.sleeve, formalStyles.sleeveLeft]}>
+        <View style={formalStyles.cuffPeek} />
+        <View style={formalStyles.hand} />
+      </View>
+      <View style={[formalStyles.sleeve, formalStyles.sleeveRight]}>
+        <View style={formalStyles.cuffPeek} />
+        <View style={formalStyles.hand} />
+      </View>
+    </View>
+  );
+}
+function FormalLowerBody() {
+  return (
+    <>
+      <View style={formalStyles.legsRow}>
+        <View style={formalStyles.leg}>
+          <View style={formalStyles.crease} />
+        </View>
+        <View style={formalStyles.leg}>
+          <View style={formalStyles.crease} />
+        </View>
+      </View>
+      <View style={formalStyles.shoesRow}>
+        <View style={formalStyles.oxford}>
+          <View style={formalStyles.oxfordCapLine} />
+          <View style={formalStyles.oxfordSole} />
+        </View>
+        <View style={formalStyles.oxford}>
+          <View style={formalStyles.oxfordCapLine} />
+          <View style={formalStyles.oxfordSole} />
+        </View>
+      </View>
+    </>
+  );
+}
+
+function AvatarFigure({ variant }: Readonly<{ variant: AvatarVariant }>) {
   const floatAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -124,64 +399,27 @@ function AvatarFigure() {
     return () => loop.stop();
   }, [floatAnim]);
 
+  let Body: () => React.JSX.Element;
+  let Lower: () => React.JSX.Element;
+  if (variant === 0) { Body = CasualBody; Lower = CasualLowerBody; }
+  else if (variant === 1) { Body = SmartCasualBody; Lower = SmartCasualLowerBody; }
+  else { Body = FormalBody; Lower = FormalLowerBody; }
+
   return (
     <View style={avatarStyles.wrapper}>
       {/* Radial glow behind */}
       <View style={avatarStyles.glow} />
 
       <Animated.View style={[avatarStyles.figure, { transform: [{ translateY: floatAnim }] }]}>
-        {/* Hair */}
-        <View style={avatarStyles.hair}>
-          <View style={avatarStyles.hairTop} />
-          <View style={avatarStyles.bangLeft} />
-          <View style={avatarStyles.bangRight} />
-        </View>
-
-        {/* Face */}
-        <View style={avatarStyles.face}>
-          {/* Ears */}
-          <View style={[avatarStyles.ear, avatarStyles.earLeft]} />
-          <View style={[avatarStyles.ear, avatarStyles.earRight]} />
-          {/* Eyes */}
-          <View style={avatarStyles.eyeRow}>
-            <View style={avatarStyles.eye} />
-            <View style={avatarStyles.eye} />
-          </View>
-          {/* Smile */}
-          <View style={avatarStyles.smile} />
-        </View>
-
-        {/* Neck */}
-        <View style={avatarStyles.neck} />
-
-        {/* Torso / shirt */}
-        <View style={avatarStyles.torso}>
-          {/* Collar V */}
-          <View style={avatarStyles.collarV}>
-            <View style={avatarStyles.collarLeft} />
-            <View style={avatarStyles.collarRight} />
-          </View>
-          {/* Arms */}
-          <View style={[avatarStyles.arm, avatarStyles.armLeft]}>
-            <View style={avatarStyles.hand} />
-          </View>
-          <View style={[avatarStyles.arm, avatarStyles.armRight]}>
-            <View style={avatarStyles.hand} />
-          </View>
-        </View>
-
-        {/* Legs */}
-        <View style={avatarStyles.legsRow}>
-          <View style={avatarStyles.leg} />
-          <View style={avatarStyles.leg} />
-        </View>
-
-        {/* Shoes */}
-        <View style={avatarStyles.shoesRow}>
-          <View style={avatarStyles.shoe} />
-          <View style={avatarStyles.shoe} />
-        </View>
+        <AvatarHead variant={variant} />
+        <Body />
+        <Lower />
       </Animated.View>
+
+      {/* Ground shadow — same for all variants (approximated as a flat ellipse
+          since RN has no radial gradient without SVG; low-opacity dark fill
+          reads as a soft grounded shadow against the warm beige backdrop). */}
+      <View style={avatarStyles.groundShadow} />
     </View>
   );
 }
@@ -212,6 +450,10 @@ export default function HomeScreen() {
   const [forecastDays, setForecastDays] = useState<ForecastDay[]>([]);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [laundryCount, setLaundryCount] = useState(0);
+
+  // TODO: REMOVE DEBUG AVATAR SWITCHER BEFORE PRODUCTION
+  const [debugAvatarOverride, setDebugAvatarOverride] = useState<number | null>(null);
+  const avatarIndex = debugAvatarOverride !== null ? debugAvatarOverride : getAvatarIndex();
 
   const { width: screenW, height: screenH } = Dimensions.get('window');
   const containerW  = screenW - H_PAD * 2;
@@ -390,7 +632,24 @@ export default function HomeScreen() {
 
         {/* ── Avatar area (~55% height) ──────────────────────────────────── */}
         <View style={[styles.avatarArea, { height: avatarH }]}>
-          <AvatarFigure />
+          <AvatarFigure variant={avatarIndex as AvatarVariant} />
+        </View>
+
+        {/* TODO: REMOVE DEBUG AVATAR SWITCHER BEFORE PRODUCTION */}
+        <View style={styles.debugDotRow}>
+          {[0, 1, 2].map((i) => {
+            const isActive = avatarIndex === i;
+            return (
+              <Pressable
+                key={i}
+                onPress={() => setDebugAvatarOverride(i)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Show avatar variant ${i}`}
+                style={[styles.debugDot, isActive && styles.debugDotActive]}
+              />
+            );
+          })}
         </View>
 
         {/* ── CTA button ─────────────────────────────────────────────────── */}
@@ -573,6 +832,9 @@ export default function HomeScreen() {
 }
 
 // ─── Avatar figure styles ────────────────────────────────────────────────────
+// Shared (wrapper, glow, face/eyes/brows/smile/ears, neck, hair shell,
+// ground shadow). Variant-specific styles live in casualStyles / smartStyles
+// / formalStyles below.
 const avatarStyles = StyleSheet.create({
   wrapper: {
     flex: 1,
@@ -590,8 +852,18 @@ const avatarStyles = StyleSheet.create({
   figure: {
     alignItems: 'center',
   },
+  // Ground shadow ellipse (flat low-opacity pill, approximating a radial
+  // fade since RN has no radial gradient without SVG).
+  groundShadow: {
+    position: 'absolute',
+    bottom: 14,
+    width: 72,
+    height: 10,
+    borderRadius: 36,
+    backgroundColor: 'rgba(61,52,38,0.08)',
+  },
 
-  // Hair
+  // Hair — shell shared across variants
   hair: {
     width: 72,
     height: 34,
@@ -606,7 +878,45 @@ const avatarStyles = StyleSheet.create({
     borderTopRightRadius: 36,
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 6,
-    backgroundColor: P.hair,
+  },
+  hairCasualRidge: {
+    position: 'absolute',
+    top: -2,
+    left: 10,
+    right: 10,
+    height: 12,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: '#4A3828',
+  },
+  hairWaveLeft: {
+    position: 'absolute',
+    top: -4,
+    left: 8,
+    width: 26,
+    height: 12,
+    borderRadius: 12,
+    backgroundColor: '#3D2B1F',
+    transform: [{ rotate: '-8deg' }],
+  },
+  hairWaveRight: {
+    position: 'absolute',
+    top: -4,
+    right: 8,
+    width: 26,
+    height: 12,
+    borderRadius: 12,
+    backgroundColor: '#3D2B1F',
+    transform: [{ rotate: '8deg' }],
+  },
+  hairSidePart: {
+    position: 'absolute',
+    top: 3,
+    left: 26,
+    width: 2,
+    height: 22,
+    backgroundColor: '#1A1208',
+    opacity: 0.6,
   },
   bangLeft: {
     position: 'absolute',
@@ -616,7 +926,6 @@ const avatarStyles = StyleSheet.create({
     height: 18,
     borderBottomLeftRadius: 10,
     borderBottomRightRadius: 4,
-    backgroundColor: P.hair,
   },
   bangRight: {
     position: 'absolute',
@@ -626,10 +935,9 @@ const avatarStyles = StyleSheet.create({
     height: 14,
     borderBottomLeftRadius: 4,
     borderBottomRightRadius: 10,
-    backgroundColor: P.hair,
   },
 
-  // Face
+  // Face (shared)
   face: {
     width: 64,
     height: 72,
@@ -650,10 +958,27 @@ const avatarStyles = StyleSheet.create({
   },
   earLeft:  { left: -5 },
   earRight: { right: -5 },
+  // Eyebrows — 3-sided rounded border forms a small arched stroke above each eye.
+  browRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 2,
+  },
+  brow: {
+    width: 9,
+    height: 4,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+    borderTopWidth: 1.5,
+    borderLeftWidth: 1.5,
+    borderRightWidth: 1.5,
+    borderBottomWidth: 0,
+    backgroundColor: 'transparent',
+  },
   eyeRow: {
     flexDirection: 'row',
     gap: 16,
-    marginTop: 4,
+    marginTop: 1,
   },
   eye: {
     width: 6,
@@ -672,104 +997,548 @@ const avatarStyles = StyleSheet.create({
     borderTopWidth: 0,
     borderColor: P.primaryText,
     backgroundColor: 'transparent',
-    marginTop: 8,
+    marginTop: 7,
   },
 
-  // Neck
+  // Neck (shared)
   neck: {
     width: 18,
     height: 10,
     backgroundColor: P.skinDark,
     zIndex: 0,
   },
+});
 
-  // Torso
+// ─ Variant 0 (Casual) — cream knit polo + tan chinos + loafers ────────────
+const casualStyles = StyleSheet.create({
   torso: {
-    width: 90,
-    height: 80,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderBottomLeftRadius: 8,
-    borderBottomRightRadius: 8,
-    backgroundColor: P.accentLight,
+    width: 84,
+    height: 82,
+    borderRadius: 8,
+    backgroundColor: '#EDE6D8',
     alignItems: 'center',
     position: 'relative',
     overflow: 'visible',
   },
-  collarV: {
+  collarWrap: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: 2,
   },
   collarLeft: {
-    width: 14,
+    width: 12,
     height: 14,
-    borderBottomRightRadius: 14,
-    borderRightWidth: 2,
-    borderBottomWidth: 2,
-    borderColor: P.accent,
-    backgroundColor: 'transparent',
-    transform: [{ rotate: '15deg' }],
+    backgroundColor: '#F5F0E8',
+    borderWidth: 1,
+    borderColor: '#D4C5B0',
+    borderBottomRightRadius: 12,
+    transform: [{ rotate: '14deg' }],
     marginRight: -2,
   },
   collarRight: {
-    width: 14,
+    width: 12,
     height: 14,
-    borderBottomLeftRadius: 14,
-    borderLeftWidth: 2,
-    borderBottomWidth: 2,
-    borderColor: P.accent,
-    backgroundColor: 'transparent',
-    transform: [{ rotate: '-15deg' }],
+    backgroundColor: '#F5F0E8',
+    borderWidth: 1,
+    borderColor: '#D4C5B0',
+    borderBottomLeftRadius: 12,
+    transform: [{ rotate: '-14deg' }],
     marginLeft: -2,
   },
-
-  // Arms
-  arm: {
-    position: 'absolute',
-    width: 20,
-    height: 60,
-    borderRadius: 10,
-    backgroundColor: P.accentLight,
-    top: 6,
-    justifyContent: 'flex-end',
+  buttonsWrap: {
     alignItems: 'center',
-    paddingBottom: 2,
+    marginTop: 3,
   },
-  armLeft:  { left: -14 },
-  armRight: { right: -14 },
+  button: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(196,168,130,0.5)',
+  },
+  knitLine: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(212,197,176,0.4)',
+  },
+  sleeve: {
+    position: 'absolute',
+    width: 18,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#EDE6D8',
+    top: 6,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  sleeveLeft: {
+    left: -12,
+    transform: [{ rotate: '-8deg' }],
+  },
+  sleeveRight: {
+    right: -12,
+    transform: [{ rotate: '8deg' }],
+  },
+  cuff: {
+    position: 'absolute',
+    bottom: 0,
+    width: 18,
+    height: 5,
+    backgroundColor: 'rgba(212,197,176,0.4)',
+  },
   hand: {
     width: 14,
     height: 14,
     borderRadius: 7,
     backgroundColor: P.skin,
+    marginBottom: -14,
   },
-
-  // Legs
+  beltRow: {
+    alignItems: 'center',
+  },
+  belt: {
+    width: 48,
+    height: 4,
+    backgroundColor: '#A8896A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buckle: {
+    position: 'absolute',
+    width: 6,
+    height: 6,
+    backgroundColor: P.accent,
+  },
   legsRow: {
     flexDirection: 'row',
-    gap: 4,
-    marginTop: 0,
+    gap: 6,
   },
   leg: {
-    width: 24,
-    height: 52,
-    borderBottomLeftRadius: 6,
-    borderBottomRightRadius: 6,
-    backgroundColor: P.pants,
+    width: 18,
+    height: 60,
+    backgroundColor: '#C4B08B',
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
   },
-
-  // Shoes
   shoesRow: {
     flexDirection: 'row',
-    gap: 4,
-    marginTop: 0,
+    gap: 6,
   },
   shoe: {
-    width: 28,
-    height: 12,
+    width: 22,
+    height: 11,
+    borderRadius: 5,
+    backgroundColor: '#A8896A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shoeStrap: {
+    width: 14,
+    height: 3,
+    backgroundColor: 'rgba(140,126,106,0.4)',
+  },
+});
+
+// ─ Variant 1 (Smart Casual) — turtleneck + camel overcoat + watch + boots ─
+const smartStyles = StyleSheet.create({
+  torsoWrap: {
+    width: 100,
+    height: 86,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  turtleneck: {
+    width: 72,
+    height: 80,
     borderRadius: 6,
-    backgroundColor: P.shoes,
+    backgroundColor: '#5C4A3A',
+    marginTop: 4,
+    zIndex: 1,
+  },
+  turtleFold: {
+    position: 'absolute',
+    top: -2,
+    width: 28,
+    height: 10,
+    borderRadius: 4,
+    backgroundColor: '#5C4A3A',
+    zIndex: 2,
+    overflow: 'hidden',
+  },
+  turtleFoldLine: {
+    position: 'absolute',
+    left: 2,
+    right: 2,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(74,56,40,0.5)',
+  },
+  coatPanel: {
+    position: 'absolute',
+    width: 40,
+    height: 86,
+    borderRadius: 5,
+    backgroundColor: P.accent,
+    top: 0,
+    overflow: 'hidden',
+    zIndex: 3,
+  },
+  coatLeft:  { left: 0 },
+  coatRight: { right: 0 },
+  coatOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(168,137,106,0.2)',
+  },
+  // Diagonal lapel stroke, approximated as a thin rotated rect.
+  coatLapelLeft: {
+    position: 'absolute',
+    top: 8,
+    right: 2,
+    width: 22,
+    height: 1.5,
+    backgroundColor: '#A8896A',
+    transform: [{ rotate: '-38deg' }],
+  },
+  coatLapelRight: {
+    position: 'absolute',
+    top: 8,
+    left: 2,
+    width: 22,
+    height: 1.5,
+    backgroundColor: '#A8896A',
+    transform: [{ rotate: '38deg' }],
+  },
+  coatButton: {
+    position: 'absolute',
+    right: 6,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#8C7E6A',
+  },
+  coatPocketFlap: {
+    position: 'absolute',
+    alignSelf: 'center',
+    width: 24,
+    height: 3,
+    backgroundColor: 'rgba(168,137,106,0.4)',
+  },
+  sleeve: {
+    position: 'absolute',
+    width: 18,
+    height: 50,
+    borderRadius: 8,
+    backgroundColor: P.accent,
+    top: 8,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    zIndex: 4,
+  },
+  sleeveLeft: {
+    left: -14,
+    transform: [{ rotate: '-6deg' }],
+  },
+  sleeveRight: {
+    right: -14,
+    transform: [{ rotate: '6deg' }],
+  },
+  watchWrap: {
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  watchStrap: {
+    width: 7,
+    height: 3,
+    backgroundColor: 'rgba(168,137,106,0.6)',
+  },
+  watchOuter: {
+    width: 10,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1.3,
+    borderColor: P.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  watchFace: {
+    width: 6,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(196,168,130,0.25)',
+  },
+  hand: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: P.skin,
+    marginBottom: -14,
+  },
+  legsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  leg: {
+    width: 18,
+    height: 56,
+    backgroundColor: '#3D3426',
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  shoesRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  boot: {
+    width: 22,
+    height: 14,
+    borderRadius: 4,
+    backgroundColor: '#5C4A3A',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  // Elastic panel on the inner side of each boot (left boot → right edge;
+  // right boot → left edge — faces each other).
+  bootElasticLeft: {
+    position: 'absolute',
+    top: 3,
+    right: 2,
+    width: 4,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: 'rgba(140,126,106,0.3)',
+  },
+  bootElasticRight: {
+    position: 'absolute',
+    top: 3,
+    left: 2,
+    width: 4,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: 'rgba(140,126,106,0.3)',
+  },
+  bootSole: {
+    width: 22,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#4A3828',
+  },
+});
+
+// ─ Variant 2 (Formal) — white dress shirt + gold tie + blazer + oxfords ───
+const formalStyles = StyleSheet.create({
+  torsoWrap: {
+    width: 96,
+    height: 82,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  dressShirt: {
+    width: 68,
+    height: 80,
+    borderRadius: 5,
+    backgroundColor: '#F5F0E8',
+    alignItems: 'center',
+    marginTop: 2,
+    zIndex: 1,
+  },
+  collarPoints: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  dressCollarLeft: {
+    width: 10,
+    height: 14,
+    backgroundColor: '#F5F0E8',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderBottomRightRadius: 10,
+    transform: [{ rotate: '16deg' }],
+    marginRight: -1,
+  },
+  dressCollarRight: {
+    width: 10,
+    height: 14,
+    backgroundColor: '#F5F0E8',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderBottomLeftRadius: 10,
+    transform: [{ rotate: '-16deg' }],
+    marginLeft: -1,
+  },
+  // Gold silk tie — knot at top + tapered body below.
+  tieWrap: {
+    position: 'absolute',
+    top: 14,
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  tieKnot: {
+    width: 8,
+    height: 8,
+    backgroundColor: P.accent,
+    transform: [{ rotate: '45deg' }],
+  },
+  tieBody: {
+    width: 4,
+    height: 56,
+    backgroundColor: P.accent,
+    marginTop: -2,
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  tieShine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(232,217,197,0.3)',
+  },
+  tieOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(168,137,106,0.25)',
+  },
+  blazerPanel: {
+    position: 'absolute',
+    width: 38,
+    height: 82,
+    borderRadius: 5,
+    backgroundColor: '#5C4A3A',
+    top: 0,
+    overflow: 'hidden',
+    zIndex: 3,
+  },
+  blazerLeft:  { left: 0 },
+  blazerRight: { right: 0 },
+  blazerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(74,56,40,0.2)',
+  },
+  // Notch-lapel diagonal strokes, approximated as rotated thin rects.
+  blazerLapelLeft: {
+    position: 'absolute',
+    top: 10,
+    right: 2,
+    width: 22,
+    height: 1,
+    backgroundColor: '#4A3828',
+    transform: [{ rotate: '-40deg' }],
+  },
+  blazerLapelRight: {
+    position: 'absolute',
+    top: 10,
+    left: 2,
+    width: 22,
+    height: 1,
+    backgroundColor: '#4A3828',
+    transform: [{ rotate: '40deg' }],
+  },
+  blazerButton: {
+    position: 'absolute',
+    right: 6,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: P.accent,
+  },
+  breastPocket: {
+    position: 'absolute',
+    top: 22,
+    left: 8,
+    width: 14,
+    height: 2,
+    backgroundColor: 'rgba(74,56,40,0.4)',
+  },
+  // Small pocket square peeking out, rotated for a folded-triangle feel.
+  pocketSquare: {
+    position: 'absolute',
+    top: 20,
+    left: 12,
+    width: 6,
+    height: 5,
+    backgroundColor: 'rgba(232,217,197,0.7)',
+    borderTopLeftRadius: 1,
+    borderTopRightRadius: 1,
+    transform: [{ rotate: '-12deg' }],
+  },
+  sleeve: {
+    position: 'absolute',
+    width: 18,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#5C4A3A',
+    top: 12,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    zIndex: 4,
+  },
+  sleeveLeft: {
+    left: -12,
+    transform: [{ rotate: '-6deg' }],
+  },
+  sleeveRight: {
+    right: -12,
+    transform: [{ rotate: '6deg' }],
+  },
+  cuffPeek: {
+    position: 'absolute',
+    bottom: 0,
+    width: 18,
+    height: 5,
+    backgroundColor: 'rgba(245,240,232,0.7)',
+  },
+  hand: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: P.skin,
+    marginBottom: -14,
+  },
+  legsRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  leg: {
+    width: 18,
+    height: 60,
+    backgroundColor: '#3D3426',
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+    alignItems: 'center',
+  },
+  crease: {
+    width: StyleSheet.hairlineWidth,
+    height: 60,
+    backgroundColor: 'rgba(42,31,20,0.3)',
+  },
+  shoesRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  oxford: {
+    width: 22,
+    height: 12,
+    borderRadius: 5,
+    backgroundColor: '#4A3828',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  oxfordCapLine: {
+    position: 'absolute',
+    top: 4,
+    left: 0,
+    width: 7,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(61,43,31,0.3)',
+  },
+  oxfordSole: {
+    width: 22,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#3D2B1F',
   },
 });
 
@@ -846,6 +1615,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
+  },
+
+  // TODO: REMOVE DEBUG AVATAR SWITCHER BEFORE PRODUCTION
+  debugDotRow: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  debugDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: P.border,
+  },
+  debugDotActive: {
+    width: 24,
+    backgroundColor: P.accent,
   },
 
   // CTA
