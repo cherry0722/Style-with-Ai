@@ -20,6 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useTheme } from '../context/ThemeContext';
 import { getReasonedOutfits, type ReasonedOutfitEntry } from '../api/ai';
+import { buildSuggestionContext } from '../store/weatherContext';
 import { getPlannerRange, postPlanner, type PlannerPlan } from '../api/planner';
 
 type Nav = NativeStackNavigationProp<RootStackParamList, 'PlanOutfitSuggestions'>;
@@ -93,7 +94,7 @@ export default function PlanOutfitSuggestionsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getReasonedOutfits({ occasion, lockedItemIds: [] });
+      const data = await getReasonedOutfits({ occasion, lockedItemIds: [], context: buildSuggestionContext() });
       setOutfits(data.outfits || []);
     } catch (err) {
       setError((err as { message?: string })?.message ?? 'Failed to load suggestions');
