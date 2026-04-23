@@ -681,8 +681,8 @@ def _build_item_summary(it: Dict[str, Any]) -> Dict[str, Any]:
         "formality": profile.get("formality"),  # 0–10 from Vision
         "season": profile.get("season"),
         "styleTags": profile.get("styleTags") or [],
-        "keyDetails": profile.get("keyDetails") or [],
-        "pairingHints": profile.get("pairingHints") or [],
+        "keyDetails": (profile.get("keyDetails") or [])[:3],
+        "pairingHints": (profile.get("pairingHints") or [])[:3],
     }
 
 
@@ -814,6 +814,7 @@ def _call_openai_text(
             ],
             max_tokens=1000,
             response_format={"type": "json_object"},
+            timeout=20.0,
         )
         raw = (resp.choices[0].message.content or "").strip()
         if not raw:
@@ -1204,6 +1205,51 @@ def _mark_duplicates(outfits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Wardrobe shortlist for LLM (Phase 2: latency reduction)
+# ---------------------------------------------------------------------------
+
+_LLM_CATEGORY_LIMITS: Dict[str, int] = {
+    "top":      5,
+    "bottom":   5,
+    "shoes":    3,
+    "outerwear":2,
+    "dress":    3,
+    "other":    2,
+}
+
+
+def _shortlist_for_llm(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Cap each clothing category to a small limit before sending to the LLM.
+
+    Keeps total prompt size to ~18 items so token count stays predictable and
+    OpenAI response latency stays well under the 20 s Python timeout.
+    Within each category, items with richer profile data (type, pairingHints,
+    primaryColor) are preferred so the LLM gets the best-context candidates.
+    Never returns empty if items is non-empty.
+    """
+    by_cat: Dict[str, List[Dict[str, Any]]] = {}
+    for it in items:
+        cat = _normalize_category(it.get("profile"))
+        by_cat.setdefault(cat, []).append(it)
+
+    def _richness(item: Dict[str, Any]) -> int:
+        p = item.get("profile") or {}
+        return (
+            (2 if p.get("type") else 0)
+            + (1 if p.get("pairingHints") else 0)
+            + (1 if p.get("primaryColor") else 0)
+        )
+
+    result: List[Dict[str, Any]] = []
+    for cat, limit in _LLM_CATEGORY_LIMITS.items():
+        group = sorted(by_cat.get(cat, []), key=_richness, reverse=True)
+        result.extend(group[:limit])
+
+    return result if result else items
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -1255,15 +1301,24 @@ def generate_outfits(
     # _mark_duplicates applied so LLM-fabricated variety (same itemIds, different titles)
     # is replaced with an honest limited-wardrobe message.
     if use_llm and (os.getenv("OPENAI_API_KEY") or "").strip():
-        out = _call_openai_text(filtered_items, occasion, loc_dict, weather_dict)
+        # Phase 2: cap items sent to LLM to keep prompt small and latency low.
+        llm_items = _shortlist_for_llm(filtered_items)
+        out = _call_openai_text(llm_items, occasion, loc_dict, weather_dict)
         if out:
-            # Near-duplicate check: detect visually identical LLM suggestions
-            # (same top-type group + same top-color bucket) and substitute with
-            # deterministic alternatives when available.
-            out = _near_duplicate_check(out, filtered_items, occasion, weather_dict)
-            # Completeness filter: remove any outfit missing a top or bottom.
-            # Returns fewer results rather than surfacing bottom-only/top-only slots.
-            out = _filter_complete_outfits(out, filtered_items)
+            out = _near_duplicate_check(out, llm_items, occasion, weather_dict)
+            out = _filter_complete_outfits(out, llm_items)
+            # Backfill: if completeness filtering dropped us below 3, pad with
+            # deterministic outfits (from the full filtered set) so callers
+            # consistently receive 3 outfits rather than 1 or 2.
+            if len(out) < 3:
+                det_pad = _deterministic_outfits(filtered_items, occasion, weather_dict)
+                det_pad = _filter_complete_outfits(det_pad, filtered_items)
+                seen = {frozenset(o.get("itemIds") or []) for o in out}
+                for candidate in det_pad:
+                    if len(out) >= 3:
+                        break
+                    if frozenset(candidate.get("itemIds") or []) not in seen:
+                        out.append(candidate)
             return _mark_duplicates(out)
 
     # Step 3: deterministic fallback with full scoring + diversity selection.
