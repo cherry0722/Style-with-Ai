@@ -1,350 +1,366 @@
+/**
+ * SplashScreen (v2) — editorial, image-backed splash.
+ *
+ * Fades in a full-screen hero photograph with a dark gradient overlay and
+ * the MYRA masthead, then fades out and navigates to the Auth screen.
+ *
+ * Navigation integration: registered as the initial unauthenticated route
+ * in RootNavigator; calls navigation.replace('Auth') when the timeline
+ * completes. Auth screens and logic are untouched.
+ */
 import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
   Animated,
-  Dimensions,
   StyleSheet,
+  ImageBackground,
+  StatusBar,
+  Platform,
 } from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
+import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { theme } from '../theme';
 
-const { width, height } = Dimensions.get('window');
+const heroImage = require('../../assets/models/images/splash-hero.png');
 
-export default function SplashScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  
-  // Animation values
-  const backgroundOpacity = useRef(new Animated.Value(0)).current;
-  const logoScale = useRef(new Animated.Value(0)).current;
-  const logoOpacity = useRef(new Animated.Value(0)).current;
-  const logoRotation = useRef(new Animated.Value(0)).current;
-  const textOpacity = useRef(new Animated.Value(0)).current;
-  const textTranslateY = useRef(new Animated.Value(30)).current;
-  const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const taglineTranslateY = useRef(new Animated.Value(20)).current;
-  const particlesOpacity = useRef(new Animated.Value(0)).current;
-  const particlesScale = useRef(new Animated.Value(0)).current;
+const FONT_SERIF = Platform.select({
+  ios: 'Georgia',
+  android: 'serif',
+  default: 'serif',
+});
+const FONT_SERIF_ITALIC = Platform.select({
+  ios: 'Georgia-Italic',
+  android: 'serif',
+  default: 'serif',
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// PulsingDot — staggered opacity pulse
+// ─────────────────────────────────────────────────────────────────────────
+type PulsingDotProps = { delay: number };
+
+function PulsingDot({ delay }: PulsingDotProps) {
+  const anim = useRef(new Animated.Value(0.2)).current;
 
   useEffect(() => {
-    const startAnimations = () => {
-      // Background fade in
-      Animated.timing(backgroundOpacity, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 400,
+          delay,
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0.2,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [anim, delay]);
 
-      // Particles animation
+  return <Animated.View style={[styles.dot, { opacity: anim }]} />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SplashScreen
+// ─────────────────────────────────────────────────────────────────────────
+export default function SplashScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const titleAnim = useRef(new Animated.Value(0)).current;
+  const subtitleAnim = useRef(new Animated.Value(0)).current;
+  const lineAnim = useRef(new Animated.Value(0)).current;
+  const loaderAnim = useRef(new Animated.Value(0)).current;
+  const fadeOutAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+
+    // 0ms: screen fades in
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+
+    // 500ms: MYRA title fades in + slides down
+    timers.push(
       setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(particlesOpacity, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(particlesScale, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }, 200);
+        Animated.timing(titleAnim, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }).start();
+      }, 500),
+    );
 
-      // Logo animation with rotation
+    // 1000ms: subtitle fades in
+    timers.push(
       setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(logoScale, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(logoOpacity, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(logoRotation, {
-            toValue: 1,
-            duration: 1200,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }, 600);
+        Animated.timing(subtitleAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }, 1000),
+    );
 
-      // Brand name animation
+    // 1400ms: gold line + tagline fade in
+    timers.push(
       setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(textOpacity, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(textTranslateY, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }, 1200);
+        Animated.timing(lineAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }).start();
+      }, 1400),
+    );
 
-      // Tagline animation
+    // 1800ms: loader dots fade in
+    timers.push(
       setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(taglineOpacity, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(taglineTranslateY, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }, 1600);
+        Animated.timing(loaderAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }).start();
+      }, 1800),
+    );
 
+    // 3300ms: everything fades out
+    timers.push(
+      setTimeout(() => {
+        Animated.timing(fadeOutAnim, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }).start();
+      }, 3300),
+    );
+
+    // 3900ms: navigate to Auth
+    timers.push(
       setTimeout(() => {
         navigation.replace('Auth');
-      }, 4000);
+      }, 3900),
+    );
+
+    return () => {
+      timers.forEach(clearTimeout);
     };
+  }, [navigation, fadeAnim, titleAnim, subtitleAnim, lineAnim, loaderAnim, fadeOutAnim]);
 
-    startAnimations();
-  }, [navigation, backgroundOpacity, logoScale, logoOpacity, logoRotation, textOpacity, textTranslateY, taglineOpacity, taglineTranslateY, particlesOpacity, particlesScale]);
-
-  const logoRotationInterpolate = logoRotation.interpolate({
+  const titleTranslateY = titleAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: [-12, 0],
   });
 
   return (
-    <Animated.View style={[styles.container, { opacity: backgroundOpacity }]}>
-        {/* Fashion gradient background */}
-        <View style={styles.backgroundGradient} />
+    <Animated.View style={[styles.root, { opacity: fadeOutAnim }]}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-        {/* Animated fashion elements */}
-        <Animated.View style={[styles.fashionElementsContainer, { opacity: particlesOpacity }]}>
-          {[...Array(15)].map((_, index) => (
-            <Animated.View
-              key={index}
+      <Animated.View style={[styles.fill, { opacity: fadeAnim }]}>
+        <ImageBackground
+          source={heroImage}
+          // `resizeMode` on the inner <Image> is the authoritative prop for
+          // ImageBackground — the outer style is applied to the wrapping
+          // View, while `imageStyle` targets the Image node directly. Setting
+          // it both here and via `imageStyle` guarantees "cover" fill on all
+          // RN versions/platforms and prevents the image from falling back
+          // to its intrinsic pixel dimensions (which was producing the
+          // stacked "horizontal lines" tiling effect on-device).
+          resizeMode="cover"
+          style={styles.imageBg}
+          imageStyle={styles.imageBgImage}
+        >
+          {/*
+            Real LinearGradient overlays (replacing the previous four stacked
+            solid-rgba Views, which produced visible rectangular bands). Two
+            gradients — top darkens for the MYRA masthead, bottom darkens for
+            the loader — rendered above the image but below text content so
+            the type still sits on top crisply. pointerEvents="none" keeps
+            them purely decorative.
+          */}
+          <LinearGradient
+            colors={['rgba(10,8,5,0.75)', 'transparent']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.gradientTop}
+            pointerEvents="none"
+          />
+          <LinearGradient
+            colors={['transparent', 'rgba(10,8,5,0.85)']}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={styles.gradientBottom}
+            pointerEvents="none"
+          />
+
+          {/* ── Top content ─────────────────────────────────────────── */}
+          <View style={styles.topContent} pointerEvents="none">
+            <Animated.Text style={[styles.subtitle, { opacity: subtitleAnim }]}>
+              YOUR PERSONAL STYLE ASSISTANT
+            </Animated.Text>
+
+            <Animated.Text
               style={[
-                styles.fashionElement,
+                styles.title,
                 {
-                  left: Math.random() * width,
-                  top: Math.random() * height,
-                  transform: [{ scale: particlesScale }],
+                  opacity: titleAnim,
+                  transform: [{ translateY: titleTranslateY }],
                 },
               ]}
             >
-              <Ionicons
-                name={
-                  ([
-                    'shirt-outline', 'footsteps-outline', 'bag-outline',
-                    'color-palette-outline', 'diamond-outline', 'trophy-outline',
-                    'glasses-outline', 'layers-outline', 'shirt', 'walk-outline',
-                  ] as const)[index % 10]
-                }
-                size={24}
-                color="rgba(255,255,255,0.7)"
-              />
-            </Animated.View>
-          ))}
-        </Animated.View>
-      
-      {/* Main content */}
-      <View style={styles.contentContainer}>
-        {/* Logo with premium styling */}
-        <Animated.View
-          style={[
-            styles.logoContainer,
-            {
-              transform: [
-                { scale: logoScale },
-                { rotate: logoRotationInterpolate },
-              ],
-              opacity: logoOpacity,
-            },
-          ]}
-        >
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>M</Text>
+              MYRA
+            </Animated.Text>
+
+            <Animated.View style={[styles.shimmerLine, { opacity: lineAnim }]} />
+
+            <Animated.Text style={[styles.tagline, { opacity: lineAnim }]}>
+              Dress with intention
+            </Animated.Text>
           </View>
-          <View style={styles.logoGlow} />
-        </Animated.View>
-        
-        {/* Brand name with premium typography */}
-        <Animated.View
-          style={[
-            styles.textContainer,
-            {
-              opacity: textOpacity,
-              transform: [{ translateY: textTranslateY }],
-            },
-          ]}
-        >
-          <Text style={styles.brandName}>MYRA</Text>
-        </Animated.View>
-        
-        {/* Tagline */}
-        <Animated.View
-          style={[
-            styles.taglineContainer,
-            {
-              opacity: taglineOpacity,
-              transform: [{ translateY: taglineTranslateY }],
-            },
-          ]}
-        >
-                <Text style={styles.tagline}>Your Personal Style Assistant</Text>
-                <Text style={styles.subTagline}>Fashion Forward, Always</Text>
-        </Animated.View>
-      </View>
-      
-      {/* Premium loading indicator */}
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingBar}>
-          <Animated.View style={[styles.loadingProgress, { width: '100%' }]} />
-        </View>
-      </View>
+
+          {/* ── Bottom content ──────────────────────────────────────── */}
+          <Animated.View
+            style={[styles.bottomContent, { opacity: loaderAnim }]}
+            pointerEvents="none"
+          >
+            <View style={styles.dotsRow}>
+              <PulsingDot delay={0} />
+              <PulsingDot delay={200} />
+              <PulsingDot delay={400} />
+            </View>
+            <Text style={styles.loadingText}>STYLING YOUR EXPERIENCE</Text>
+          </Animated.View>
+        </ImageBackground>
+      </Animated.View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: '#000000',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#0A0805',
   },
-  backgroundGradient: {
+  fill: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  // ImageBackground — the wrapping View. Must be a real, flex-filled layout
+  // box (NOT position: absolute with 0 bounds) so the inner <Image> receives
+  // concrete width/height constraints from layout and renders "cover" once,
+  // edge-to-edge, instead of falling back to its intrinsic pixel dimensions
+  // stacked vertically (the "horizontal lines" artifact).
+  imageBg: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  // ImageBackground — the inner <Image>. Setting resizeMode here via style
+  // is the authoritative way on modern RN; pairs with the `resizeMode` prop
+  // on the component itself to be safe across versions.
+  imageBgImage: {
+    resizeMode: 'cover',
+    width: '100%',
+    height: '100%',
+  },
+
+  // Real gradient overlays — replace the previous four solid-rgba bands.
+  gradientTop: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: '#000000',
+    width: '100%',
+    height: '55%',
   },
-  fashionElementsContainer: {
+  gradientBottom: {
     position: 'absolute',
-    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
-    bottom: 0,
+    width: '100%',
+    height: '40%',
   },
-  fashionElement: {
+
+  // Top content at ~18% from top
+  topContent: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
+    top: '18%',
+    left: 0,
+    right: 0,
     alignItems: 'center',
-    opacity: 0.7,
   },
-  fashionIcon: {
-    textAlign: 'center',
+  subtitle: {
+    fontSize: 9,
+    fontWeight: '500',
+    letterSpacing: 5,
+    color: 'rgba(196,168,130,0.8)',
+    textTransform: 'uppercase',
+    marginBottom: 18,
   },
-  contentContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  logoCircle: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#ffffff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#ffffff',
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 20,
-  },
-  logoGlow: {
-    position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    shadowColor: '#ffffff',
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 30,
-    elevation: 30,
-  },
-  logoText: {
-    fontSize: 56,
-    fontWeight: '900',
-    color: '#000000',
-    letterSpacing: -3,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+  title: {
+    fontFamily: FONT_SERIF,
+    fontSize: 64,
+    fontWeight: '300',
+    color: '#FFFFFF',
+    letterSpacing: 10,
+    textTransform: 'uppercase',
+    textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowRadius: 12,
+    marginBottom: 22,
+    // Compensate for letter-spacing visually centering the glyphs
+    paddingLeft: 10,
   },
-  textContainer: {
-    alignItems: 'center',
-    marginTop: theme.spacing['3xl'],
-  },
-  brandName: {
-    fontSize: 48,
-    fontWeight: '900',
-    color: '#ffffff',
-    letterSpacing: 8,
-    textShadowColor: 'rgba(255, 255, 255, 0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
-  },
-  taglineContainer: {
-    alignItems: 'center',
-    marginTop: theme.spacing['2xl'],
+  shimmerLine: {
+    width: 48,
+    height: 1.5,
+    backgroundColor: '#C4A882',
+    alignSelf: 'center',
+    marginBottom: 18,
   },
   tagline: {
-    fontSize: theme.typography.lg,
-    color: '#ffffff',
-    fontWeight: '600',
-    textAlign: 'center',
-    letterSpacing: 1,
-    opacity: 0.9,
-  },
-  subTagline: {
-    fontSize: theme.typography.base,
-    color: '#ffffff',
+    fontFamily: FONT_SERIF_ITALIC,
+    fontSize: 15,
     fontWeight: '400',
-    textAlign: 'center',
-    marginTop: theme.spacing.sm,
-    opacity: 0.7,
-    letterSpacing: 0.5,
+    fontStyle: 'italic',
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 2,
   },
-  loadingContainer: {
+
+  // Bottom content ~80px from bottom
+  bottomContent: {
     position: 'absolute',
-    bottom: height * 0.1,
-    left: theme.spacing.xl,
-    right: theme.spacing.xl,
+    bottom: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
-  loadingBar: {
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    overflow: 'hidden',
+  dotsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  loadingProgress: {
-    height: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 2,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#C4A882',
+    marginHorizontal: 4,
+  },
+  loadingText: {
+    fontSize: 10,
+    fontWeight: '400',
+    letterSpacing: 3,
+    color: 'rgba(255,255,255,0.35)',
+    textTransform: 'uppercase',
   },
 });

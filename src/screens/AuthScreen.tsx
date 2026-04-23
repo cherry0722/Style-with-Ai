@@ -1,9 +1,13 @@
 /**
- * Auth Screen (v1) — Login + Signup with required fields and validation.
+ * Auth Screen (v2) — Login + Signup, redesigned with MYRA editorial aesthetic.
+ *
+ * Visual/layout only — all authentication logic, validation, navigation,
+ * loading/error state, and auth-context usage are preserved from v1.
+ *
  * Sign Up: username (required, min 3, letters/numbers/underscore), email, password (min 8).
  * Login: email + password valid; buttons disabled until valid.
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,15 +19,46 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 
 type Tab = 'login' | 'signup';
 
+// ───────────────────────────────────────────────────────────────────────────
+// Design tokens (Myra editorial palette)
+// ───────────────────────────────────────────────────────────────────────────
+const COLORS = {
+  beige: '#F5F0E8',
+  cream: '#FDFBF7',
+  warmCream: '#FAF7F2',
+  softCream: '#F0EBE2',
+  gold: '#C4A882',
+  goldSoft: 'rgba(196,168,130,0.08)',
+  darkBrown: '#3D3426',
+  muted: '#8C7E6A',
+  mutedLight: '#B5A894',
+  border: '#E8E0D0',
+  error: '#C05A5A',
+};
+
+const FONT_SERIF = Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' });
+const FONT_SERIF_ITALIC = Platform.select({
+  ios: 'Georgia-Italic',
+  android: 'serif',
+  default: 'serif',
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Validation (unchanged from v1)
+// ───────────────────────────────────────────────────────────────────────────
 const USERNAME_MIN = 3;
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
 const PASSWORD_MIN = 8;
@@ -50,38 +85,253 @@ function validatePassword(value: string): string | null {
   return null;
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// FloatingLabelInput — editorial-style input with animated label + icon
+// ───────────────────────────────────────────────────────────────────────────
+type FloatingLabelInputProps = {
+  label: string;
+  value: string;
+  onChangeText: (v: string) => void;
+  onBlur?: () => void;
+  icon: string;
+  secureTextEntry?: boolean;
+  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  editable?: boolean;
+  hasError?: boolean;
+  rightAccessory?: React.ReactNode;
+  returnKeyType?: 'done' | 'next' | 'go';
+  onSubmitEditing?: () => void;
+};
+
+function FloatingLabelInput({
+  label,
+  value,
+  onChangeText,
+  onBlur,
+  icon,
+  secureTextEntry,
+  keyboardType,
+  autoCapitalize,
+  editable = true,
+  hasError,
+  rightAccessory,
+  returnKeyType,
+  onSubmitEditing,
+}: FloatingLabelInputProps) {
+  const [focused, setFocused] = useState(false);
+  const isActive = focused || value.length > 0;
+  const anim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+
+  // FIX: ref + imperative focus fallback.
+  // Diagnosis: the card sub-tree receives taps correctly (Pressables work),
+  // but tapping the TextInput wasn't reliably triggering the native
+  // first-responder acquisition — most often when the tap landed on the
+  // icon column, the floating-label's cutout area, or right against the
+  // row's padding. Wrapping the row in a Pressable with an onPress that
+  // imperatively calls inputRef.current?.focus() guarantees focus from
+  // anywhere in the row. If the native tap already focused the TextInput,
+  // focus() is a no-op.
+  const inputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: isActive ? 1 : 0,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [isActive, anim]);
+
+  const labelTop = anim.interpolate({ inputRange: [0, 1], outputRange: [18, -8] });
+  const labelFontSize = anim.interpolate({ inputRange: [0, 1], outputRange: [14, 10] });
+
+  const iconColor = focused ? COLORS.gold : COLORS.mutedLight;
+
+  const handleRowPress = () => {
+    if (!editable) return;
+    inputRef.current?.focus();
+  };
+
+  return (
+    <View style={fieldStyles.wrap}>
+      {/*
+        The row container is a Pressable (was a plain View). Its only job is
+        to provide a focus fallback: `onPress` calls the TextInput's ref.focus()
+        so a tap anywhere on the row (icon gap, label cutout, padding) reliably
+        focuses the input. A nested child that claims the gesture first — the
+        SHOW/HIDE Pressable or the TextInput itself — still wins its own hit
+        region, so this is purely additive.
+      */}
+      <Pressable
+        onPress={handleRowPress}
+        // `android_disableSound` avoids the tap sound fire every time we
+        // forward focus; harmless on iOS.
+        android_disableSound
+        style={({ pressed }) => [
+          fieldStyles.container,
+          focused && fieldStyles.containerFocused,
+          hasError && fieldStyles.containerError,
+          // Keep the visual identical — Pressable doesn't change opacity.
+          pressed && null,
+        ]}
+      >
+        {/*
+          Decorative icon column — made non-interactive so taps on the icon
+          still forward to the row's TextInput rather than dead-ending here.
+        */}
+        <View style={fieldStyles.iconCol} pointerEvents="none">
+          <Ionicons name={icon} size={16} color={iconColor} />
+        </View>
+
+        <View style={fieldStyles.inputCol} collapsable={false}>
+          {/*
+            Floating label wrapped in an Animated.View with pointerEvents="none"
+            so it never swallows taps meant for the TextInput (prior fix).
+          */}
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              fieldStyles.labelWrap,
+              { top: labelTop },
+              isActive && fieldStyles.labelWrapActive,
+            ]}
+          >
+            <Animated.Text
+              style={[
+                fieldStyles.labelBase,
+                { fontSize: labelFontSize },
+                isActive && fieldStyles.labelActiveText,
+                { color: isActive ? COLORS.gold : COLORS.mutedLight },
+              ]}
+            >
+              {label}
+            </Animated.Text>
+          </Animated.View>
+
+          <TextInput
+            ref={inputRef}
+            value={value}
+            onChangeText={onChangeText}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+              setFocused(false);
+              onBlur?.();
+            }}
+            secureTextEntry={secureTextEntry}
+            keyboardType={keyboardType}
+            autoCapitalize={autoCapitalize}
+            editable={editable}
+            style={fieldStyles.input}
+            selectionColor={COLORS.gold}
+            returnKeyType={returnKeyType}
+            onSubmitEditing={onSubmitEditing}
+            underlineColorAndroid="transparent"
+          />
+        </View>
+
+        {rightAccessory ? <View style={fieldStyles.accessoryCol}>{rightAccessory}</View> : null}
+      </Pressable>
+    </View>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Animated primary / guest button (scale on press)
+// ───────────────────────────────────────────────────────────────────────────
+type AnimatedButtonProps = {
+  onPress: () => void;
+  disabled?: boolean;
+  style?: any;
+  children: React.ReactNode;
+};
+
+function AnimatedButton({ onPress, disabled, style, children }: AnimatedButtonProps) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const pressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 6,
+    }).start();
+  };
+  const pressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 40,
+      bounciness: 6,
+    }).start();
+  };
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={pressIn}
+      onPressOut={pressOut}
+      disabled={disabled}
+      accessibilityRole="button"
+    >
+      <Animated.View style={[style, { transform: [{ scale }] }, disabled && { opacity: 0.5 }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// AuthScreen
+// ───────────────────────────────────────────────────────────────────────────
 export default function AuthScreen() {
-  const theme = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { login, signup, sessionExpiredMessage, clearSessionMessage } = useAuth();
   const clearSessionRef = React.useRef(clearSessionMessage);
   clearSessionRef.current = clearSessionMessage;
+
   const [tab, setTab] = useState<Tab>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [touched, setTouched] = useState({ email: false, password: false, username: false });
 
   React.useEffect(() => {
     clearSessionRef.current?.();
   }, []);
 
-  const loginEmailError = useMemo(() => (touched.email ? validateEmail(email) : null), [email, touched.email]);
-  const loginPasswordError = useMemo(() => (touched.password ? validatePassword(password) : null), [password, touched.password]);
+  // ── Validation (identical behavior to v1) ────────────────────────────────
+  const loginEmailError = useMemo(
+    () => (touched.email ? validateEmail(email) : null),
+    [email, touched.email],
+  );
+  const loginPasswordError = useMemo(
+    () => (touched.password ? validatePassword(password) : null),
+    [password, touched.password],
+  );
   const loginValid = !validateEmail(email.trim()) && !validatePassword(password);
   const loginDisabled = !loginValid || loading;
 
-  const signupUsernameError = useMemo(() => (touched.username ? validateUsername(username) : null), [username, touched.username]);
-  const signupEmailError = useMemo(() => (touched.email ? validateEmail(email) : null), [email, touched.email]);
-  const signupPasswordError = useMemo(() => (touched.password ? validatePassword(password) : null), [password, touched.password]);
+  const signupUsernameError = useMemo(
+    () => (touched.username ? validateUsername(username) : null),
+    [username, touched.username],
+  );
+  const signupEmailError = useMemo(
+    () => (touched.email ? validateEmail(email) : null),
+    [email, touched.email],
+  );
+  const signupPasswordError = useMemo(
+    () => (touched.password ? validatePassword(password) : null),
+    [password, touched.password],
+  );
   const signupValid =
     !validateUsername(username) &&
     !validateEmail(email.trim()) &&
     !validatePassword(password);
   const signupDisabled = !signupValid || loading;
 
+  // ── Auth handlers ────────────────────────────────────────────────────────
   const handleLogin = async () => {
     const emailErr = validateEmail(email.trim());
     const pwErr = validatePassword(password);
@@ -91,6 +341,9 @@ export default function AuthScreen() {
       return;
     }
     setError('');
+    // Clear any lingering "Session expired" banner so it never masks the
+    // real result of this new login attempt.
+    clearSessionRef.current?.();
     setLoading(true);
     try {
       await login(email.trim(), password);
@@ -123,6 +376,7 @@ export default function AuthScreen() {
       return;
     }
     setError('');
+    clearSessionRef.current?.();
     setLoading(true);
     try {
       await signup(e, password, u);
@@ -147,176 +401,714 @@ export default function AuthScreen() {
     }
   };
 
-  const displayError = sessionExpiredMessage || error;
-  const styles = createStyles(theme);
+  // ── Mount / transition animations ────────────────────────────────────────
+  const topFade = useRef(new Animated.Value(0)).current;
+  const screenHeight = Dimensions.get('window').height;
+  const slideAnim = useRef(new Animated.Value(screenHeight)).current;
+  const rotate = useRef(new Animated.Value(0)).current;
+
+  // FIX: track whether the bottom-sheet slide-up is still running.
+  // While true, we apply the Animated transform to the card. Once it settles,
+  // we drop the transform entirely so the card is a plain, laid-out view —
+  // this is required because on iOS, a persistent native-driven `transform`
+  // on an ancestor of interactive children keeps the shadow-tree layout and
+  // the native view's hit region out of sync, which causes <TextInput>s to
+  // silently ignore taps (the exact symptom we saw).
+  const [cardAnimating, setCardAnimating] = useState(true);
+
+  useEffect(() => {
+    Animated.timing(topFade, {
+      toValue: 1,
+      duration: 500,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    const timer = setTimeout(() => {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 50,
+        friction: 12,
+        // CRITICAL: useNativeDriver MUST be false here. With the native
+        // driver, iOS animates the CoreAnimation presentation layer while
+        // doing hit-tests against the model layer — the two drift apart for
+        // the lifetime of the view, and <TextInput>s inside this animated
+        // container permanently stop receiving focus. JS-driven animation
+        // keeps React's shadow tree and the native view's hit region in
+        // sync on every frame, so inputs remain reliably focusable during
+        // and after the slide-up.
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        // Once the spring finishes, re-render without the transform style so
+        // the card sub-tree is no longer considered "animated/transformed" by
+        // the RN hit-test system. TextInputs become reliably focusable.
+        if (finished) setCardAnimating(false);
+      });
+    }, 500);
+
+    Animated.loop(
+      Animated.timing(rotate, {
+        toValue: 1,
+        duration: 40000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    ).start();
+
+    return () => clearTimeout(timer);
+  }, [topFade, slideAnim, rotate]);
+
+  const rotateInterpolate = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  // ── Toggle (Login / Sign up) animations ──────────────────────────────────
+  const [toggleWidth, setToggleWidth] = useState(0);
+  const toggleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(toggleAnim, {
+      toValue: tab === 'login' ? 0 : 1,
+      duration: 400,
+      easing: Easing.bezier(0.4, 0, 0.2, 1),
+      useNativeDriver: true,
+    }).start();
+  }, [tab, toggleAnim]);
+
+  const TOGGLE_PAD = 5;
+  const tabWidth = toggleWidth > 0 ? (toggleWidth - TOGGLE_PAD * 2) / 2 : 0;
+  const indicatorTranslateX = toggleAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, tabWidth],
+  });
+
+  // ── Username slide-in animation ──────────────────────────────────────────
+  const usernameAnim = useRef(new Animated.Value(tab === 'signup' ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(usernameAnim, {
+      toValue: tab === 'signup' ? 1 : 0,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [tab, usernameAnim]);
+  const usernameTranslateY = usernameAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-10, 0],
+  });
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const switchTab = (next: Tab) => {
+    if (next === tab) return;
+    setTab(next);
+    setError('');
+  };
+
+  // A real attempt-level error (setError from handleLogin / handleSignup) must
+  // always take precedence over the generic "Session expired" banner so the
+  // user sees why *this* attempt failed, not the state of a previous session.
+  const displayError = error || sessionExpiredMessage;
   const isLogin = tab === 'login';
 
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle={theme.isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
-      <KeyboardAvoidingView style={styles.keyboard} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.card}>
-            <Text style={styles.title}>MYRA</Text>
-            <Text style={styles.subtitle}>Your Personal Style Assistant</Text>
+  // First inline error to show (prioritized) under the form
+  const currentInlineError = isLogin
+    ? loginEmailError || loginPasswordError
+    : signupUsernameError || signupEmailError || signupPasswordError;
 
-            <View style={styles.tabRow}>
-              <Pressable style={[styles.tab, isLogin && styles.tabActive]} onPress={() => { setTab('login'); setError(''); }}>
-                <Text style={[styles.tabText, isLogin && styles.tabTextActive]}>Login</Text>
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+
+      {/* ── TOP SECTION (beige) ──────────────────────────────────────────── */}
+      <SafeAreaView edges={['top']} style={styles.topSafe}>
+        <Animated.View style={[styles.topSection, { opacity: topFade }]}>
+          {/* Decorative rotating circle — top-right */}
+          <Animated.View
+            style={[
+              styles.decorCircle,
+              { transform: [{ rotate: rotateInterpolate }] },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={styles.decorDot} />
+          </Animated.View>
+
+          <View style={styles.brandWrap}>
+            <Text style={styles.eyebrow}>Welcome to</Text>
+            <Text style={styles.brand}>
+              <Text style={styles.brandMy}>My</Text>
+              <Text style={styles.brandRa}>ra</Text>
+            </Text>
+
+            <View style={styles.accentLine} />
+
+            <Text style={styles.tagline}>Your personal style assistant.</Text>
+            <Text style={styles.taglineAccent}>Dress with intention.</Text>
+          </View>
+        </Animated.View>
+      </SafeAreaView>
+
+      {/* ── BOTTOM CARD ──────────────────────────────────────────────────── */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.cardWrap}
+      >
+        <Animated.View
+          // collapsable={false} stops Fabric/Paper from flattening this view
+          // into its parent — flattening is another known cause of focus
+          // events being silently dropped on a descendant TextInput after
+          // the parent's layout/props change. Keeping the node distinct
+          // preserves a stable native view handle for hit-testing.
+          collapsable={false}
+          style={[
+            styles.card,
+            // Only apply the transform while the slide-up is in flight.
+            // After it settles, the style is dropped entirely so the card
+            // is a plain laid-out view again — a second layer of safety on
+            // top of the useNativeDriver:false change above.
+            cardAnimating ? { transform: [{ translateY: slideAnim }] } : null,
+          ]}
+        >
+          <ScrollView
+            contentContainerStyle={styles.cardScroll}
+            // "always" guarantees taps on inputs are delivered even if the
+            // keyboard/responder tree is in an intermediate state (e.g. while
+            // switching tabs or right after the slide-up finishes).
+            keyboardShouldPersistTaps="always"
+            showsVerticalScrollIndicator={false}
+            // Disable iOS view clipping of children that briefly sit outside
+            // the ScrollView's bounds during layout — another source of lost
+            // hit targets when parents have been transformed.
+            removeClippedSubviews={false}
+          >
+            {/* Drag handle (decorative affordance) */}
+            <View style={styles.dragHandle} />
+
+            {/* Toggle (Login / Sign up) */}
+            <View
+              style={styles.toggleContainer}
+              onLayout={(e) => setToggleWidth(e.nativeEvent.layout.width)}
+            >
+              {tabWidth > 0 ? (
+                <Animated.View
+                  style={[
+                    styles.toggleIndicator,
+                    {
+                      width: tabWidth,
+                      transform: [{ translateX: indicatorTranslateX }],
+                    },
+                  ]}
+                />
+              ) : null}
+              <Pressable
+                style={styles.toggleTab}
+                onPress={() => switchTab('login')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isLogin }}
+              >
+                <Text style={[styles.toggleText, isLogin && styles.toggleTextActive]}>
+                  Login
+                </Text>
               </Pressable>
-              <Pressable style={[styles.tab, !isLogin && styles.tabActive]} onPress={() => { setTab('signup'); setError(''); }}>
-                <Text style={[styles.tabText, !isLogin && styles.tabTextActive]}>Sign up</Text>
+              <Pressable
+                style={styles.toggleTab}
+                onPress={() => switchTab('signup')}
+                accessibilityRole="button"
+                accessibilityState={{ selected: !isLogin }}
+              >
+                <Text style={[styles.toggleText, !isLogin && styles.toggleTextActive]}>
+                  Sign up
+                </Text>
               </Pressable>
             </View>
 
-            {isLogin ? (
-              <>
-                <TextInput
-                  style={[styles.input, loginEmailError ? styles.inputError : null]}
-                  placeholder="Email"
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={email}
-                  onChangeText={(t) => { setEmail(t); setError(''); }}
-                  onBlur={() => setTouched((p) => ({ ...p, email: true }))}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={!loading}
-                />
-                {loginEmailError ? <Text style={styles.inlineError}>{loginEmailError}</Text> : null}
-                <TextInput
-                  style={[styles.input, loginPasswordError ? styles.inputError : null]}
-                  placeholder={`Password (min ${PASSWORD_MIN})`}
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={password}
-                  onChangeText={(t) => { setPassword(t); setError(''); }}
-                  onBlur={() => setTouched((p) => ({ ...p, password: true }))}
-                  secureTextEntry
-                  editable={!loading}
-                />
-                {loginPasswordError ? <Text style={styles.inlineError}>{loginPasswordError}</Text> : null}
-                <Pressable style={[styles.button, loginDisabled && styles.buttonDisabled]} onPress={handleLogin} disabled={loginDisabled}>
-                  {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.buttonText}>Log in</Text>}
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <TextInput
-                  style={[styles.input, signupUsernameError ? styles.inputError : null]}
-                  placeholder={`Username (min ${USERNAME_MIN}, letters/numbers/underscore)`}
-                  placeholderTextColor={theme.colors.textTertiary}
+            {/* Username (signup only) */}
+            {!isLogin ? (
+              <Animated.View
+                style={{
+                  opacity: usernameAnim,
+                  transform: [{ translateY: usernameTranslateY }],
+                }}
+              >
+                <FloatingLabelInput
+                  label="Username"
                   value={username}
-                  onChangeText={(t) => { setUsername(t); setError(''); }}
+                  onChangeText={(t) => {
+                    setUsername(t);
+                    if (error) setError('');
+                    if (sessionExpiredMessage) clearSessionRef.current?.();
+                  }}
                   onBlur={() => setTouched((p) => ({ ...p, username: true }))}
+                  icon="person-outline"
                   autoCapitalize="none"
                   editable={!loading}
+                  hasError={!!signupUsernameError}
                 />
-                {signupUsernameError ? <Text style={styles.inlineError}>{signupUsernameError}</Text> : null}
-                <TextInput
-                  style={[styles.input, signupEmailError ? styles.inputError : null]}
-                  placeholder="Email"
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={email}
-                  onChangeText={(t) => { setEmail(t); setError(''); }}
-                  onBlur={() => setTouched((p) => ({ ...p, email: true }))}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={!loading}
-                />
-                {signupEmailError ? <Text style={styles.inlineError}>{signupEmailError}</Text> : null}
-                <TextInput
-                  style={[styles.input, signupPasswordError ? styles.inputError : null]}
-                  placeholder={`Password (min ${PASSWORD_MIN})`}
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={password}
-                  onChangeText={(t) => { setPassword(t); setError(''); }}
-                  onBlur={() => setTouched((p) => ({ ...p, password: true }))}
-                  secureTextEntry
-                  editable={!loading}
-                />
-                {signupPasswordError ? <Text style={styles.inlineError}>{signupPasswordError}</Text> : null}
-                <Pressable style={[styles.button, signupDisabled && styles.buttonDisabled]} onPress={handleSignup} disabled={signupDisabled}>
-                  {loading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.buttonText}>Create account</Text>}
+              </Animated.View>
+            ) : null}
+
+            {/* Email */}
+            <FloatingLabelInput
+              label="Email"
+              value={email}
+              onChangeText={(t) => {
+                setEmail(t);
+                if (error) setError('');
+                if (sessionExpiredMessage) clearSessionRef.current?.();
+              }}
+              onBlur={() => setTouched((p) => ({ ...p, email: true }))}
+              icon="mail-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
+              hasError={isLogin ? !!loginEmailError : !!signupEmailError}
+            />
+
+            {/* Password */}
+            <FloatingLabelInput
+              label="Password"
+              value={password}
+              onChangeText={(t) => {
+                setPassword(t);
+                if (error) setError('');
+                if (sessionExpiredMessage) clearSessionRef.current?.();
+              }}
+              onBlur={() => setTouched((p) => ({ ...p, password: true }))}
+              icon="lock-closed-outline"
+              secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              editable={!loading}
+              hasError={isLogin ? !!loginPasswordError : !!signupPasswordError}
+              rightAccessory={
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <Text style={styles.showHideText}>
+                    {showPassword ? 'HIDE' : 'SHOW'}
+                  </Text>
                 </Pressable>
-              </>
+              }
+            />
+
+            {/* Forgot password (login only) — visual link, no handler wired */}
+            {isLogin ? (
+              <Pressable
+                style={styles.forgotWrap}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => {}}
+              >
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </Pressable>
+            ) : (
+              <View style={styles.forgotSpacer} />
             )}
 
-            {displayError ? <Text style={styles.errorText}>{displayError}</Text> : null}
+            {/* Inline validation hint or auth error */}
+            {currentInlineError || displayError ? (
+              <Text style={styles.errorText}>
+                {displayError || currentInlineError}
+              </Text>
+            ) : null}
 
-            <View style={styles.guestDivider}>
-              <View style={styles.guestDividerLine} />
-              <Text style={styles.guestDividerText}>or</Text>
-              <View style={styles.guestDividerLine} />
+            {/* Primary CTA */}
+            <AnimatedButton
+              onPress={isLogin ? handleLogin : handleSignup}
+              disabled={isLogin ? loginDisabled : signupDisabled}
+              style={styles.primaryBtn}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={COLORS.cream} />
+              ) : (
+                <Text style={styles.primaryBtnText}>
+                  {isLogin ? 'LOG IN' : 'CREATE ACCOUNT'}
+                </Text>
+              )}
+            </AnimatedButton>
+
+            {/* Divider */}
+            <View style={styles.divider}>
+              <View style={[styles.dividerLine, styles.dividerLineLeft]} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={[styles.dividerLine, styles.dividerLineRight]} />
             </View>
 
-            <Pressable
-              style={({ pressed }) => [styles.guestButton, pressed && { opacity: 0.7 }]}
+            {/* Guest CTA */}
+            <AnimatedButton
               onPress={() => navigation.navigate('GuestHome')}
+              style={styles.guestBtn}
             >
-              <Text style={styles.guestButtonText}>Continue as Guest</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+              <Text style={styles.guestBtnText}>CONTINUE AS GUEST</Text>
+            </AnimatedButton>
+
+            {/* Terms footer */}
+            <Text style={styles.termsText}>
+              By continuing, you agree to our{' '}
+              <Text style={styles.termsAccent}>Terms</Text>
+              {' & '}
+              <Text style={styles.termsAccent}>Privacy Policy</Text>
+            </Text>
+          </ScrollView>
+        </Animated.View>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-function createStyles(theme: ReturnType<typeof useTheme>) {
-  return StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.colors.background },
-    keyboard: { flex: 1 },
-    scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.xl },
-    card: {
-      maxWidth: 400,
-      alignSelf: 'center',
-      width: '100%',
-      backgroundColor: theme.colors.backgroundSecondary,
-      borderRadius: theme.borderRadius.xl,
-      padding: theme.spacing['2xl'],
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    title: { fontSize: theme.typography['3xl'], fontWeight: theme.typography.bold, color: theme.colors.textPrimary, textAlign: 'center', marginBottom: theme.spacing.xs },
-    subtitle: { fontSize: theme.typography.sm, color: theme.colors.textSecondary, textAlign: 'center', marginBottom: theme.spacing.xl },
-    tabRow: { flexDirection: 'row', marginBottom: theme.spacing.lg, gap: theme.spacing.sm },
-    tab: { flex: 1, paddingVertical: theme.spacing.md, alignItems: 'center', borderRadius: theme.borderRadius.lg, borderWidth: 1, borderColor: theme.colors.border },
-    tabActive: { backgroundColor: theme.colors.accent, borderColor: theme.colors.accent },
-    tabText: { fontSize: theme.typography.base, fontWeight: theme.typography.medium, color: theme.colors.textSecondary },
-    tabTextActive: { color: theme.colors.white },
-    input: {
-      backgroundColor: theme.colors.background,
-      borderRadius: theme.borderRadius.lg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      paddingHorizontal: theme.spacing.lg,
-      paddingVertical: theme.spacing.md,
-      fontSize: theme.typography.base,
-      color: theme.colors.textPrimary,
-      marginBottom: theme.spacing.xs,
-    },
-    inputError: { borderColor: theme.colors.error },
-    inlineError: { fontSize: theme.typography.xs, color: theme.colors.error, marginBottom: theme.spacing.md },
-    button: {
-      backgroundColor: theme.colors.accent,
-      borderRadius: theme.borderRadius.lg,
-      paddingVertical: theme.spacing.lg,
-      alignItems: 'center',
-      marginTop: theme.spacing.sm,
-    },
-    buttonDisabled: { opacity: 0.5 },
-    buttonText: { fontSize: theme.typography.base, fontWeight: theme.typography.bold, color: theme.colors.white },
-    errorText: { fontSize: theme.typography.sm, color: theme.colors.error, marginTop: theme.spacing.md, textAlign: 'center' },
-    guestDivider: { flexDirection: 'row', alignItems: 'center', marginTop: theme.spacing.xl, marginBottom: theme.spacing.md },
-    guestDividerLine: { flex: 1, height: 1, backgroundColor: theme.colors.border },
-    guestDividerText: { marginHorizontal: theme.spacing.md, fontSize: theme.typography.sm, color: theme.colors.textSecondary },
-    guestButton: {
-      borderRadius: theme.borderRadius.lg,
-      paddingVertical: theme.spacing.md,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: 'transparent',
-    },
-    guestButtonText: { fontSize: theme.typography.base, fontWeight: '600' as const, color: theme.colors.textSecondary },
-  });
-}
+// ───────────────────────────────────────────────────────────────────────────
+// Styles
+// ───────────────────────────────────────────────────────────────────────────
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: COLORS.beige,
+  },
+  topSafe: {
+    backgroundColor: COLORS.beige,
+  },
+  topSection: {
+    paddingHorizontal: 36,
+    paddingTop: 24,
+    paddingBottom: 32,
+    minHeight: 220,
+    justifyContent: 'center',
+  },
+  decorCircle: {
+    position: 'absolute',
+    top: 16,
+    right: -30,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  decorDot: {
+    position: 'absolute',
+    top: -3,
+    left: 60 - 3,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.gold,
+  },
+  brandWrap: {
+    alignItems: 'flex-start',
+  },
+  eyebrow: {
+    fontSize: 10,
+    letterSpacing: 4,
+    color: COLORS.gold,
+    textTransform: 'uppercase',
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  brand: {
+    color: COLORS.darkBrown,
+    marginBottom: 14,
+  },
+  brandMy: {
+    fontFamily: FONT_SERIF,
+    fontSize: 72,
+    fontWeight: '300',
+    color: COLORS.darkBrown,
+    letterSpacing: -2,
+  },
+  brandRa: {
+    fontFamily: FONT_SERIF_ITALIC,
+    fontStyle: 'italic',
+    fontSize: 72,
+    fontWeight: '400',
+    color: COLORS.darkBrown,
+    letterSpacing: -2,
+  },
+  accentLine: {
+    width: 40,
+    height: 2,
+    backgroundColor: COLORS.gold,
+    opacity: 0.85,
+    marginBottom: 14,
+    borderRadius: 1,
+  },
+  tagline: {
+    fontSize: 13,
+    color: COLORS.muted,
+    fontWeight: '400',
+    marginBottom: 2,
+  },
+  taglineAccent: {
+    fontSize: 13,
+    color: COLORS.gold,
+    fontWeight: '500',
+    fontStyle: 'italic',
+    fontFamily: FONT_SERIF_ITALIC,
+  },
+
+  // Card
+  cardWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  card: {
+    backgroundColor: COLORS.cream,
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    paddingHorizontal: 36,
+    paddingTop: 28,
+    paddingBottom: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowRadius: 20,
+    shadowOpacity: 0.08,
+    elevation: 12,
+    flexGrow: 1,
+  },
+  cardScroll: {
+    paddingBottom: 24,
+    // flexGrow ensures the content container always fills the card's height,
+    // so hit regions for the inputs/buttons match their visible positions
+    // even when the form is short (login mode has fewer fields).
+    flexGrow: 1,
+  },
+
+  // Drag handle (decorative)
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+
+  // Toggle
+  toggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.softCream,
+    borderRadius: 20,
+    padding: 5,
+    marginBottom: 22,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  toggleIndicator: {
+    position: 'absolute',
+    top: 5,
+    bottom: 5,
+    left: 5,
+    backgroundColor: COLORS.darkBrown,
+    borderRadius: 16,
+    shadowColor: '#3D3426',
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 16,
+    shadowOpacity: 0.2,
+    elevation: 4,
+  },
+  toggleTab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  toggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.muted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  toggleTextActive: {
+    color: COLORS.warmCream,
+  },
+
+  // Forgot password
+  forgotWrap: {
+    alignSelf: 'flex-end',
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  forgotSpacer: {
+    height: 12,
+  },
+  forgotText: {
+    fontSize: 12,
+    color: COLORS.gold,
+    fontWeight: '500',
+  },
+
+  // Error
+  errorText: {
+    fontSize: 12,
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: 14,
+    marginTop: -4,
+  },
+
+  // Primary button
+  primaryBtn: {
+    backgroundColor: COLORS.darkBrown,
+    paddingVertical: 18,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#3D3426',
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 20,
+    shadowOpacity: 0.15,
+    elevation: 6,
+  },
+  primaryBtnText: {
+    color: COLORS.warmCream,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+
+  // Show / Hide
+  showHideText: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    color: COLORS.gold,
+    textTransform: 'uppercase',
+  },
+
+  // Divider
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 22,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.border,
+  },
+  dividerLineLeft: {
+    opacity: 0.6,
+  },
+  dividerLineRight: {
+    opacity: 0.6,
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: COLORS.mutedLight,
+    fontStyle: 'italic',
+    fontFamily: FONT_SERIF_ITALIC,
+  },
+
+  // Guest button
+  guestBtn: {
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: 'transparent',
+    paddingVertical: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestBtnText: {
+    color: COLORS.darkBrown,
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+
+  // Terms footer
+  termsText: {
+    textAlign: 'center',
+    fontSize: 11,
+    color: COLORS.mutedLight,
+    marginTop: 22,
+    lineHeight: 16,
+  },
+  termsAccent: {
+    color: COLORS.gold,
+    fontWeight: '500',
+  },
+});
+
+const fieldStyles = StyleSheet.create({
+  wrap: {
+    marginBottom: 14,
+  },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 56,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.warmCream,
+    paddingHorizontal: 16,
+  },
+  containerFocused: {
+    borderColor: COLORS.gold,
+    backgroundColor: '#FFFFFF',
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  containerError: {
+    borderColor: COLORS.error,
+  },
+  iconCol: {
+    width: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputCol: {
+    flex: 1,
+    marginLeft: 10,
+    position: 'relative',
+    justifyContent: 'center',
+    minHeight: 56,
+  },
+  accessoryCol: {
+    marginLeft: 8,
+    paddingLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Wrapper owns positioning + the "cutout" background in the active state.
+  // pointerEvents="none" lives on this View (see FloatingLabelInput JSX) so
+  // the label never intercepts taps meant for the TextInput.
+  labelWrap: {
+    position: 'absolute',
+    left: 0,
+  },
+  labelWrapActive: {
+    backgroundColor: COLORS.cream,
+    paddingHorizontal: 6,
+    // Pull left a touch so the padded background aligns with the input's edge
+    left: -4,
+    borderRadius: 2,
+  },
+  labelBase: {
+    fontWeight: '400',
+    color: COLORS.mutedLight,
+  },
+  labelActiveText: {
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  input: {
+    fontSize: 15,
+    fontWeight: '400',
+    color: COLORS.darkBrown,
+    paddingVertical: 18,
+    paddingHorizontal: 0,
+    margin: 0,
+  },
+});

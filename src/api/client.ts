@@ -68,10 +68,29 @@ client.interceptors.response.use(
       if (__DEV__) {
         console.log('[API Client] Auth failure (401)', { url, status });
       }
-      callOn401();
+
+      // A 401 from the credential-check endpoints themselves (login / signup /
+      // refresh) is NOT a session-expiration event — the user simply typed
+      // the wrong email/password or hit a server-side rate limit. Firing the
+      // global on401 handler here would wipe any existing token, show the
+      // "Session expired. Please log in again." banner, and navigate to Auth,
+      // which then masks the real "Invalid email or password" error on the
+      // AuthScreen. Only propagate 401s from *authenticated* endpoints into
+      // the session-expired pipeline.
+      const isCredentialEndpoint =
+        url.includes('/api/auth/login') ||
+        url.includes('/api/auth/signup') ||
+        url.includes('/api/auth/refresh');
+
+      if (!isCredentialEndpoint) {
+        callOn401();
+      }
+
       const cleanMessage = msgFromBody
         ? String(msgFromBody)
-        : 'Session expired. Please log in again.';
+        : isCredentialEndpoint
+          ? 'Invalid email or password.'
+          : 'Session expired. Please log in again.';
       return Promise.reject({ status: 401, data, message: cleanMessage });
     }
 
