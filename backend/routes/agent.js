@@ -126,7 +126,8 @@ router.post('/reasoned_outfits', auth, async (req, res, next) => {
     }
 
     if (outfits.length === 0) {
-      const fallback = generateThreeOutfits(availableItems, locked);
+      const fallbackContext = { occasion: normalizedOccasion, weather: (weather && weather.tempF != null) ? weather : undefined };
+      const fallback = generateThreeOutfits(availableItems, locked, fallbackContext);
       outfits = fallback.map((o) => ({
         outfitId: o.outfitId,
         items: (o.items || []).map(sanitizeWardrobeItem),
@@ -178,7 +179,7 @@ router.post('/reasoned_outfits/regenerate', auth, async (req, res, next) => {
     const availableItems = filterAvailable(allItems);
     const locked = Array.isArray(lockedItemIds) ? lockedItemIds.map(String) : [];
     const current = Array.isArray(currentItems) ? currentItems : [];
-    const result = regenerateOutfit(availableItems, locked, current);
+    const result = regenerateOutfit(availableItems, locked, current, {});
     res.status(200).json({
       outfitId: outfitId || null,
       items: (result.items || []).map(sanitizeWardrobeItem),
@@ -204,7 +205,7 @@ router.post('/reasoned_outfits/swap', auth, async (req, res, next) => {
     const allItems = await Wardrobe.find({ userId }).lean().exec();
     const availableItems = filterAvailable(allItems);
     const current = Array.isArray(currentItems) ? currentItems : [];
-    const result = swapCategory(availableItems, current, category);
+    const result = swapCategory(availableItems, current, category, {});
     res.status(200).json({
       outfitId: outfitId || null,
       items: (result.items || []).map(sanitizeWardrobeItem),
