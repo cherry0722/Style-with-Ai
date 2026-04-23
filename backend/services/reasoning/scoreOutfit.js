@@ -286,6 +286,16 @@ function matchFormalityToRule(avgFormality, rule) {
   return { points: -3, reason: `Outfit may be too formal for ${label}` };
 }
 
+/**
+ * Normalize season field to a flat array of lowercase strings.
+ * Handles: string, array of strings, null/undefined/other.
+ */
+function normalizeSeason(raw) {
+  if (Array.isArray(raw)) return raw.map((s) => String(s).toLowerCase());
+  if (typeof raw === 'string' && raw.trim()) return [raw.toLowerCase()];
+  return ['all'];
+}
+
 function matchSeasonToWeather(combo, tempF) {
   const preferredSeasons = tempToSeasons(tempF);
   let matches = 0;
@@ -293,13 +303,13 @@ function matchSeasonToWeather(combo, tempF) {
 
   for (const item of combo) {
     const p = item.profile || item;
-    const season = (p.season || "all").toLowerCase();
-    if (season === "all") {
+    const seasons = normalizeSeason(p.season);
+    if (seasons.length === 1 && seasons[0] === 'all') {
       matches += 1;
       total += 1;
     } else {
       total += 1;
-      if (preferredSeasons.includes(season)) matches += 1;
+      if (seasons.some((s) => preferredSeasons.includes(s))) matches += 1;
     }
   }
 
@@ -365,4 +375,4 @@ function getColorBonus(combo) {
   return { points: 0, reason: null };
 }
 
-module.exports = { scoreOutfit };
+module.exports = { scoreOutfit, scoreOutfitCombo };

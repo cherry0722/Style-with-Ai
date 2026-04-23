@@ -53,6 +53,7 @@ import {
   Model,
 } from 'react-native-filament';
 import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
+import {buildSuggestionContext} from '../store/weatherContext';
 import {fetchOutfitAvatarMappings} from '../api/avatar';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSavedOutfits } from '../store/savedOutfits';
@@ -634,7 +635,7 @@ export default function Avatar3DScreen() {
     setIsGenerating(true);
     setGenerateError(null);
     try {
-      const res = await getReasonedOutfits({occasion: OCCASIONS[occasionIndex].value});
+      const res = await getReasonedOutfits({occasion: OCCASIONS[occasionIndex].value, context: buildSuggestionContext()});
       const outfits = res.outfits.slice(0, 3).filter(isValidSuggestion);
       setSuggestions(outfits);
       setOutfitIndex(0);

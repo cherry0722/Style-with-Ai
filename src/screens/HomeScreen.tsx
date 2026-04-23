@@ -28,6 +28,7 @@ import { fetchHomeToday, HomeTodayResponse } from '../api/home';
 import { listLaundry } from '../api/wardrobe';
 import { fetchForecast, ForecastDay } from '../api/weather';
 import { useSettings } from '../store/settings';
+import { useWeatherContext } from '../store/weatherContext';
 import { convertTemp, tempLabel } from '../utils/temperature';
 
 const H_PAD = 24;
@@ -468,6 +469,7 @@ export default function HomeScreen() {
         (pos) => {
           setLocationDenied(false);
           setLocationCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+          useWeatherContext.getState().setLocation(pos.coords.latitude, pos.coords.longitude);
         },
         () => {
           setLocationDenied(true);
@@ -500,6 +502,11 @@ export default function HomeScreen() {
       const params = locationCoords ? { lat: locationCoords.lat, lon: locationCoords.lon } : undefined;
       const result = await fetchHomeToday(params);
       setData(result);
+      // Publish weather to shared store so suggestion screens can use it.
+      const w = result?.weather;
+      if (w?.ok && w.tempF != null) {
+        useWeatherContext.getState().setWeather(w.tempF, w.condition ?? null);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Network error');
       setData(null);

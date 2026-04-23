@@ -19,6 +19,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { getReasonedOutfits, ReasonedOutfitsResponse, ReasonedOutfitEntry } from '../api/ai';
+import { buildSuggestionContext } from '../store/weatherContext';
 
 const P = {
   background:    '#F5F0E8',
@@ -227,7 +228,7 @@ export default function OutfitScreen() {
       setLoading(true);
       setError(null);
       setResult(null);
-      const body = { occasion, context: undefined };
+      const body = { occasion, context: buildSuggestionContext() };
       setResult(await getReasonedOutfits(body));
     } catch (err: any) {
       const msg = err?.message || 'Failed to get outfits. Please try again.';
