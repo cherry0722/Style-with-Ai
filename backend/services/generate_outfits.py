@@ -1205,27 +1205,123 @@ def _mark_duplicates(outfits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Wardrobe shortlist for LLM (Phase 2: latency reduction)
+# Wardrobe shortlist for LLM (Phase 2: latency reduction / Phase 3: quality)
 # ---------------------------------------------------------------------------
 
 _LLM_CATEGORY_LIMITS: Dict[str, int] = {
-    "top":      5,
-    "bottom":   5,
-    "shoes":    3,
-    "outerwear":2,
-    "dress":    3,
-    "other":    2,
+    "top":       5,
+    "bottom":    5,
+    "shoes":     3,
+    "outerwear": 2,
+    "dress":     3,
+    "other":     2,
 }
 
 
-def _shortlist_for_llm(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _shortlist_score(
+    item: Dict[str, Any],
+    occasion: Optional[str],
+    temp_f: Optional[float],
+) -> int:
     """
-    Cap each clothing category to a small limit before sending to the LLM.
+    Score one wardrobe item for shortlist priority.  Higher = more likely to be
+    sent to the LLM.  All signals come from fields already stored on the
+    wardrobe document — no new data or schema changes required.
 
-    Keeps total prompt size to ~18 items so token count stays predictable and
-    OpenAI response latency stays well under the 20 s Python timeout.
-    Within each category, items with richer profile data (type, pairingHints,
-    primaryColor) are preferred so the LLM gets the best-context candidates.
+    Signals (additive):
+      +4  isFavorite=true          user explicitly wants this in rotation
+      +2  profile.type present      gives LLM the best slot-assignment context
+      +2  formality matches occasion formal item for formal occ / casual for casual
+      +1  profile.primaryColor      enables color-harmony reasoning
+      +1  profile.pairingHints      direct pairing guidance for the LLM
+      +1  profile.material          enables weather/season reasoning
+      +1  season matches temp_f     item is appropriate for current weather
+      +1  occasionTags overlap      legacy tag matches the requested occasion
+      -1  formality mismatch        casual item for formal occ (deprioritise only)
+      -1  season opposes temp_f     winter coat in summer / summer dress in cold
+    """
+    score = 0
+    p = item.get("profile") or {}
+
+    # Favourite signal — user explicitly wants this item in rotation
+    if item.get("isFavorite"):
+        score += 4
+
+    # Profile completeness — richer data → better LLM reasoning
+    if p.get("type"):
+        score += 2
+    if p.get("primaryColor"):
+        score += 1
+    if p.get("pairingHints"):
+        score += 1
+    if p.get("material"):
+        score += 1
+
+    # Formality fit — prefer items whose formality matches the requested occasion
+    formality_val = p.get("formality")
+    if occasion and formality_val is not None:
+        try:
+            f = int(formality_val)
+            if _is_formal_occasion(occasion):
+                if f >= 6:
+                    score += 2   # formal item for a formal occasion
+                elif f <= 3:
+                    score -= 1   # clearly casual — deprioritise when formals exist
+            else:
+                if f <= 5:
+                    score += 1   # casual item for a casual occasion
+        except (ValueError, TypeError):
+            pass
+
+    # Season / weather — prefer items suited to the current temperature.
+    # profile.season is Mixed: normalise list ["summer","spring"] or plain string.
+    season_raw = p.get("season")
+    if isinstance(season_raw, list):
+        season = " ".join(str(s).lower() for s in season_raw)
+    elif season_raw:
+        season = str(season_raw).lower()
+    else:
+        season = ""
+    if temp_f is not None and season:
+        if temp_f >= 75 and any(s in season for s in ("summer", "spring")):
+            score += 1
+        elif temp_f <= 50 and any(s in season for s in ("winter", "fall", "autumn")):
+            score += 1
+        elif temp_f >= 75 and "winter" in season:
+            score -= 1   # wrong-season item — send better options instead
+        elif temp_f <= 50 and "summer" in season:
+            score -= 1
+
+    # Occasion tags (legacy field) — small bonus when tags overlap the occasion.
+    # occasionTags schema is [String] but legacy docs may store a plain string.
+    occ_tags_raw = item.get("occasionTags")
+    if isinstance(occ_tags_raw, str):
+        occ_tags: List[str] = [occ_tags_raw] if occ_tags_raw else []
+    elif isinstance(occ_tags_raw, list):
+        occ_tags = [t for t in occ_tags_raw if isinstance(t, str)]
+    else:
+        occ_tags = []
+    if occasion and occ_tags:
+        occ_lower = occasion.lower()
+        if any(occ_lower in t.lower() or t.lower() in occ_lower for t in occ_tags):
+            score += 1
+
+    return score
+
+
+def _shortlist_for_llm(
+    items: List[Dict[str, Any]],
+    occasion: Optional[str] = None,
+    temp_f: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Select a category-balanced shortlist for the LLM prompt.
+
+    Category caps (_LLM_CATEGORY_LIMITS) keep total items ≤ 20 so token count
+    and OpenAI latency stay predictable.  Within each category items are ranked
+    by _shortlist_score, which rewards favorites, rich profiles, formality fit,
+    and weather/season relevance — surfacing the most contextually appropriate
+    candidates without changing any stored data.
     Never returns empty if items is non-empty.
     """
     by_cat: Dict[str, List[Dict[str, Any]]] = {}
@@ -1233,17 +1329,13 @@ def _shortlist_for_llm(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         cat = _normalize_category(it.get("profile"))
         by_cat.setdefault(cat, []).append(it)
 
-    def _richness(item: Dict[str, Any]) -> int:
-        p = item.get("profile") or {}
-        return (
-            (2 if p.get("type") else 0)
-            + (1 if p.get("pairingHints") else 0)
-            + (1 if p.get("primaryColor") else 0)
-        )
-
     result: List[Dict[str, Any]] = []
     for cat, limit in _LLM_CATEGORY_LIMITS.items():
-        group = sorted(by_cat.get(cat, []), key=_richness, reverse=True)
+        group = sorted(
+            by_cat.get(cat, []),
+            key=lambda it: _shortlist_score(it, occasion, temp_f),
+            reverse=True,
+        )
         result.extend(group[:limit])
 
     return result if result else items
@@ -1301,8 +1393,8 @@ def generate_outfits(
     # _mark_duplicates applied so LLM-fabricated variety (same itemIds, different titles)
     # is replaced with an honest limited-wardrobe message.
     if use_llm and (os.getenv("OPENAI_API_KEY") or "").strip():
-        # Phase 2: cap items sent to LLM to keep prompt small and latency low.
-        llm_items = _shortlist_for_llm(filtered_items)
+        # Phase 2/3: cap items sent to LLM; rank by occasion + weather relevance.
+        llm_items = _shortlist_for_llm(filtered_items, occasion=occasion, temp_f=temp_f)
         out = _call_openai_text(llm_items, occasion, loc_dict, weather_dict)
         if out:
             out = _near_duplicate_check(out, llm_items, occasion, weather_dict)
