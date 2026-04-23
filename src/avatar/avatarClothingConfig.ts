@@ -88,11 +88,13 @@ export const COMBINED_NODE_BOTTOM = 'Pants';
 // tshirt+pants combined avatar.  When adding a new combined GLB, add a new
 // set pair and a branch in resolveCombinedAvatar().
 
-const SHORTSLEEVE_FAMILIES = new Set(['shirt', 'polo']);
+const SHORTSLEEVE_FAMILIES = new Set([
+  'shirt', 'polo', 'button_down', 'long_sleeve',
+]);
 
 const SHIRT_FAMILIES = new Set([
   'dress_shirt', 'tshirt', 'hoodie', 'zip_hoodie',
-  'sweater', 'blazer', 'tank', 'crop_top',
+  'sweater', 'sweatshirt', 'cardigan', 'blazer', 'tank', 'crop_top',
 ]);
 
 const PANTS_FAMILIES = new Set([
@@ -326,6 +328,43 @@ export function resolveCombinedAvatar(
       topColor,
       bottomColor,
     };
+  }
+
+  // ── Nearest-available fallback for normal top+bottom outfits ─────────────────
+  // Reached only when neither exact-match pair above fired.
+  // Prevents naked avatar for valid outfits that have no dedicated combined GLB.
+  //
+  // Rules:
+  //   known top (any family in SHIRT_FAMILIES or SHORTSLEEVE_FAMILIES) +
+  //   known bottom (any family in PANTS_FAMILIES)
+  //   → tshirt+pants asset as the safest approximation.
+  //
+  // Notably: shirt/polo + shorts → would otherwise show naked avatar because the
+  // shortsleeve+pants exact match only covers LONG_PANTS_FAMILIES.
+  // Dresses, jumpsuits, and truly unknown families are not in either set and
+  // still fall through to the naked avatar below.
+  if (topFamily && bottomFamily) {
+    const isKnownTop    = SHIRT_FAMILIES.has(topFamily) || SHORTSLEEVE_FAMILIES.has(topFamily);
+    const isKnownBottom = PANTS_FAMILIES.has(bottomFamily);
+
+    if (isKnownTop && isKnownBottom) {
+      const topColor    = hexToLinearRGBA(config.top?.tintPrimary ?? null);
+      const bottomColor = hexToLinearRGBA(config.bottom?.tintPrimary ?? null);
+
+      if (__DEV__) {
+        console.log(
+          `[Avatar] Fallback resolver: ${topFamily} + ${bottomFamily}` +
+          ` → avatar_tshirt_pants_male_v1.glb (approx)` +
+          ` | top=${config.top?.tintPrimary ?? 'default'} bottom=${config.bottom?.tintPrimary ?? 'default'}`,
+        );
+      }
+      return {
+        asset:     ASSET_COMBINED_TSHIRT_PANTS,
+        debugName: 'avatar_tshirt_pants_male_v1.glb (approx)',
+        topColor,
+        bottomColor,
+      };
+    }
   }
 
   if (__DEV__) {

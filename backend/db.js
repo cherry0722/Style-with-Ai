@@ -13,8 +13,10 @@ async function connectDB() {
     await mongoose.connect(URI, { dbName: DB_NAME, autoIndex: true });
     console.log(`[DB] Connected to MongoDB db=${DB_NAME}`);
   } catch (err) {
-    console.error('[DB] Mongo connection error:', err.message);
-    process.exit(1);
+    // Log prominently but do NOT exit — the HTTP server is already bound and
+    // /api/health must stay responsive. DB-dependent routes will return 500s
+    // until Mongoose reconnects on its own (built-in retry behaviour).
+    console.error('[DB] Mongo connection error — server continues without DB:', err.message);
   }
 }
 
