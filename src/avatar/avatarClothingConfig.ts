@@ -64,6 +64,8 @@ export interface AvatarMappingResult {
 // A single GLB containing body + clothing baked together from Blender.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ASSET_COMBINED_TSHIRT_PANTS = require('../../assets/models/combined/avatar_tshirt_pants_male_v1.glb');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const ASSET_COMBINED_SHORTSLEEVE_PANTS = require('../../assets/models/combined/avatar_shortsleeve_pants.glb');
 
 /**
  * glTF node names inside avatar_tshirt_pants_male_v1.glb.
@@ -86,14 +88,20 @@ export const COMBINED_NODE_BOTTOM = 'Pants';
 // tshirt+pants combined avatar.  When adding a new combined GLB, add a new
 // set pair and a branch in resolveCombinedAvatar().
 
+const SHORTSLEEVE_FAMILIES = new Set(['shirt', 'polo']);
+
 const SHIRT_FAMILIES = new Set([
-  'shirt', 'dress_shirt', 'tshirt', 'hoodie', 'zip_hoodie',
-  'sweater', 'blazer', 'tank', 'polo', 'crop_top',
+  'dress_shirt', 'tshirt', 'hoodie', 'zip_hoodie',
+  'sweater', 'blazer', 'tank', 'crop_top',
 ]);
 
 const PANTS_FAMILIES = new Set([
   'jeans', 'trousers', 'chinos', 'cargo_pants', 'joggers', 'sweatpants',
   'shorts', 'leggings', 'skirt',
+]);
+
+const LONG_PANTS_FAMILIES = new Set([
+  'jeans', 'trousers', 'chinos', 'cargo_pants', 'joggers', 'sweatpants', 'leggings'
 ]);
 
 // ── Runtime render config ──────────────────────────────────────────────────────
@@ -294,6 +302,27 @@ export function resolveCombinedAvatar(
     return {
       asset:       ASSET_COMBINED_TSHIRT_PANTS,
       debugName:   'avatar_tshirt_pants_male_v1.glb',
+      topColor,
+      bottomColor,
+    };
+  }
+
+  if (topFamily && bottomFamily
+      && SHORTSLEEVE_FAMILIES.has(topFamily)
+      && LONG_PANTS_FAMILIES.has(bottomFamily)) {
+    const topColor    = hexToLinearRGBA(config.top?.tintPrimary ?? null);
+    const bottomColor = hexToLinearRGBA(config.bottom?.tintPrimary ?? null);
+
+    if (__DEV__) {
+      console.log(
+        `[Avatar] Combined resolver: ${topFamily} + ${bottomFamily}` +
+        ` → avatar_shortsleeve_pants.glb` +
+        ` | top=${config.top?.tintPrimary ?? 'default'} bottom=${config.bottom?.tintPrimary ?? 'default'}`,
+      );
+    }
+    return {
+      asset:       ASSET_COMBINED_SHORTSLEEVE_PANTS,
+      debugName:   'avatar_shortsleeve_pants.glb',
       topColor,
       bottomColor,
     };
