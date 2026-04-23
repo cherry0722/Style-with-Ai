@@ -110,6 +110,15 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || process.env.NODE_PORT || 5001;
-app.listen(PORT, '0.0.0.0', () => {
+console.log(`[API] Binding to :${PORT} (NODE_PORT=${process.env.NODE_PORT}, PORT=${process.env.PORT})`);
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`[API] Node server running on :${PORT}`);
+});
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[API] Port ${PORT} already in use — kill the existing process and retry.`);
+  } else {
+    console.error('[API] Server failed to bind:', err.message);
+  }
+  process.exit(1);
 });

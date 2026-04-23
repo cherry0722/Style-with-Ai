@@ -52,7 +52,7 @@ import {
   FilamentView,
   Model,
 } from 'react-native-filament';
-import {getReasonedOutfits, ReasonedOutfitEntry} from '../api/ai';
+import {getReasonedOutfits, ReasonedOutfitEntry, WardrobeItemInOutfit} from '../api/ai';
 import {buildSuggestionContext} from '../store/weatherContext';
 import {fetchOutfitAvatarMappings} from '../api/avatar';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -390,6 +390,18 @@ function formatPlanDate(isoDate: string): string {
   }
 }
 
+// ── Avatar mapping cache key ──────────────────────────────────────────────────
+// Produces a stable, sorted string identifier for an outfit's item list so the
+// same outfit revisited within a session can skip the /avatar-mapping round-trip.
+// Primary discriminator: item ID (id or _id). Fallback: imageUrl, which is
+// always present in WardrobeItemInOutfit, guaranteeing a non-empty key.
+function outfitCacheKey(items: WardrobeItemInOutfit[]): string {
+  return items
+    .map(it => it.id ?? it._id ?? it.imageUrl)
+    .sort()
+    .join(',');
+}
+
 export default function Avatar3DScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
@@ -421,6 +433,9 @@ export default function Avatar3DScreen() {
   const savedItems = useSavedOutfits(s => s.items);
   const fetchAllSaved = useSavedOutfits(s => s.fetchAll);
   const loadedFromSaved = useRef(false);
+  // Session-scoped cache: avoids repeat /avatar-mapping calls for outfits already
+  // resolved during this screen session. Cleared on component unmount automatically.
+  const avatarMappingCache = useRef<Map<string, AvatarRenderConfig>>(new Map());
 
   // Keep the saved store fresh so isSaved derives correctly.
   useEffect(() => {
@@ -511,9 +526,20 @@ export default function Avatar3DScreen() {
     (async () => {
       try {
         const outfit = suggestions[outfitIndex];
-        const mappings = await fetchOutfitAvatarMappings(outfit.items);
+        const cacheKey = outfitCacheKey(outfit.items);
+        const cached = avatarMappingCache.current.get(cacheKey);
+
+        let config: AvatarRenderConfig;
+        if (cached) {
+          config = cached;
+        } else {
+          const mappings = await fetchOutfitAvatarMappings(outfit.items);
+          if (cancelled) return;
+          config = buildRenderConfig(mappings);
+          avatarMappingCache.current.set(cacheKey, config);
+        }
+
         if (cancelled) return;
-        const config = buildRenderConfig(mappings);
         sceneRef.current?.setClothingConfig(config);
       } catch (err) {
         if (__DEV__) {
