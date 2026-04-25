@@ -8,9 +8,9 @@
  *   to populate Config.* at runtime. That wiring is deferred until MyraNative
  *   moves to the repo root and gets a proper production build setup.
  *
- *   During this migration phase the __DEV__ fallbacks below point at localhost
- *   so the iOS Simulator reaches the local backends without any Xcode edits.
- *   The production fallback (Render) is preserved for non-dev builds.
+ *   During this migration phase the __DEV__ fallbacks below point at the
+ *   production Render URLs so physical device dev builds work without any
+ *   Xcode edits.  The production fallback is the same Render URL.
  *
  *   TODO (when moving to root): wire react-native-config Build Phase in Xcode,
  *   then remove the DEV_FALLBACK_* constants and collapse back to a single
@@ -19,8 +19,8 @@
 import Config from 'react-native-config';
 
 // --- MIGRATION-PHASE DEV FALLBACKS (remove when react-native-config is wired) ---
-const DEV_FALLBACK_API_URL = 'http://localhost:5001';
-const DEV_FALLBACK_AI_URL  = 'http://localhost:5002';
+const DEV_FALLBACK_API_URL = 'https://style-with-ai-node.onrender.com';
+const DEV_FALLBACK_AI_URL  = 'https://style-with-ai-python.onrender.com';
 // ---------------------------------------------------------------------------------
 
 // Node / main app backend

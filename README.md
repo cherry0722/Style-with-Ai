@@ -4,6 +4,28 @@ Bare React Native CLI app (v0.84.1, New Architecture) with a Node.js/Express bac
 
 ---
 
+## Quick Start for Evaluators
+
+MYRA can be fully evaluated using **Xcode iOS Simulator + Render-hosted backend**. No physical iPhone, no TestFlight, and no paid Apple Developer account are required.
+
+The backend (Node.js) and AI service (Python) are already deployed on Render and will be hit automatically — local backend setup is optional developer mode.
+
+**Minimum requirements:** macOS, Xcode, Node.js 22.x, npm, CocoaPods
+
+**Minimum run steps:**
+
+```bash
+npm install
+cd ios && pod install && cd ..
+echo 'export NODE_BINARY=$(command -v node)' > ios/.xcode.env.local
+npm start          # Terminal 1 — Metro Bundler
+npm run ios        # Terminal 2 — iOS Simulator (separate terminal)
+```
+
+That is all that is needed to evaluate the app. The sections below cover local backend setup and advanced configuration.
+
+---
+
 ## Mac Prerequisites
 
 Install these once before cloning. **Node version matters — do not skip the version check.**
@@ -55,7 +77,8 @@ npm run pods
 # 6. Set up environment
 cp .env.example .env
 # Edit .env — fill in MONGO_URI, JWT_SECRET, INTERNAL_TOKEN for backend
-# Mobile simulator uses localhost fallbacks — API_URL and AI_BASE_URL are optional for local dev
+# Mobile simulator connects to Render backend by default — no env changes needed for evaluation mode
+# Fill in MONGO_URI, JWT_SECRET, INTERNAL_TOKEN only if running the backend locally
 
 # 7. Set Xcode's Node binary path (machine-specific, gitignored — run once per machine)
 echo 'export NODE_BINARY=$(command -v node)' > ios/.xcode.env.local
@@ -90,20 +113,20 @@ npx react-native run-ios --simulator "iPhone 16"
 > If your machine has both iOS 18 and iOS 26 simulators, pin to iOS 18 for stability with React Native 0.84.1.
 > To list available simulators: `xcrun simctl list devices available | grep iPhone`
 
-**Terminal 3 — Node.js Backend** (optional for UI-only work)
+**Terminal 3 — Node.js Backend** (not needed for Simulator+Render mode — already on Render)
 
 ```bash
 npm run backend
 # Runs on http://localhost:5001
 ```
 
-**Terminal 4 — Python AI Service** (optional — only needed for AI outfit features)
+**Terminal 4 — Python AI Service** (not needed for Simulator+Render mode — already on Render)
 
 ```bash
 cd backend
 python -m venv .venv        # first time only
 source .venv/bin/activate
-pip install -r requirements.txt   # first time only
+pip install -r backend/requirements.txt   # first time only — use backend/requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 5002 --reload
 ```
 
@@ -119,9 +142,12 @@ Copy `.env.example` to `.env` at the repo root.
 | `JWT_SECRET` | Yes (backend) | Any long random string |
 | `INTERNAL_TOKEN` | Yes (backend) | Any long random string |
 | `OPENAI_API_KEY` | Yes (AI service) | OpenAI key for outfit suggestions |
-| `API_URL` | Dev optional | Mobile → backend. Falls back to `localhost:5001` in dev |
-| `AI_BASE_URL` | Dev optional | Mobile → AI service. Falls back to `localhost:5002` in dev |
+| `API_URL` | Not needed for Simulator+Render | Mobile → backend. Defaults to Render URL when unset |
+| `AI_BASE_URL` | Not needed for Simulator+Render | Mobile → AI service. Defaults to Render URL when unset |
 | `ENABLE_AI` | No | Set `true` to enable AI features |
+| `AI_SERVICE_URL` | Local backend only | Node → Python service. Set to Render Python URL on Render |
+| `AI_USE_MOCK_DB` | No | Python AI: `true` uses mock data, `false` uses MongoDB |
+| `WEATHER_API_KEY` | Optional | OpenWeatherMap key; weather-aware suggestions degrade gracefully without it |
 | `R2_*` vars | Optional | Cloudflare R2 — only needed for image upload in production |
 
 ---
@@ -258,11 +284,11 @@ repo root/            ← React Native app (bare CLI)
 │   ├── navigation/   ← RootNavigator + Tabs
 │   ├── context/      ← Auth and Theme providers
 │   ├── store/        ← Zustand state stores
-│   ├── api/          ← axios API layer
-│   └── stubs/        ← @expo/vector-icons → react-native-vector-icons shim
+│   └── api/          ← axios API layer
 ├── ios/              ← Xcode project and CocoaPods
 ├── android/          ← Android project
 ├── assets/           ← 3D models and static assets
+├── docs/             ← project documentation
 ├── backend/          ← Node.js Express API (port 5001)
 │   ├── index.js      ← server entry point
 │   ├── app.py        ← Python FastAPI AI service (port 5002)
