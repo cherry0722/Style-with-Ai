@@ -172,7 +172,7 @@ export default function Tabs() {
           tabBarButton: () => <AddItemTabButton onPress={handleAddItem} />,
         }}
       />
-      <Tab.Screen name="Avatar"   component={Avatar3DScreen} />
+      <Tab.Screen name="Avatar" component={Avatar3DScreen} options={{ unmountOnBlur: true }} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );

@@ -27,7 +27,7 @@
  *   Metro resolves .glb via the assetExts entry in metro.config.js.
  */
 
-import React, {useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -74,6 +74,47 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AVATAR_MODEL = require('../../assets/models/avatar/avatar_base_male.glb');
 
+// ── Demo-stable initial avatar config ────────────────────────────────────────
+// Pre-loads avatar_tshirt_pants_male_v1.glb on screen mount so the Filament
+// engine has the combined GLB resident before Generate is ever pressed.
+// This eliminates the base→combined GLB swap (the crash root cause) by ensuring
+// key={avatarSource} never changes after the initial render: every outfit's
+// mapping result is applied as a tint-only update, not a Model remount.
+// tintPrimary: null → hexToLinearRGBA returns NEUTRAL_TINT ([1,1,1,1]), which
+// preserves the material's original baked colors until a real outfit is applied.
+const DEMO_INITIAL_CONFIG: AvatarRenderConfig = {
+  top: {
+    assetFamily: 'tshirt',
+    tintPrimary: null,
+    tintSecondary: null,
+    materialPreset: 'matte',
+    patternPreset: 'solid',
+    fitPreset: 'regular',
+    renderHints: {
+      usePatternTexture: false,
+      useSecondaryColor: false,
+      surfaceFinish: 'matte',
+      frontTextureRef: null,
+      backTextureRef: null,
+    },
+  },
+  bottom: {
+    assetFamily: 'jeans',
+    tintPrimary: null,
+    tintSecondary: null,
+    materialPreset: 'matte',
+    patternPreset: 'solid',
+    fitPreset: 'regular',
+    renderHints: {
+      usePatternTexture: false,
+      useSecondaryColor: false,
+      surfaceFinish: 'matte',
+      frontTextureRef: null,
+      backTextureRef: null,
+    },
+  },
+};
+
 // ── Combined avatar axis-correction ───────────────────────────────────────────
 // Combined dressed avatars exported from Blender use Z-up world space, but
 // glTF / Filament expect Y-up.  This rotation offset stands the model upright.
@@ -95,8 +136,19 @@ const BODY_MATERIAL_PARAMS = {
   parameters: {baseColorFactor: MVP_SKIN_TONE_LINEAR},
 } as const;
 
+// ── Demo stability flag ───────────────────────────────────────────────────────
+// Set to true to re-enable the Filament 3D avatar preview.
+// When false, a static fallback card is shown instead to prevent
+// filament.render.queue crashes on the iOS Simulator.
+const ENABLE_3D_AVATAR_PREVIEW = true;
+
 // ── Interaction constants ──────────────────────────────────────────────────────
 const ROTATION_SENSITIVITY = 0.4;  // rad/px  (rotate prop is radians — see TransformProps.ts)
+
+// After a GLB asset swap, hold the nav lock for this long so the Filament
+// render thread has time to finish loading the new asset before the next
+// config change arrives. Sized for the largest bundled GLB (21.4 MB).
+const GLB_SETTLE_MS = 1500;
 
 // NOTE: useApplyTransformations (react-native-filament internal) unconditionally
 // re-applies transformToUnitCube on every effect run, resetting the matrix.
@@ -177,8 +229,8 @@ const SceneContent = React.forwardRef<SceneHandle>(function SceneContent(_, ref)
   // clothingConfig drives combined-avatar resolution via resolveCombinedAvatar().
   // useState (not useRef) so that pushing a new config via setClothingConfig()
   // triggers a re-render of SceneContent, causing the Model source to update.
-  const [clothingConfig, setClothingConfigState] = useState<AvatarRenderConfig>(EMPTY_RENDER_CONFIG);
-  const clothingConfigRef = useRef<AvatarRenderConfig>(EMPTY_RENDER_CONFIG);
+  const [clothingConfig, setClothingConfigState] = useState<AvatarRenderConfig>(DEMO_INITIAL_CONFIG);
+  const clothingConfigRef = useRef<AvatarRenderConfig>(DEMO_INITIAL_CONFIG);
 
   // ── Model source resolution ──────────────────────────────────────────────────
   // Uses the combined dressed avatar when the resolver matches the current
@@ -437,6 +489,12 @@ export default function Avatar3DScreen() {
   // resolved during this screen session. Cleared on component unmount automatically.
   const avatarMappingCache = useRef<Map<string, AvatarRenderConfig>>(new Map());
 
+  // Demo-stability: pin the first combined GLB loaded in each generate session.
+  // Stores the Metro asset number and the config that produced it.
+  // Cleared on every new Generate so a fresh session can pick the right GLB.
+  const pinnedGlbRef    = useRef<number | null>(null);
+  const pinnedConfigRef = useRef<AvatarRenderConfig | null>(null);
+
   // Keep the saved store fresh so isSaved derives correctly.
   useEffect(() => {
     fetchAllSaved().catch(() => {});
@@ -484,6 +542,18 @@ export default function Avatar3DScreen() {
   // All save, commit, and display logic must read from this constant.
   const currentOutfit = suggestions[outfitIndex] ?? null;
 
+  // Stable string key for the currently viewed outfit's item composition.
+  // Used as the sole dependency for the avatar-mapping effect so the effect
+  // only re-fires when the actual outfit data changes — not on every
+  // suggestions array reference change that occurs after every generate call.
+  const currentOutfitKey = useMemo(
+    () => {
+      const outfit = suggestions[outfitIndex];
+      return outfit ? outfitCacheKey(outfit.items) : null;
+    },
+    [outfitIndex, suggestions],
+  );
+
   // Derive isSaved from the store — true if currentOutfit's item IDs match any
   // saved outfit. Updates whenever the viewed outfit or the saved collection changes.
   const isSaved = useMemo(() => {
@@ -512,13 +582,41 @@ export default function Avatar3DScreen() {
     setDropdownOpen(false);
   };
 
+  // ── Nav lock — declared before the avatar-mapping effect that uses it ─────────
+  // navLockRef: read synchronously inside goToNext/goToPrev without triggering
+  //             a re-render on each check.
+  // navLocked state: mirrors the ref solely for UI (button disabled + color).
+  // Lock is acquired on button press and released by the avatar-mapping effect
+  // once the config is applied and — when a GLB swap occurred — after
+  // GLB_SETTLE_MS has elapsed to let the Filament render thread finish loading.
+  const navLockRef = useRef(false);
+  const [navLocked, setNavLocked] = useState(false);
+  const acquireNavLock = useCallback(() => {
+    navLockRef.current = true;
+    setNavLocked(true);
+  }, []);
+  const releaseNavLock = useCallback(() => {
+    navLockRef.current = false;
+    setNavLocked(false);
+  }, []);
+
   // ── Avatar clothing config resolution ────────────────────────────────────────
   // Resolves /avatar-mapping for the currently displayed outfit and pushes the
   // result to SceneContent imperatively. A cancellation flag ensures that only
   // the response for the LATEST outfit is applied — stale responses from
   // previous outfits or prior Generate presses are silently discarded.
+  //
+  // Nav-lock contract:
+  //   • goToNext/goToPrev acquire the lock before changing outfitIndex.
+  //   • This effect releases it after config is applied.
+  //   • When applying the config changes the active GLB asset, the release is
+  //     deferred by GLB_SETTLE_MS so the Filament render thread has time to
+  //     finish loading the new asset before another config change can arrive.
+  //   • When triggered by Generate (not navigation), the lock starts as false;
+  //     if a GLB swap is detected the lock is acquired+released here so that
+  //     navigation is also blocked during the initial asset load.
   useEffect(() => {
-    if (suggestions.length === 0) return;
+    if (!currentOutfitKey || suggestions.length === 0) return;
     loadedFromSaved.current = false;
 
     let cancelled = false;
@@ -526,9 +624,12 @@ export default function Avatar3DScreen() {
     (async () => {
       try {
         const outfit = suggestions[outfitIndex];
-        const cacheKey = outfitCacheKey(outfit.items);
-        const cached = avatarMappingCache.current.get(cacheKey);
+        if (!outfit) {
+          if (!cancelled) releaseNavLock();
+          return;
+        }
 
+        const cached = avatarMappingCache.current.get(currentOutfitKey);
         let config: AvatarRenderConfig;
         if (cached) {
           config = cached;
@@ -536,20 +637,75 @@ export default function Avatar3DScreen() {
           const mappings = await fetchOutfitAvatarMappings(outfit.items);
           if (cancelled) return;
           config = buildRenderConfig(mappings);
-          avatarMappingCache.current.set(cacheKey, config);
+          avatarMappingCache.current.set(currentOutfitKey, config);
         }
 
         if (cancelled) return;
-        sceneRef.current?.setClothingConfig(config);
+
+        const scene = sceneRef.current;
+        const prevConfig = scene?.getClothingConfig() ?? EMPTY_RENDER_CONFIG;
+        const prevSource = resolveCombinedAvatar(prevConfig)?.asset ?? AVATAR_MODEL;
+
+        // Demo-stability: if a different combined GLB would be required (e.g.
+        // outfit 2 needs shortsleeve_pants but outfit 1 already pinned tshirt_pants),
+        // override the config to reuse the pinned GLB with the new outfit's tint
+        // colors. This prevents Model remounts during rapid carousel navigation —
+        // the root cause of EXC_CRASH on filament.render.queue.
+        const rawNextSource = resolveCombinedAvatar(config)?.asset ?? AVATAR_MODEL;
+        let effectiveConfig = config;
+        if (
+          pinnedGlbRef.current !== null &&
+          rawNextSource !== AVATAR_MODEL &&
+          rawNextSource !== pinnedGlbRef.current
+        ) {
+          const pinned = pinnedConfigRef.current!;
+          effectiveConfig = {
+            top: pinned.top
+              ? {...pinned.top, tintPrimary: config.top?.tintPrimary ?? pinned.top.tintPrimary, tintSecondary: config.top?.tintSecondary ?? pinned.top.tintSecondary}
+              : null,
+            bottom: pinned.bottom
+              ? {...pinned.bottom, tintPrimary: config.bottom?.tintPrimary ?? pinned.bottom.tintPrimary, tintSecondary: config.bottom?.tintSecondary ?? pinned.bottom.tintSecondary}
+              : null,
+          };
+        }
+
+        const nextSource = resolveCombinedAvatar(effectiveConfig)?.asset ?? AVATAR_MODEL;
+
+        // Record the first combined GLB loaded in this session.
+        if (pinnedGlbRef.current === null && nextSource !== AVATAR_MODEL) {
+          pinnedGlbRef.current = nextSource;
+          pinnedConfigRef.current = effectiveConfig;
+        }
+
+        const glbWillChange = scene != null && prevSource !== nextSource;
+        if (glbWillChange) {
+          acquireNavLock();
+        }
+        scene?.setClothingConfig(effectiveConfig);
+
+        if (glbWillChange) {
+          // cancelled is checked inside the timeout so the callback is safe
+          // even if the component unmounts or the effect re-fires before it fires.
+          setTimeout(() => { if (!cancelled) releaseNavLock(); }, GLB_SETTLE_MS);
+        } else {
+          if (!cancelled) releaseNavLock();
+        }
       } catch (err) {
         if (__DEV__) {
           console.warn('[Avatar] resolveClothingConfig failed:', err);
         }
+        if (!cancelled) releaseNavLock();
       }
     })();
 
     return () => { cancelled = true; };
-  }, [outfitIndex, suggestions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // outfitIndex and suggestions are intentionally omitted: currentOutfitKey is
+    // a stable string derived from suggestions[outfitIndex], so this effect only
+    // re-fires when the viewed outfit's actual item composition changes — not on
+    // every suggestions array reference change after each generate call.
+    // acquireNavLock and releaseNavLock are stable useCallback refs ([] deps).
+  }, [currentOutfitKey, acquireNavLock, releaseNavLock]);
 
   // ── Load from saved outfit if opened from SavedScreen ────────────────────────
   useEffect(() => {
@@ -658,6 +814,8 @@ export default function Avatar3DScreen() {
 
   // ── Generate handler ─────────────────────────────────────────────────────────
   const handleGenerate = async () => {
+    pinnedGlbRef.current = null;
+    pinnedConfigRef.current = null;
     setIsGenerating(true);
     setGenerateError(null);
     try {
@@ -677,10 +835,14 @@ export default function Avatar3DScreen() {
 
   // ── Arrow navigation ─────────────────────────────────────────────────────────
   const goToPrev = () => {
+    if (navLockRef.current) return;
+    acquireNavLock();
     setOutfitIndex(i => (i - 1 + suggestions.length) % suggestions.length);
     setReasonModalVisible(false);
   };
   const goToNext = () => {
+    if (navLockRef.current) return;
+    acquireNavLock();
     setOutfitIndex(i => (i + 1) % suggestions.length);
     setReasonModalVisible(false);
   };
@@ -774,15 +936,15 @@ export default function Avatar3DScreen() {
 
             <View style={styles.outfitNav}>
               <TouchableOpacity
-                style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
+                style={[styles.arrowBtn, (!canNavigate || navLocked) && styles.arrowBtnDisabled]}
                 onPress={goToPrev}
-                disabled={!canNavigate}
+                disabled={!canNavigate || navLocked}
                 accessibilityRole="button"
                 accessibilityLabel="Previous outfit">
                 <Ionicons
                   name="chevron-back"
                   size={18}
-                  color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
+                  color={canNavigate && !navLocked ? TITLE_COLOR : DISABLED_COLOR}
                 />
               </TouchableOpacity>
 
@@ -798,15 +960,15 @@ export default function Avatar3DScreen() {
               )}
 
               <TouchableOpacity
-                style={[styles.arrowBtn, !canNavigate && styles.arrowBtnDisabled]}
+                style={[styles.arrowBtn, (!canNavigate || navLocked) && styles.arrowBtnDisabled]}
                 onPress={goToNext}
-                disabled={!canNavigate}
+                disabled={!canNavigate || navLocked}
                 accessibilityRole="button"
                 accessibilityLabel="Next outfit">
                 <Ionicons
                   name="chevron-forward"
                   size={18}
-                  color={canNavigate ? TITLE_COLOR : DISABLED_COLOR}
+                  color={canNavigate && !navLocked ? TITLE_COLOR : DISABLED_COLOR}
                 />
               </TouchableOpacity>
             </View>
@@ -937,11 +1099,27 @@ export default function Avatar3DScreen() {
            and the action row below.                                   */}
       <View style={styles.stageWrapper}>
         <View style={styles.stageCard}>
-          {/* FilamentScene does not accept a style prop — sized via View */}
-          <View style={styles.sceneContainer} {...panResponder.panHandlers}>
-            <View style={styles.avatarHighlight} />
-            <AvatarStage sceneRef={sceneRef} />
-          </View>
+          {ENABLE_3D_AVATAR_PREVIEW ? (
+            /* FilamentScene does not accept a style prop — sized via View */
+            <View style={styles.sceneContainer} {...panResponder.panHandlers}>
+              <View style={styles.avatarHighlight} />
+              <AvatarStage sceneRef={sceneRef} />
+            </View>
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Ionicons name="person-outline" size={64} color="rgba(61,52,38,0.18)" />
+              <Text style={styles.avatarFallbackTitle}>3D avatar preview disabled for simulator demo stability</Text>
+              {currentOutfit && currentOutfit.items.length > 0 && (
+                <Text style={styles.avatarFallbackItems}>
+                  {currentOutfit.items
+                    .slice(0, 3)
+                    .map((it: WardrobeItemInOutfit) => it.type ?? it.category ?? '')
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </View>
 
@@ -1431,6 +1609,26 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     top: '50%',
     marginTop: -110,
+  },
+
+  avatarFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  avatarFallbackTitle: {
+    fontSize: 13,
+    color: 'rgba(61,52,38,0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  avatarFallbackItems: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(61,52,38,0.55)',
+    textAlign: 'center',
   },
 
   // ── Action row ─────────────────────────────────────────────────

@@ -54,6 +54,6 @@ export async function getReasonedOutfits(
   body: ReasonedOutfitsRequest
 ): Promise<ReasonedOutfitsResponse> {
   if (__DEV__) console.log('[AI API] POST', REASONED_OUTFITS_PATH);
-  const res = await client.post<ReasonedOutfitsResponse>(REASONED_OUTFITS_PATH, body, { timeout: 30000 });
+  const res = await client.post<ReasonedOutfitsResponse>(REASONED_OUTFITS_PATH, body, { timeout: 60000 });
   return res.data;
 }
