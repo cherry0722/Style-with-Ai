@@ -78,6 +78,8 @@ repo root/
 
 Install these once. **Node 22 is required — other versions cause Metro failures.**
 
+Xcode must include an installed iOS Simulator runtime before you try to launch the app.
+
 | Tool | Version | Install |
 |------|---------|---------|
 | Xcode | Latest stable | App Store |
@@ -190,7 +192,7 @@ Wait for the `BUNDLE ./index.js` line before launching the simulator.
 ```bash
 npm run ios
 # or, to pin to a specific simulator:
-npx react-native run-ios --simulator "iPhone 16"
+npx react-native run-ios --simulator "iPhone 17 Pro"
 ```
 
 > To list available simulators: `xcrun simctl list devices available | grep iPhone`
@@ -236,7 +238,7 @@ npm start -- --reset-cache
 Explicitly target the simulator you want:
 
 ```bash
-npx react-native run-ios --simulator "iPhone 16"
+npx react-native run-ios --simulator "iPhone 17 Pro"
 xcrun simctl list devices available | grep iPhone
 ```
 
