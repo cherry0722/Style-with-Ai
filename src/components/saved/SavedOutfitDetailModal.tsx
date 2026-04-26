@@ -89,6 +89,11 @@ const C = {
   highlight:   'rgba(196, 168, 130, 0.18)',
 } as const;
 
+// ── Demo stability flag ───────────────────────────────────────────────────────
+// Set to true to re-enable the Filament 3D preview inside the saved outfit modal.
+// When false, a static fallback is shown to prevent filament.render.queue crashes.
+const ENABLE_SAVED_OUTFIT_3D_PREVIEW = true;
+
 // ── Error boundary for EntitySelector ───────────────────────────────────────
 class TintBoundary extends React.Component<
   { children: React.ReactNode },
@@ -362,11 +367,18 @@ export default function SavedOutfitDetailModal({
         {/* 3D Stage */}
         <View style={styles.stageCard}>
           <View style={styles.avatarHighlight} />
-          <View
-            style={styles.sceneContainer}
-            {...panResponder.panHandlers}>
-            <DetailStage sceneRef={sceneRef} config={config} />
-          </View>
+          {ENABLE_SAVED_OUTFIT_3D_PREVIEW ? (
+            <View
+              style={styles.sceneContainer}
+              {...panResponder.panHandlers}>
+              {visible && <DetailStage sceneRef={sceneRef} config={config} />}
+            </View>
+          ) : (
+            <View style={styles.previewFallback}>
+              <Ionicons name="person-outline" size={56} color="rgba(61,52,38,0.18)" />
+              <Text style={styles.previewFallbackText}>3D preview disabled for demo stability</Text>
+            </View>
+          )}
         </View>
 
         {/* Metadata panel */}
@@ -455,6 +467,19 @@ const styles = StyleSheet.create({
   },
   filamentView: {
     flex: 1,
+  },
+  previewFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 20,
+  },
+  previewFallbackText: {
+    fontSize: 13,
+    color: 'rgba(61,52,38,0.45)',
+    textAlign: 'center',
+    lineHeight: 18,
   },
   avatarHighlight: {
     position: 'absolute',

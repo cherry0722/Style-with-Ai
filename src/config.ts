@@ -19,8 +19,8 @@
 import Config from 'react-native-config';
 
 // --- MIGRATION-PHASE DEV FALLBACKS (remove when react-native-config is wired) ---
-const DEV_FALLBACK_API_URL = 'https://style-with-ai-node.onrender.com';
-const DEV_FALLBACK_AI_URL  = 'https://style-with-ai-python.onrender.com';
+const DEV_FALLBACK_API_URL = 'http://localhost:5001';
+const DEV_FALLBACK_AI_URL  = 'http://localhost:5002';
 // ---------------------------------------------------------------------------------
 
 // Node / main app backend
