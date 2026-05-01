@@ -1003,21 +1003,31 @@ export default function Avatar3DScreen() {
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <View style={[styles.header, {paddingTop: insets.top + 8}]}>
-        {routeIntent ? (
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              style={styles.headerBackBtn}
-              onPress={() => navigation.goBack()}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Go back">
-              <Ionicons name="chevron-back" size={22} color={TITLE_COLOR} />
-            </TouchableOpacity>
-            <Text style={styles.title}>My Avatar</Text>
-          </View>
-        ) : (
-          <Text style={styles.title}>My Avatar</Text>
-        )}
+       {routeIntent ? (
+  <View>
+    <View style={styles.headerRow}>
+      <TouchableOpacity
+        style={styles.headerBackBtn}
+        onPress={() => navigation.goBack()}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Go back">
+        <Ionicons name="chevron-back" size={22} color={TITLE_COLOR} />
+      </TouchableOpacity>
+      <Text style={styles.title}>My Avatar</Text>
+    </View>
+    <Text style={styles.avatarSubtitle}>
+      Preview outfit combinations on your 3D avatar.
+    </Text>
+  </View>
+) : (
+  <>
+    <Text style={styles.title}>My Avatar</Text>
+    <Text style={styles.avatarSubtitle}>
+      Preview outfit combinations on your 3D avatar.
+    </Text>
+  </>
+)}
       </View>
 
       {/* ── Top controls: occasion selector + generate button ─────── */}

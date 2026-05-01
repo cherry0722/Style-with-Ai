@@ -177,7 +177,7 @@ export default function LaundryScreen() {
     return (
       <SafeAreaView edges={['top']} style={styles.container}>
         <View style={styles.center}>
-          <Text style={styles.centerText}>Sign in to see your laundry</Text>
+         <Text style={styles.centerText}>Sign in to view and manage your laundry items</Text>
         </View>
       </SafeAreaView>
     );
@@ -219,8 +219,8 @@ export default function LaundryScreen() {
       ) : items.length === 0 ? (
         <View style={styles.center}>
           <Ionicons name="basket-outline" size={48} color={P.lightText} style={{ marginBottom: 12 }} />
-          <Text style={styles.emptyTitle}>No items in laundry</Text>
-          <Text style={styles.emptyHint}>All your clothes are ready to wear!</Text>
+          <Text style={styles.emptyTitle}>No laundry items right now</Text>
+          <Text style={styles.emptyHint}>Everything in your closet is ready to wear.</Text>
         </View>
       ) : (
         <>
@@ -244,7 +244,7 @@ export default function LaundryScreen() {
               {cleaningAll ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.cleanAllText}>CLEAN ALL ({items.length})</Text>
+                <Text style={styles.cleanAllText}>MARK ALL CLEAN ({items.length})</Text>
               )}
             </Pressable>
           </View>
