@@ -211,7 +211,7 @@ export default function GuestHomeScreen() {
 
         {/* Sign-in banner */}
         <Pressable style={styles.signInBanner} onPress={goAuth}>
-          <Text style={styles.signInText}>Sign in to unlock your personalised wardrobe</Text>
+          <Text style={styles.signInText}>Sign in to unlock your personalized wardrobe and outfit planner</Text>
           <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
         </Pressable>
       </ScrollView>
